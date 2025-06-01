@@ -1,6 +1,7 @@
 import { Entity } from './Entity.js';
 
 export class World {
+
     constructor() {
         this.entities = new Map();
         this.systems = new Map();
@@ -83,7 +84,7 @@ export class World {
         });
     }
 
-    render() {
-        // foo
+    static render() {
+        return "foo";
     }
 }
