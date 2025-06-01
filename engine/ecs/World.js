@@ -82,4 +82,8 @@ export class World {
             return componentTypes.every(type => entity.hasComponent(type));
         });
     }
+
+    render() {
+        // foo
+    }
 }
