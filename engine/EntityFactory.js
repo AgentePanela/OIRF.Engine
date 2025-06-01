@@ -1,47 +1,38 @@
-import { Transform, Velocity, Sprite, Collider, Input, Health, AI } from './ecs/Component.js';
-
-export class EntityFactory {
-    constructor(world) {
-        this.world = world;
+export class AssetManager {
+    constructor() {
+        this.sprites = new Map();
+        this.scripts = new Map();
+        this.nextId = 1;
     }
 
-    createPlayer(x = 0, y = 0) {
-        const player = this.world.createEntity('player');
+    createSprite(name, config = {}) {
+        const sprite = {
+            id: this.nextId++,
+            name: name || `Sprite_${this.nextId}`,
+            color: config.color || '#4ade80',
+            width: config.width || 32,
+            height: config.height || 32,
+            shape: config.shape || 'rectangle',
+            texture: config.texture || null
+        };
         
-        player.addComponent(new Transform(x, y))
-              .addComponent(new Sprite('#4ade80', 32, 32, 'rectangle'))
-              .addComponent(new Collider(32, 32))
-              .addComponent(new Input())
-              .addComponent(new Health(100));
-        
-        return player;
+        this.sprites.set(sprite.id, sprite);
+        return sprite;
     }
 
-    createEnemy(x = 0, y = 0) {
-        const enemy = this.world.createEntity('enemy');
-        
-        enemy.addComponent(new Transform(x, y))
-             .addComponent(new Sprite('#ef4444', 24, 24, 'circle'))
-             .addComponent(new Collider(24, 24))
-             .addComponent(new Velocity(
-                 (Math.random() - 0.5) * 100,
-                 (Math.random() - 0.5) * 100
-             ))
-             .addComponent(new Health(50))
-             .addComponent(new AI('patrol'));
-        
-        return enemy;
+    getSprite(id) {
+        return this.sprites.get(id);
     }
 
-    createProjectile(x = 0, y = 0, velocityX = 0, velocityY = 0) {
-        const projectile = this.world.createEntity('projectile');
-        
-        projectile.addComponent(new Transform(x, y))
-                  .addComponent(new Velocity(velocityX, velocityY))
-                  .addComponent(new Sprite('#ffffff', 4, 4, 'circle'))
-                  .addComponent(new Collider(4, 4, true));
-        
-        return projectile;
+    getAllSprites() {
+        return Array.from(this.sprites.values());
+    }
+
+    getScript(id) {
+        return this.scripts.get(id);
+    }
+
+    getAllScripts() {
+        return Array.from(this.scripts.values());
     }
 }
-
