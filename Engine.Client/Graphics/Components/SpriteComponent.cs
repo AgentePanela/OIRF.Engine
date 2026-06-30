@@ -15,6 +15,7 @@ public class SpriteComponent : Component
     public Color Color { get; set; } = Color.White;
     public Vector2? Origin { get; set; }
     public SamplerState? SamplerState { get; set; }
+    public SpriteEffects Effects { get; set; } = SpriteEffects.None;
 
     /// <summary>
     /// Do not set or get this manually. Use SpriteSystem.GetSprite().

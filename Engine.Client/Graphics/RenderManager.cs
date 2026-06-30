@@ -417,7 +417,7 @@ public sealed partial class RenderManager
             sprite.Rotation,
             sprite.Origin,
             sprite.Scale,
-            SpriteEffects.None,
+            sprite.Effects,
             sprite.Depth);
     }
 

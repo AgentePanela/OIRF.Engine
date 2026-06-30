@@ -121,7 +121,6 @@ public sealed class SpriteSystem : EntityDrawSystem
         return comp.Effect;
     }
 
-    // update the sprite 2d fields with the comp fields, idk
     private void UpdateSpriteFields(SpriteComponent comp, TransformComponent trans, ref Sprite2D sprite)
     {
         sprite.Rotation = trans.Angle;
@@ -130,6 +129,7 @@ public sealed class SpriteSystem : EntityDrawSystem
         sprite.SamplerState = comp.SamplerState;
         sprite.Scale = trans.Scale ?? Vector2.One;
         sprite.Color = comp.Color;
+        sprite.Effects = comp.Effects;
         if (comp.Origin is not null)
             sprite.Origin = comp.Origin.Value;
     }
@@ -193,6 +193,7 @@ public sealed class SpriteSystem : EntityDrawSystem
         sprite.Color = layer.Color;
         sprite.Depth = comp.Spr!.Value.Depth;
         sprite.Visible = layer.Visible;
+        sprite.Effects = comp.Effects;
         if (layer.Origin is not null)
             sprite.Origin = layer.Origin.Value;
     }

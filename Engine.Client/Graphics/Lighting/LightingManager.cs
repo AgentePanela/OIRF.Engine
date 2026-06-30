@@ -16,13 +16,13 @@ public sealed class LightingManager
     /// does nothing in either Update or Draw — zero overhead, the scene
     /// is rendered with raw sprite colors.
     /// </summary>
-    public bool Enabled { get; private set; } = true;
+    public bool Enabled { get; private set; } = false;
 
     /// <summary>
     /// Default ambient color used when no <see cref="Components.Lighting.AmbientLightComponent"/>
     /// is present in the scene.
     /// </summary>
-    public Color AmbientLight { get; set; } = new Color(40, 40, 50);
+    public Color AmbientLight { get; set; } = new Color(0, 0, 0);
 
     /// <summary>
     /// Global multiplier on top of every light's intensity. (1.0 = normal.)
