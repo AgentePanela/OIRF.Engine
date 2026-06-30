@@ -1,0 +1,11 @@
+{
+    "recommendations": [
+        "ms-dotnettools.vscode-dotnet-runtime",
+        "aaron-bond.better-comments",
+        "ms-dotnettools.csharp",
+        "eamodio.gitlens",
+        "r88.monogame",
+        "christian-kohler.path-intellisense",
+        "redhat.vscode-yaml"
+    ]
+}

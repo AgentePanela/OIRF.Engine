@@ -1,0 +1,137 @@
+name: "Texture Diff"
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - "Engine.Shared/EngineResources/Textures/**"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  texture-diff:
+    name: Texture Diff Bot
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: git fetch origin ${{ github.event.pull_request.base.ref }} --depth=1
+
+      - name: Generate texture diff comment
+        id: diff
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          DIFF=$(git diff --name-status "$BASE_SHA"..."$HEAD_SHA" -- 'Resources/Textures/**.png')
+
+          if [ -z "$DIFF" ]; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+
+          BODY="<!-- texture-diff-bot -->"$'\n'
+          BODY+="### Texture Diff Bot"$'\n'
+          BODY+="Head commit \`${HEAD_SHA::8}\` merging into \`${BASE_SHA::8}\`"$'\n\n'
+
+          ADDED=0
+          MODIFIED=0
+          REMOVED=0
+
+          declare -A GROUPS
+
+          while IFS=$'\t' read -r status filepath; do
+            dir=$(dirname "$filepath")
+            GROUPS["$dir"]+="${status}|${filepath}"$'\n'
+          done <<< "$DIFF"
+
+          for dir in $(printf '%s\n' "${!GROUPS[@]}" | sort); do
+            BODY+="<details><summary>${dir}</summary>"$'\n\n'
+            BODY+="| File | Old | New | Status |"$'\n'
+            BODY+="| --- | --- | --- | --- |"$'\n'
+
+            while IFS='|' read -r status filepath; do
+              [ -z "$status" ] && continue
+
+              filename=$(basename "$filepath")
+
+              case "$status" in
+                A)
+                  new_url="https://raw.githubusercontent.com/${REPO}/${HEAD_SHA}/${filepath}"
+
+                  old_img=""
+                  new_img="<img src=\"${new_url}\" width=\"128\">"
+
+                  label="Added"
+                  ADDED=$((ADDED + 1))
+                  ;;
+
+                M)
+                  old_url="https://raw.githubusercontent.com/${REPO}/${BASE_SHA}/${filepath}"
+                  new_url="https://raw.githubusercontent.com/${REPO}/${HEAD_SHA}/${filepath}"
+
+                  old_img="<img src=\"${old_url}\" width=\"128\">"
+                  new_img="<img src=\"${new_url}\" width=\"128\">"
+
+                  label="Modified"
+                  MODIFIED=$((MODIFIED + 1))
+                  ;;
+
+                D)
+                  old_url="https://raw.githubusercontent.com/${REPO}/${BASE_SHA}/${filepath}"
+
+                  old_img="<img src=\"${old_url}\" width=\"128\">"
+                  new_img=""
+
+                  label="Removed"
+                  REMOVED=$((REMOVED + 1))
+                  ;;
+
+                *)
+                  new_url="https://raw.githubusercontent.com/${REPO}/${HEAD_SHA}/${filepath}"
+
+                  old_img=""
+                  new_img="<img src=\"${new_url}\" width=\"128\">"
+
+                  label="${status}"
+                  ;;
+              esac
+
+              BODY+="| \`${filename}\` | ${old_img} | ${new_img} | ${label} |"$'\n'
+            done <<< "${GROUPS[$dir]}"
+
+            BODY+=$'\n'"</details>"$'\n\n'
+          done
+
+          BODY+="---"$'\n'
+          BODY+="**Summary:** ${ADDED} added, ${MODIFIED} modified, ${REMOVED} removed"$'\n'
+
+          echo "$BODY" > /tmp/texture-diff-body.md
+
+      - name: Find existing comment
+        if: steps.diff.outputs.has_changes == 'true'
+        uses: peter-evans/find-comment@v3
+        id: find
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          body-includes: "<!-- texture-diff-bot -->"
+
+      - name: Post or update comment
+        if: steps.diff.outputs.has_changes == 'true'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-id: ${{ steps.find.outputs.comment-id }}
+          edit-mode: replace
+          body-path: /tmp/texture-diff-body.md
