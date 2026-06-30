@@ -85,6 +85,7 @@ public abstract class DefaultWindow : Window, IDisposable
         if (Initialized)
             return;
 
+        base.AcceptsKeyboardFocus = false;
         IoCManager.ResolveDependencies(this);
         Initialized = true;
     }
