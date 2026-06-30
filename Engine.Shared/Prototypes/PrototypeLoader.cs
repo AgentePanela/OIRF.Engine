@@ -15,7 +15,7 @@ internal sealed class PrototypeLoader
     /// <summary>
     /// Load YAML prototype files from a dir and return them as raw, unresolved prototypes.
     /// </summary>
-    public List<RawPrototype> LoadProtos(string path, List<string> prototypesToIgnore)
+    public List<RawPrototype> LoadProtos(string path)
     {
         var result = new List<RawPrototype>();
 
@@ -29,7 +29,7 @@ internal sealed class PrototypeLoader
         {
             try
             {
-                LoadFile(file, result, prototypesToIgnore);
+                LoadFile(file, result);
             }
             catch (Exception ex)
             {
@@ -40,7 +40,7 @@ internal sealed class PrototypeLoader
         return result;
     }
 
-    private static void LoadFile(string filePath, List<RawPrototype> output, List<string> prototypesToIgnore)
+    private static void LoadFile(string filePath, List<RawPrototype> output)
     {
         using var reader = new StreamReader(filePath);
         var yaml = new YamlStream();

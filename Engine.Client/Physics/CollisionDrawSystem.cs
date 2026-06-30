@@ -7,7 +7,7 @@ using Microsoft.Xna.Framework;
 
 namespace Engine.Client.Physics;
 
-public sealed class CollisionDrawSystem : EntityDrawSystem
+public sealed class CollisionDrawSystem : EntitySystem
 {
     [Dependency] private readonly RenderManager _renderer = default!;
     [Dependency] private readonly Camera2D _camera = default!;

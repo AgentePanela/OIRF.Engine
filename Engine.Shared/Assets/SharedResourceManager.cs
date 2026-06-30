@@ -14,8 +14,6 @@ public sealed class SharedResourceManager
 
     internal void Init()
     {
-        var engineResources = Path.Combine(AppContext.BaseDirectory, "EngineResources");
-        _resourcesFolders.Add(engineResources); // add the engine resources folder first, before the main content resources folder.
         _resourcesFolders.Add(GetMainResourcesFolder());
         IoCManager.ResolveDependencies(this);
     }

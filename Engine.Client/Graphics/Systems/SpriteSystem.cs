@@ -8,7 +8,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace Engine.Client.Graphics;
 
-public sealed class SpriteSystem : EntityDrawSystem
+public sealed class SpriteSystem : EntitySystem
 {
     [Dependency] private readonly RenderManager _renderMan = default!;
     [Dependency] private readonly IAssetManager _assetMan = default!;
@@ -98,7 +98,7 @@ public sealed class SpriteSystem : EntityDrawSystem
         if (!_assetMan.GetSprite(comp.Key, out var sprite))
         {
             Log.Warn($"Unknow sprite key '{comp.Key}' for entity UID {comp.Owner}");
-            comp.Key = "EngineInternal/Placeholders/Null";
+            comp.Key = "Engine/Null";
         }
 
         // Cache atlas data for fast rendering (eliminates per-frame dictionary lookup)
@@ -160,7 +160,7 @@ public sealed class SpriteSystem : EntityDrawSystem
         if (!_assetMan.GetSprite(layer.Key, out var sprite))
         {
             Log.Warn($"Unknown sprite layer key '{layer.Key}' for entity UID {comp.Owner}");
-            layer.Key = "EngineInternal/Placeholders/Null";
+            layer.Key = "Engine/Null";
         }
 
         // Cache atlas data for fast rendering

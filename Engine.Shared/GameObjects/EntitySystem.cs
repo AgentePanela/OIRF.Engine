@@ -34,7 +34,16 @@ public abstract class EntitySystem
     }
 
     /// <summary>
-    /// Called right before the main process shutdown.
+    /// Called every frame to render the system.
+    /// Should contain rendering logic only.
+    /// </summary>
+    public virtual void Draw(float dt)
+    {
+        
+    }
+
+    /// <summary>
+    /// Called right before the game shutdown.
     /// </summary>
     public virtual void OnShutdown()
     {

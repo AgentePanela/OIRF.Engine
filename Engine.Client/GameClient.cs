@@ -22,7 +22,6 @@ using Engine.Shared.Storage;
 using System.Linq;
 using Engine.Shared.Prototypes;
 using Engine.Shared.GameObjects;
-using Engine.Client.Graphics.Lighting;
 
 namespace Engine.Client;
 
@@ -94,7 +93,7 @@ public class GameClient : Game
     public static WindowManager WindowManager { get; private set; }
     public static GameState GameState = GameState.Booting;
 
-    public static ClientOptions Options = new ClientOptions();
+    public static EntryPointOptions Options = new EntryPointOptions();
     public static GTime GameTime = new GTime();
     public GCMeter GCMeter = new();
 
@@ -103,7 +102,7 @@ public class GameClient : Game
     /// <summary>
     /// Creates a new GameClient instance.
     /// </summary>
-    protected GameClient(ClientOptions options)
+    protected GameClient(EntryPointOptions options)
     {
         if (s_instance != null)
         {
@@ -145,13 +144,10 @@ public class GameClient : Game
         IoCManager.Register(new SceneManager(this));
         IoCManager.Register<ViewportAdapter>();
         IoCManager.Register<Camera2D>();
-        IoCManager.Register<LightingManager>();
         IoCManager.Register<RenderManager>();
         IoCManager.Register<InputManager>();
         IoCManager.Register<UIManager>();
         IoCManager.Register<WindowManager>();
-
-        IoCManager.AutoRegister(Assembly.GetExecutingAssembly());
 
         Assets = IoCManager.Resolve<IAssetManager>();
         Audio = IoCManager.Resolve<IAudioManager>();
@@ -166,6 +162,8 @@ public class GameClient : Game
         InterfaceManager = IoCManager.Resolve<UIManager>();
         WindowManager = IoCManager.Resolve<WindowManager>();
         ConfigManager = IoCManager.Resolve<IConfigurationManager>();
+
+        IoCManager.AutoRegister(Assembly.GetExecutingAssembly());
 
         ConfigManager.ForceDefaultValue(GameCVars.GameVersion, Options.Version);
         ConfigManager.ForceDefaultValue(GameCVars.ResolutionWidth, Options.Width);
@@ -326,43 +324,15 @@ public class GameClient : Game
         /// recebe essa chamada quando ocoore o base.Draw();
         base.Draw(gameTime);
 
-        // Lock the backbuffer viewport to the letterboxed rect before any
-        // world draw. The lighting SceneTarget path in Renderer.DrawQueue
-        // bypasses Begin's on-backbuffer branch, so without this
-        // LastBackbufferViewport ends up as the full backbuffer and the
-        // apply pass stretches the (uniformly-scaled) SceneTarget to fill
-        // it, producing a vertical squash whenever the window aspect ratio
-        // doesn't match the virtual resolution. Resizing=false during
-        // loading → skip and let the loading scene manage its own viewport.
-        if (Renderer.Resizing)
-            Renderer.SetLetterboxedBackbufferViewport();
-
         if (GameState == GameState.Running)
         {
             Camera.CacheFrame();
-
-            // Allocate (or resize) the offscreen scene target. The world is
-            // drawn into this target first so the lighting pass can sample it
-            // and blend the lightmap on top in Renderer.DrawQueue().
-            Renderer.EnsureSceneTarget(Viewport.VirtualWidth, Viewport.VirtualHeight);
-
             EntityManager.Draw(GameTime.DeltaTime);
         }
 
         //Renderer.Begin();
         //CurrentScene?.Draw(Renderer); > SceneManager
         Renderer.DrawQueue();
-
-        // Apply the lighting pass over the rendered scene (must happen
-        // AFTER DrawQueue has written to SceneTarget, but BEFORE the UI).
-        // This draws the composited frame to the backbuffer.
-        var lightingSystem = EntityManager.GetSystem<LightingSystem>();
-        lightingSystem?.ApplyAfterWorld();
-
-        // Draw sprites that opted out of lighting (shader declares IsUnshaded=true).
-        // Must run after ApplyAfterWorld but before the viewport is reset for UI.
-        Renderer.DrawUnshadedQueue();
-
         //Renderer.End();
 
         // restore the viewport before drawing the UI

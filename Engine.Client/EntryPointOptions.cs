@@ -8,7 +8,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace Engine.Client;
 
-public sealed class ClientOptions
+public sealed class EntryPointOptions
 {
     public string Version = "1.0.0";
     public string Title = "My Game";

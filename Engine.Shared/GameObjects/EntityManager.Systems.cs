@@ -9,9 +9,9 @@ namespace Engine.Shared.GameObjects;
 
 public sealed partial class EntityManager
 {
-    [Dependency] internal SystemsProfiler _sysProff = default!;
+    [Dependency] private SystemsProfiler _sysProff = default!;
     internal Dictionary<Type, EntitySystem> Systems = new();
-    internal readonly Stopwatch _systemTimer = new();
+    private readonly Stopwatch _systemTimer = new();
 
     internal void RegisterSystems()
     {
@@ -96,5 +96,17 @@ public sealed partial class EntityManager
             _systemTimer.Stop();
             _sysProff.Record(type.Name, _systemTimer.Elapsed.TotalMilliseconds, 0.0);
         }
+    }
+
+    private void DrawSystems(float dt)
+    {
+        foreach ((var type, var system) in Systems)
+        {
+            _systemTimer.Restart();
+            system.Draw(dt);
+            _systemTimer.Stop();
+            _sysProff.Record(type.Name, 0.0, _systemTimer.Elapsed.TotalMilliseconds);
+        }
+            
     }
 }

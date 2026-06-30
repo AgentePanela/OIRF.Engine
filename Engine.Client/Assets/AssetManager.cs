@@ -84,8 +84,6 @@ internal sealed partial class AssetManager : IAssetManager
 
     internal Stack<(string key, byte[] data)> LoadRawTextures()
     {
-        LoadAnimationInfo();
-
         var list = new Stack<(string, byte[])>();
         var files = TexturesResPath.GetFiles("png");
 
@@ -93,21 +91,8 @@ internal sealed partial class AssetManager : IAssetManager
         {
             //Debug.WriteLine($"Reading {key}.png");
 
-            // spritesheet source: keep its natural key, gets sliced in UploadTextures instead of queued as-is
-            if (_sheetSources.ContainsKey(resFile.Relative))
-            {
-                var sheetBytes = File.ReadAllBytes(resFile.FilePath);
-                list.Push((resFile.Relative, sheetBytes));
-                continue;
-            }
-
-            // loose frame file explicitly listed in an animation's `files:` -> queue under the remapped frame key
-            var key = _explicitFrames.TryGetValue(resFile.Relative, out var remapped)
-                ? remapped
-                : resFile.Relative;
-
             var bytes = File.ReadAllBytes(resFile.FilePath);
-            list.Push((key, bytes));
+            list.Push((resFile.Relative, bytes));
         }
 
         return list;
@@ -127,15 +112,7 @@ internal sealed partial class AssetManager : IAssetManager
                 var texture = Texture2D.FromStream(_graphics, ms);
                 //Debug.WriteLine($"Streaming {key}");
 
-                if (_sheetSources.TryGetValue(key, out var slice))
-                {
-                    SliceAndQueue(texture, slice);
-                    texture.Dispose();
-                }
-                else
-                {
-                    _atlas.QueueSprite(key, texture);
-                }
+                _atlas.QueueSprite(key, texture);
             }
             catch
             {
@@ -191,7 +168,7 @@ internal sealed partial class AssetManager : IAssetManager
 
     public bool GetTexture(string key, [NotNullWhen(true)] out AtlasSprite sprite, [NotNullWhen(true)] out AtlasPage page)
     {
-        sprite = _atlas.sprites["EngineInternal/Placeholders/Null"]; // invalid sprite
+        sprite = _atlas.sprites["Engine/Null"]; // invalid sprite
         page = _atlas.pages[sprite.Page];
 
         if (!_atlas.sprites.ContainsKey(key))
@@ -211,7 +188,7 @@ internal sealed partial class AssetManager : IAssetManager
         }
 
         // fallback to invalid sprite
-        sprite = _atlas.sprites["EngineInternal/Placeholders/Null"];
+        sprite = _atlas.sprites["Engine/Null"];
         page = _atlas.pages[sprite.Page];
         return false;
     }
@@ -223,7 +200,7 @@ internal sealed partial class AssetManager : IAssetManager
 
     private Sprite2D GetInvalidSprite()
     {
-        var key = "EngineInternal/Placeholders/Null";
+        var key = "Engine/Null";
         var aSpr = _atlas.sprites[key];
         var sprite = new Sprite2D(key, aSpr.Width, aSpr.Height);
         return sprite;
@@ -237,12 +214,7 @@ internal sealed partial class AssetManager : IAssetManager
             return true;
         }
 
-        // bare animation key (e.g. "Player/walk-anim") used without an AnimationComponent driving it -> show frame 0
-        if (_animations.TryGetValue(key, out var anim))
-            return GetSprite(anim.FrameKey(0), out sprite);
-
         sprite = GetInvalidSprite();
-        Log.Warn($"Sprite {key} does not exist!");
         return false;
     }
 

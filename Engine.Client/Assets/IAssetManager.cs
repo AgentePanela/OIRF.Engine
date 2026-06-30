@@ -1,4 +1,3 @@
-using Engine.Client.Assets.Animation;
 using Engine.Client.Assets.Atlas;
 using Engine.Client.Graphics;
 using Engine.Shared.Assets;
@@ -29,12 +28,6 @@ public interface IAssetManager
     public bool GetSprite(string key, [NotNullWhen(true)]out Sprite2D sprite);
 
     public bool HasSprite(string key);
-
-    /// <summary>
-    /// Try to get an animation definition (frame count, speed, loop) loaded from a folder's info.yml.
-    /// </summary>
-    /// <param name="key">Animation key, e.g. "Player/walk-anim".</param>
-    public bool TryGetAnimation(string key, [NotNullWhen(true)] out AnimationDef? def);
 
     /// <summary>
     /// Add a texture rect to the texture atlas, usefull when u have to dynamic add sprites to the atlas.

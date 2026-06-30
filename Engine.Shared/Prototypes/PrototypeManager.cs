@@ -69,15 +69,12 @@ public interface IPrototypeManager
     /// Returns true if the given YAML type key is registered.
     /// </summary>
     bool HasType(string typeKey);
-
-    void IgnorePrototypes(string[] prototypesToIgnore);
 }
 
 public sealed class PrototypeManager : IPrototypeManager
 {
     [Dependency] private readonly SharedContentManager _contentMan = default!;
     public ResPath ResPath {get; private set; } = new ("Prototypes");
-    public List<string> IgnoredPrototypesTypes = new();
 
     // "entity" -> typeof(EntityPrototype), etc.
     private readonly Dictionary<string, Type> _typeMapping = new(StringComparer.OrdinalIgnoreCase);
@@ -109,11 +106,6 @@ public sealed class PrototypeManager : IPrototypeManager
             LoadRawPrototypes(dir);
         
         BuildAll();
-    }
-
-    public void IgnorePrototypes(string[] prototypesToIgnore)
-    {
-        IgnoredPrototypesTypes.AddRange(prototypesToIgnore);
     }
 
     private void ScanPrototypeTypes()
@@ -162,7 +154,7 @@ public sealed class PrototypeManager : IPrototypeManager
     {
         var loader = new PrototypeLoader();
 
-        foreach (var raw in loader.LoadProtos(dir, IgnoredPrototypesTypes))
+        foreach (var raw in loader.LoadProtos(dir))
         {
             if (string.IsNullOrWhiteSpace(raw.Type))
                 throw new PrototypeLoadException($"Prototype in '{raw.SourceFile}' is missing 'type'.");
@@ -171,13 +163,8 @@ public sealed class PrototypeManager : IPrototypeManager
                 throw new PrototypeLoadException($"Prototype in '{raw.SourceFile}' is missing 'id'.");
 
             if (!_typeMapping.ContainsKey(raw.Type))
-            {
-                if (!IgnoredPrototypesTypes.Contains(raw.Type))
-                    throw new PrototypeLoadException($"Unknown prototype type '{raw.Type}' in '{raw.SourceFile}'.");
+                throw new PrototypeLoadException($"Unknown prototype type '{raw.Type}' in '{raw.SourceFile}'.");
 
-                continue;
-            }
-                
             if (!_rawByType.TryGetValue(raw.Type, out var bucket))
             {
                 bucket = new Dictionary<string, RawPrototype>(StringComparer.OrdinalIgnoreCase);

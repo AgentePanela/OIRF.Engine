@@ -13,7 +13,7 @@ public sealed class ComponentFactory
     [Dependency] private readonly SharedContentManager _contentMan = default!;
 
     public Dictionary<string, Type> Components {get; private set;} = new();
-    public Dictionary<string, Type> ComponentsSanitized {get; private set;} = new();
+    public Dictionary<string, Type> ComponentsSanitazed {get; private set;} = new();
 
     public ComponentFactory()
         => IoCManager.ResolveDependencies(this);
@@ -38,7 +38,7 @@ public sealed class ComponentFactory
                 throw new Exception($"{type.FullName} inherits Component but is missing [RegisterComponent()].");
 
             Components.Add(type.Name, type);
-            ComponentsSanitized.Add(attr.Name, type);
+            ComponentsSanitazed.Add(attr.Name, type);
         }
     }
 
@@ -50,9 +50,9 @@ public sealed class ComponentFactory
         return Components[str];
     }
 
-    public string? GetSanitizedByType(Type type)
+    public string? GetSanitazedByType(Type type)
     {
-        foreach (var kvp in ComponentsSanitized)
+        foreach (var kvp in ComponentsSanitazed)
         {
             if (kvp.Value == type)
                 return kvp.Key;
@@ -61,12 +61,12 @@ public sealed class ComponentFactory
         return null;
     }
 
-    public string? GetSanitizedByType<T>() where T : Component
-        => GetSanitizedByType(typeof(T));
+    public string? GetSanitazedByType<T>() where T : Component
+        => GetSanitazedByType(typeof(T));
 
-    public Component? CreateInstanceFromSanitized(string name)
+    public Component? CreateInstanceFromSanitazed(string name)
     {
-        if (!ComponentsSanitized.TryGetValue(name, out var type))
+        if (!ComponentsSanitazed.TryGetValue(name, out var type))
             return null;
 
         return CreateInstance(type);
@@ -98,5 +98,4 @@ public sealed class ComponentFactory
         _entMan.CompsPendingAdd.Add(instance);
         return instance;
     }
-
 }

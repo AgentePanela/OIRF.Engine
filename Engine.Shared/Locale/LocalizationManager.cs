@@ -87,40 +87,9 @@ internal sealed class LocalizationManager : ILocalizationManager
 
     public void LoadCulture()
     {
-        var cultureFiles = new Dictionary<CultureInfo, List<string>>();
-
-        foreach (var localeRoot in ResPath.GetFolders())
-        {
-            var cultures = Directory.GetDirectories(localeRoot);
-
-            foreach (var cultureDir in cultures)
-            {
-                var name = Path.GetFileName(cultureDir);
-
-                if (!Cultures.TryGetValue(name, out var culture))
-                {
-                    culture = new CultureInfo(name);
-                    Cultures.Add(name, culture);
-                }
-
-                if (!cultureFiles.TryGetValue(culture, out var files))
-                {
-                    files = [];
-                    cultureFiles[culture] = files;
-                }
-
-                files.AddRange(
-                    Directory.GetFiles(
-                        cultureDir,
-                        "*.ftl",
-                        SearchOption.AllDirectories
-                    )
-                );
-            }
-        }
-
-        foreach (var (culture, files) in cultureFiles)
-            LoadBundle(culture, files);
+        var dirs = ResPath.GetFolders();
+        foreach (var dir in dirs)
+            LoadRes(dir);
     }
 
     public void ReloadCulture()
@@ -215,8 +184,26 @@ internal sealed class LocalizationManager : ILocalizationManager
         
     }
 
-    private void LoadBundle(CultureInfo loc, IEnumerable<string> files)
+    private void LoadRes(string res)
     {
+        var dirs = Directory.GetDirectories(res);
+        foreach (var dir in dirs)
+        {
+            var name = new DirectoryInfo(dir).Name;
+            CultureInfo? culture;
+            if (!Cultures.TryGetValue(name, out culture)) 
+            {
+                culture = new CultureInfo(name);
+                Cultures.Add(name, culture);
+            }
+            
+            LoadBundle(culture, dir);
+        }
+    }
+
+    private void LoadBundle(CultureInfo loc, string path)
+    {
+        var files = Directory.GetFiles(path, "*.ftl", SearchOption.AllDirectories);
         var builder = LinguiniBuilder
         .Builder()
         .CultureInfo(loc);
@@ -234,7 +221,7 @@ internal sealed class LocalizationManager : ILocalizationManager
             foreach (var (name, func) in funcs)
                 builderReady.AddFunction(name, func);
 
-        var (bundle, errors) = builderReady.Build();
+        var (bundle, errors) = builder.SkipResources().Build();
         if (errors is not null && errors.Count > 0) 
         {
             Log.Error($"Error(s) in locale building for {loc.Name}:");

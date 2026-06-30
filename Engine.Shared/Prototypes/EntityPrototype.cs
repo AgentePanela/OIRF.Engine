@@ -6,7 +6,7 @@ using System.Linq;
 
 namespace Engine.Shared.Prototypes;
 
-/// <summary>
+// <summary>
 /// Prototype definition for entities. Supports inheritance and component data merging.
 /// </summary>
 [Prototype("entity")]
@@ -26,6 +26,15 @@ public sealed class EntityPrototype : IPrototype, IInheritingPrototype
 
     [DataField("name")]
     public string? Name { get; private set; }
+
+    [DataField("category")]
+    public string? Category { get; private set; }
+
+    [DataField("description")]
+    public string? Description { get; private set; }
+
+    [DataField("recipe")]
+    public Dictionary<string, int> Recipe { get; private set; } = new();
 
     [DataField("components")]
     [ComponentsDataField]

@@ -14,11 +14,4 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="EngineResources\**\*">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </Content>
-  </ItemGroup>
 </Project>

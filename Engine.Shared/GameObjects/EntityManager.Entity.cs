@@ -55,7 +55,7 @@ public sealed partial class EntityManager
 
         foreach (var entry in proto.Components.Values)
         {
-            var comp = _compFac.CreateInstanceFromSanitized(entry.Type)
+            var comp = _compFac.CreateInstanceFromSanitazed(entry.Type)
                 ?? _compFac.CreateInstance(entry.Type)
                 ?? throw new Exception($"Unknown component '{entry.Type}' in prototype '{proto.ID}'.");
 

@@ -195,6 +195,11 @@ public sealed class HealthSystem : EntitySystem
         }
     }
 
+    public override void Draw(float dt)
+    {
+        // Only rendering logic here.
+    }
+
     public override void OnShutdown()
     {
         // Clean up before the game closes.
@@ -204,22 +209,6 @@ public sealed class HealthSystem : EntitySystem
     {
         hp.CurrentHealth = hp.MaxHealth;
     }
-}
-```
-
-### EntityDrawSystem
-EntityDrawSystem is a client-side exclusive base class for systems that need to do draw calls (e.g SpriteSystem, TilemapSystem...).
-It inherites EntitySystem and all it methods. EntityDrawSystem only adds `Draw(float dt)` new method.
-```cs
-public sealed class MySpriteSystem : EntityDrawSystem
-{
-
-    public override void Draw(float dt)
-    {
-        // Only rendering logic here.
-    }
-
-    /// All others EntitySystem methods still here...
 }
 ```
 

@@ -69,10 +69,11 @@ public class SpriteWidget : Image
         _spriteKey = spriteKey;
 
         var asset = IoCManager.Resolve<IAssetManager>();
-        asset.GetSprite(spriteKey, out var sprite);
-        _sprite = sprite;
-        _spriteKey = sprite.Key;
-        ApplyTexture(_spriteKey);
+        if (asset.GetSprite(spriteKey, out var sprite))
+        {
+            _sprite = sprite;
+            ApplyTexture(spriteKey);
+        }
     }
 
     private void SetSprite(Sprite2D sprite)

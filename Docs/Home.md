@@ -19,8 +19,6 @@ Everything you need to build a game on top of ORIF.
 | [Scenes](Content/Scenes.md) | Scene lifecycle and scene management |
 | [Prototypes](Content/Prototypes.md) | YAML-driven data definitions |
 | [Graphics](Content/Graphics.md) | Rendering, sprites, labels, and camera |
-| [Animations](Content/Animations.md) | Spritesheet/frame-based animations via info.yml |
-| [Lighting](Content/Lighting.md) | Dynamic 2D lighting, shadows, and ambient light |
 | [Input](Content/Input.md) | Keyboard, mouse, gamepad, and action maps |
 | [Physics](Content/Physics.md) | Collision, physics components, and raycasting |
 | [Tilemaps](Content/Tilemaps.md) | Tile-based maps and chunks |

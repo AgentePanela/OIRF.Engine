@@ -6,7 +6,11 @@
     <NoWarn>CS8618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.*">
+      <PrivateAssets>All</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Engine.Shared\Engine.Shared.csproj" />
-    <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.*" />
   </ItemGroup>
 </Project>

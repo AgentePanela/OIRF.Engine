@@ -12,7 +12,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace Engine.Client.Tilemap;
 
-public sealed class TilemapSystem : EntityDrawSystem
+public sealed class TilemapSystem : EntitySystem
 {
     [Dependency] private readonly RenderManager _renderMan = default!;
     [Dependency] private readonly IAssetManager _assetMan = default!;

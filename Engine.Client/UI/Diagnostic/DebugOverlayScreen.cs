@@ -3,7 +3,6 @@ using Engine.Shared.Configuration;
 
 using Engine.Shared.Configuration.CVars;
 using Engine.Client.Debug.Diagnostics;
-using Engine.Client.Graphics.Lighting;
 
 using Microsoft.Xna.Framework;
 using Myra.Graphics2D;
@@ -20,7 +19,6 @@ public sealed class DebugOverlayScreen : UICanvas
 {
     [Dependency] private readonly Camera2D _camera = default!;
     [Dependency] private readonly RenderManager _renderMan = default!;
-    [Dependency] private readonly LightingManager _lighting = default!;
     [Dependency] private readonly IConfigurationManager _cfg = default!;
     [Dependency] private readonly SystemsProfiler _proff = default!;
 
@@ -33,8 +31,6 @@ public sealed class DebugOverlayScreen : UICanvas
     private Label _resolutionLabel = default!;
     private Label _entityCountLabel = default!;
     private Label _memoryLabel = default!;
-    private Label _profilerSummaryLabel = default!;
-    private Label _lightingLabel = default!;
     private Label _gameStateLabel = default!;
     private Label _elapsedLabel = default!;
     private SystemProfilerWidget _profilerWidget = default!;
@@ -73,8 +69,6 @@ public sealed class DebugOverlayScreen : UICanvas
         _resolutionLabel = CreateLabel("resolution");
         _entityCountLabel = CreateLabel("entities");
         _memoryLabel = CreateLabel("memory");
-        _profilerSummaryLabel = CreateLabel("profilerSummary");
-        _lightingLabel = CreateLabel("lighting");
         _gameStateLabel = CreateLabel("gamestate");
         _elapsedLabel = CreateLabel("elapsed");
 
@@ -90,8 +84,6 @@ public sealed class DebugOverlayScreen : UICanvas
         leftPanel.Widgets.Add(_entityCountLabel);
         leftPanel.Widgets.Add(CreateSpacer());
         leftPanel.Widgets.Add(_renderSpentTime);
-        leftPanel.Widgets.Add(_profilerSummaryLabel);
-        leftPanel.Widgets.Add(_lightingLabel);
         leftPanel.Widgets.Add(_memoryLabel);
         leftPanel.Widgets.Add(CreateSpacer());
         leftPanel.Widgets.Add(_gameStateLabel);
@@ -142,8 +134,7 @@ public sealed class DebugOverlayScreen : UICanvas
                             $"Engine Version: {_cfg.Get(EngineCvars.EngineVersion)}\n" +
                             $"{PlatformInfo.GraphicsBackend} | {PlatformInfo.MonoGamePlatform}";
         
-        _renderSpentTime.Text = $"Renderer draw time: {FormatMs(_renderMan.DrawStopwatch.Elapsed.TotalMilliseconds)}";
-        RefreshProfilerLabels();
+        _renderSpentTime.Text = $"Renderer draw time: {FormatMs(_renderMan.DrawStopwatch.ElapsedMilliseconds)}";
 
         _cameraLabel.Text = $"Camera XY: {_camera.Position.X:0.0}, {_camera.Position.Y:0.0}";
         _zoomLabel.Text = $"Zoom: {_camera.Zoom:0.00}x";
@@ -157,30 +148,6 @@ public sealed class DebugOverlayScreen : UICanvas
 
         _gameStateLabel.Text = $"State: {GameClient.GameState}";
         _elapsedLabel.Text = $"Elapsed: {FormatTime(time.TotalTime)}";
-    }
-
-    private void RefreshProfilerLabels()
-    {
-        double updateMs = 0;
-        double drawMs = 0;
-        int systems = 0;
-
-        foreach (var snapshot in _proff.GetAll())
-        {
-            updateMs += snapshot.UpdateMs;
-            drawMs += snapshot.DrawMs;
-            systems++;
-        }
-
-        _profilerSummaryLabel.Text =
-            $"Profiler: {systems} systems | Update {FormatMs(updateMs)} | Draw {FormatMs(drawMs)}";
-
-        _lightingLabel.Text =
-            $"Lighting: {FormatMs(_lighting.LastLightingTotalMs)} | " +
-            $"lights {_lighting.LastVisibleLights}/{_lighting.LastShadowLights} | " +
-            $"occ {_lighting.LastOccluders} | shadow {_lighting.LastShadowMapWidth}x{_lighting.LastShadowMapHeight}\n" +
-            $"  shadow {FormatMs(_lighting.LastShadowPassMs)} | mask {FormatMs(_lighting.LastOcclusionMaskMs)} | " +
-            $"light {FormatMs(_lighting.LastLightPassMs)} | bleed {FormatMs(_lighting.LastWallBleedMs)} | blur {FormatMs(_lighting.LastLightBlurMs)}";
     }
 
     private static Label CreateLabel(string id)

@@ -106,6 +106,11 @@ public sealed partial class EntityManager
         }
     }
 
+    internal void Draw(float dt)
+    {
+        DrawSystems(dt);
+    }
+
     private Dictionary<EntityUid, Component> GetPool(Type type)
     {
         if (!_scene.Components.TryGetValue(type, out var pool))
