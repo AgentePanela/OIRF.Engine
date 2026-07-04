@@ -29,7 +29,12 @@ public sealed class ClientOptions
     /// <summary>
     /// The main scene the game will load when it get loaded.
     /// </summary>
-    public Type InitialScene;
+    public Type? InitialScene;
+
+    /// <summary>
+    /// The default loading scene used by the engine.
+    /// </summary>
+    public Type LoadingScene = typeof(DefaultLoadingScene);
 
     /// <summary>
     /// The %AppData% location for your game data storage.

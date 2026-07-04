@@ -4,4 +4,4 @@ using System.Runtime.CompilerServices;
 [assembly: InternalsVisibleTo("Engine.Client")]
 [assembly: InternalsVisibleTo("Engine.Server")]
 [assembly: InternalsVisibleTo("Engine.Shared")]
-
+[assembly: InternalsVisibleTo("Engine.Editor")]

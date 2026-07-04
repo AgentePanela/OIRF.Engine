@@ -19,6 +19,11 @@ public sealed class SceneManager : DrawableGameComponent
     public event Action<Scene>? OnSceneChanged;
     public event Action<Scene>? OnBeforeSceneInit;
 
+    /// <summary>
+    /// Seeks if a loading scene already happend.
+    /// </summary>
+    public bool Loaded { get; private set; } = false;
+
     public SceneManager(Game? game) : base(game)
     {
         IoCManager.ResolveDependencies(this);
@@ -28,8 +33,24 @@ public sealed class SceneManager : DrawableGameComponent
     {
         base.Initialize();
 
-        //if (CurrentScene is not null)
-        //    CurrentScene.Initialize(default);
+        // get the initial loading scene.
+        var ops = GameClient.Options;
+        if (!typeof(LoadingScene).IsAssignableFrom(ops.LoadingScene))
+            throw new System.Exception("Initial loading scene is not a loading scene!");
+        var ins = Activator.CreateInstance(ops.LoadingScene) as LoadingScene;
+        if (ins is null)
+            throw new NullReferenceException("Initial loading scene type instance is invalid/null.");
+
+        DoLoadingScene(ins);
+    }
+
+    public void DoLoadingScene(LoadingScene scene)
+    {
+        if (Loaded)
+            throw new Exception("You cannot run a load scene two times!");
+        
+        _nextScene = scene; // force scene
+        TransitionScene();
     }
 
     public override void Update(GameTime gameTime)
@@ -37,8 +58,6 @@ public sealed class SceneManager : DrawableGameComponent
         // Happens before current scene update
         if (_nextScene is not null)
             TransitionScene();
-        else if (CurrentScene is null) //theres no scene
-            ChangeScene(new DefaultLoadingScene());
 
         CurrentScene?.Update(GameClient.GameTime.DeltaTime);
         base.Update(gameTime);
@@ -61,7 +80,7 @@ public sealed class SceneManager : DrawableGameComponent
         if (next is null || CurrentScene == next)
             return;
 
-        _nextScene = next;
+        ChangeScene(next);
     }
 
     /// <summary>
@@ -73,6 +92,9 @@ public sealed class SceneManager : DrawableGameComponent
     {
         if (CurrentScene == next)
             return;
+
+        if (next.GetType().IsSubclassOf(typeof(LoadingScene)))
+            throw new Exception("You cannot change to a loading scene. Use DoLoadingScene();");
 
         _nextScene = next;
     }

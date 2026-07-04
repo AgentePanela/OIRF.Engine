@@ -87,6 +87,8 @@ While `GameState == GameState.Loading`, `SceneManager` displays a loading splash
 * YAML files loaded by the `PrototypeManager`.
 * Texture sheets loaded into the `AssetManager` to build the global atlas.
 
+The loading scene type is configurable via `ClientOptions.LoadingScene` (defaults to `DefaultLoadingScene`). On `SceneManager.Initialize()`, the engine validates that this type derives from `LoadingScene` before instantiating it with `Activator.CreateInstance`; otherwise it throws.
+
 ### 3. Transition to Running
 Once assets are fully loaded:
 1. `GameState` transitions to `GameState.Running`.

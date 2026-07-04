@@ -1,170 +1,109 @@
-using Engine.Client.Assets;
-using Engine.Client.Scenes.Factories;
-using Engine.Client.Graphics;
-using Engine.Client.Graphics.Fonts;
-using Engine.Shared.IoC;
-using Engine.Client.UI;
-using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
-using System;
-using System.IO;
-using System.Threading;
 using System.Threading.Tasks;
-using Engine.Shared.GameObjects.Factories;
+using Engine.Client.Graphics.Fonts;
+using Engine.Client.Scenes.Factories;
 using Engine.Shared.GameObjects;
-using Engine.Shared.Assets;
+using Engine.Shared.GameObjects.Factories;
 
 namespace Engine.Client.Scenes;
 
 /// <summary>
-/// Handles game ENTIRE loading logic
+/// Base class for loading scenes. This handles everything related to loading the base game.
 /// </summary>
-public class DefaultLoadingScene : Scene
+public abstract class LoadingScene : Scene
 {
-    [Dependency] private readonly SceneFactory _sceneFac = default!;
-    [Dependency] private readonly ComponentFactory _compFac = default!;
-    [Dependency] private readonly EntityManager _entMan = default!;
-    [Dependency] private readonly IFontManager _fonts = default!;
-    [Dependency] private readonly TextLayoutService _textLayout = default!;
+    [Dependency] protected readonly SceneFactory _sceneFac = default!;
+    [Dependency] protected readonly ComponentFactory _compFac = default!;
+    [Dependency] protected readonly EntityManager _entMan = default!;
+    [Dependency] protected readonly IFontManager _fonts = default!;
+    [Dependency] protected readonly TextLayoutService _textLayout = default!;
+    protected Task? _registryTask;
 
-    private Label2D _label;
-    private Vector2 _labelPos;
-    private string _loadingFlavour = string.Empty;
-    private TextureRect _logo;
-    private Vector2 _logoPos;
-    protected LoadingState _state = LoadingState.Registry;
+    protected bool _autoStartLoading = true;
 
-    public override UICanvas? DefaultCanvas { get; protected set; } = null;
-
-    private Task? _loadingTask;
-    private bool _startedLoading = false;
+    protected LoadingState _state = LoadingState.Idle;
+    
+    protected enum LoadingState
+    {
+        Idle,
+        TextureLoading,
+        Registry,
+        Done
+    }
 
     public override void OnSceneStart()
     {
         base.OnSceneStart();
+        if (_autoStartLoading)
+            StartLoading();
 
-        _fonts.BootstrapDefaults(_content);
-
-        _loadingFlavour = Loc.GetString("engine-loading-flavour-default");
-
-        var logoPath = Path.Combine(SharedResourceManager.GetMainResourcesFolder(), "Textures", "Interface");
-        _logo = new TextureRect(Texture2D.FromFile(GameClient.GraphicsDevice, Path.Combine(logoPath, "Logo.png"))); // we dont have asset manager ready lol
-        _logo.Origin = new Vector2(
-            _logo.Texture.Width / 2,
-            _logo.Texture.Height
-        );
-        _logo.Scale = new Vector2(0.8f);
-
-        _asset.OnLoadingCompleted += LoadingCompleted;
-
-        _logoPos = new Vector2(
-            GameClient.Options.Width / 2,
-            (GameClient.Options.Height / 2) + (_logo.Texture.Height / 4)
-        );
-        _labelPos = new Vector2(
-            GameClient.Options.Width / 2,
-            (GameClient.Options.Height / 2) + (_logo.Texture.Height / 4) + 20
-        );
-
-        _label = new Label2D(
-            TextStyle.Loading,
-            _loadingFlavour,
-            Vector2.Zero,
-            0f,
-            Vector2.One,
-            Color.White,
-            0f
-        );
-
-        _renderer.Resizing = false; // disable resizing for a better look
-        _renderer.BlendState = BlendState.NonPremultiplied; // as we are using texture2d from files the alpha is fucked up so we need to change the blend state
+        _asset.OnLoadingCompleted += () => _state = LoadingState.Registry;
     }
 
     public override void Update(float dt)
     {
         base.Update(dt);
-
-        if (_state == LoadingState.Done)
-            _loadingFlavour = Loc.GetString("engine-loading-flavour-done");
-
-        if (_state == LoadingState.AssetManager)
+        switch (_state)
         {
-            _asset.UpdateLoading(null); // will load 30 textures each call and bake the atlas in the last call
-            var asset = IoCManager.Resolve<IAssetManager>() as AssetManager;
+            case LoadingState.TextureLoading:
+                TexturesPhase(dt);
+                break;
+            case LoadingState.Registry:
+                RegistryPhase();
+                break;
+            case LoadingState.Done:
+                LoadingCompleted();
+                break;
+        }
+    }
 
-            _loadingFlavour = Loc.GetString("engine-loading-flavour-asset",
-                ("textures", $"{asset?.initialPendingSprites - asset?._pending.Count}"), ("maxTextures", $"{asset?.initialPendingSprites}"));
+    protected virtual void StartLoading()
+    {
+        _asset.Init(GameClient.GraphicsDevice, GameClient.SpriteBatch);
+        _fonts.BootstrapDefaults(_content);
+        Log.Debug("LoadingState = TextureLoading.");
+        _state = LoadingState.TextureLoading;
+    }
+
+    protected virtual void RegistryPhase()
+    {
+        if (_registryTask?.IsCompleted == true)
+        {
+            _state = LoadingState.Done;
+            Log.Debug("LoadingState = Done.");
+            return;
         }
 
-        // fun fact: if this get called two times or more by some perf issue
-        // the whole loading logic will get fucked
-        if (_state == LoadingState.Registry && !_startedLoading)
+        if (_registryTask is not null)
+            return;
+
+        Log.Debug("LoadingState = Registry.");
+        _registryTask = Task.Run(() =>
         {
-            _startedLoading = true;
-
-            _loadingFlavour = Loc.GetString("engine-loading-flavour-registry");
-
-            _loadingTask = Task.Run(() =>
-            {
-                _sceneFac.LoadScenes();
-                _compFac.LoadComponents();
+            _sceneFac.LoadScenes();
+            _compFac.LoadComponents();
                 
-                _entMan.Init();
-                _entMan.RegisterSystems();
-
-                _loadingFlavour = Loc.GetString("engine-loading-flavour-rawtex-load");
-
-                _asset.Init(GameClient.GraphicsDevice, GameClient.SpriteBatch);
-            });
-        }
-
-        if (_loadingTask != null && _loadingTask.IsCompleted)
-            _state = LoadingState.AssetManager;
-
-        _label.String = _loadingFlavour;
-        _label.Origin = _textLayout.GetCenteredOrigin(_label);
+            _entMan.Init();
+            _entMan.RegisterSystems();
+        });
     }
 
-    public override void Draw(float dt)
+    protected virtual void TexturesPhase(float dt)
     {
-        base.Draw(dt);
-        _renderer.Submit(_label, _labelPos);
-        _renderer.Submit(_logo, _logoPos);
+        _asset.UpdateLoading(null);
     }
 
-    private void LoadingCompleted()
+    private bool _completed = false;
+    protected virtual void LoadingCompleted()
     {
+        if (_completed)
+            return;
+        
+        _completed = true;
         _state = LoadingState.Done;
         GameClient.GameState = GameState.Running;
         Log.Debug("GameState: Loading > Running!");
-        #if !DEBUG
-        Thread.Sleep((int)(1.5 * 1000)); // loading is currently too fast </3
-        #endif
-        var ops = GameClient.Options;
-        if (!ops.InitialScene.IsSubclassOf(typeof(Scene)))
-            throw new System.Exception("Initial scene is not a scene!");
-        var ins = Activator.CreateInstance(ops.InitialScene) as Scene;
-        if (ins is null)
-            throw new NullReferenceException("Initial scene type instance is invalid/null.");
-        _scene.ChangeScene(ins);
-
-        _logo.Texture.Dispose();
-        _renderer.Resizing = true;
-        _renderer.BlendState = BlendState.AlphaBlend;
 
         _entMan.EventBus.RaiseEvent(new LoadingFinishedEvent());
-    }
-
-    public override void OnSceneEnd()
-    {
-        base.OnSceneEnd();
-    }
-
-    protected enum LoadingState
-    {
-        Registry,
-        AssetManager,
-        Done
     }
 }
 
