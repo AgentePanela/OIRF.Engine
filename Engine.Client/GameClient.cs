@@ -363,11 +363,17 @@ public class GameClient : Game
         //CurrentScene?.Draw(Renderer); > SceneManager
         Renderer.DrawQueue();
 
-        // Apply the lighting pass over the rendered scene (must happen
-        // AFTER DrawQueue has written to SceneTarget, but BEFORE the UI).
-        // This draws the composited frame to the backbuffer.
-        var lightingSystem = EntityManager.GetSystem<LightingSystem>();
-        lightingSystem?.ApplyAfterWorld();
+        if (GameState == GameState.Running)
+        {
+            // Apply the lighting pass over the rendered scene (must happen
+            // AFTER DrawQueue has written to SceneTarget, but BEFORE the UI).
+            // This draws the composited frame to the backbuffer. Gated on
+            // GameState.Running because EntityManager.RegisterSystems() runs on a
+            // background task during loading - fetching the system before that
+            // finishes resolving its [Dependency] fields crashes with an NRE.
+            var lightingSystem = EntityManager.GetSystem<LightingSystem>();
+            lightingSystem?.ApplyAfterWorld();
+        }
 
         // Draw sprites that opted out of lighting (shader declares IsUnshaded=true).
         // Must run after ApplyAfterWorld but before the viewport is reset for UI.
