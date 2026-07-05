@@ -171,6 +171,8 @@ public class GameClient : Game
         ConfigManager.ForceDefaultValue(GameCVars.ResolutionWidth, Options.Width);
         ConfigManager.ForceDefaultValue(GameCVars.ResolutionHeight, options.Height);
 
+        BeforeInit();
+
         sharedContent.PostInit();
         InputManager.Init();
         
@@ -244,6 +246,14 @@ public class GameClient : Game
         WindowManager.Resize();
 
         SuppressDraw();
+    }
+
+    /// <summary>
+    /// Called right before almost all systems init, right after ioc registrations
+    /// </summary>
+    protected virtual void BeforeInit()
+    {
+        
     }
 
     protected override void Initialize()
