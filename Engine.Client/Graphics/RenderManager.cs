@@ -25,6 +25,13 @@ public sealed partial class RenderManager
     public BlendState BlendState = BlendState.AlphaBlend;
     public SamplerState DefaultSampler => GameClient.Options.Samplimg;
 
+    /// <summary>
+    /// When set, redirects the frame's final composited output to this target instead of
+    /// the backbuffer. Null (default) preserves today's exact backbuffer behavior -
+    /// callers (e.g. an editor viewport panel) opt in per-frame.
+    /// </summary>
+    public RenderTarget2D? FinalTarget { get; set; }
+
     private readonly SortedDictionary<int, List<RenderQueue>> _renderQueue = new();
     private readonly List<IPooledRenderable> _pooledEntries = new();
 
@@ -139,13 +146,22 @@ public sealed partial class RenderManager
     private static bool IsEffectUnshaded(Effect? effect) =>
         effect?.CurrentTechnique?.Name == "Unshaded";
 
+    /// <summary>
+    /// Sets a plain full-size viewport (no letterboxing) — used when rendering into a
+    /// custom-sized <see cref="FinalTarget"/> instead of the backbuffer.
+    /// </summary>
+    public void SetFullViewport(int width, int height)
+        => GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, width, height);
+
     public void DrawUnshadedQueue()
     {
         if (_unshadedQueue.Count == 0)
             return;
 
-        GameClient.GraphicsDevice.SetRenderTarget(null);
-        GameClient.GraphicsDevice.Viewport = LastBackbufferViewport;
+        GameClient.GraphicsDevice.SetRenderTarget(FinalTarget);
+        GameClient.GraphicsDevice.Viewport = FinalTarget is not null
+            ? new Viewport(0, 0, FinalTarget.Width, FinalTarget.Height)
+            : LastBackbufferViewport;
 
         Effect? currentShader = null;
         SamplerState? currentSampler = null;
@@ -289,7 +305,11 @@ public sealed partial class RenderManager
             // GraphicsDevice.Viewport here. LightingSystem.Draw() sets
             // per-light row viewports during shadow-map rendering and never
             // restores them, so the device viewport is stale by this point.
-            if (Resizing)
+            if (FinalTarget is not null)
+            {
+                previousViewport = new Viewport(0, 0, FinalTarget.Width, FinalTarget.Height);
+            }
+            else if (Resizing)
             {
                 var pp = GameClient.GraphicsDevice.PresentationParameters;
                 int vx = (pp.BackBufferWidth  - _viewport.VirtualWidth)  / 2;
@@ -339,7 +359,7 @@ public sealed partial class RenderManager
 
         if (didSwitchTarget)
         {
-            GameClient.GraphicsDevice.SetRenderTarget(null);
+            GameClient.GraphicsDevice.SetRenderTarget(FinalTarget);
             GameClient.GraphicsDevice.Viewport = previousViewport;
         }
 

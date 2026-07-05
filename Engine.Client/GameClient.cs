@@ -345,7 +345,12 @@ public class GameClient : Game
         // doesn't match the virtual resolution. Resizing=false during
         // loading → skip and let the loading scene manage its own viewport.
         if (Renderer.Resizing)
-            Renderer.SetLetterboxedBackbufferViewport();
+        {
+            if (Renderer.FinalTarget is not null)
+                Renderer.SetFullViewport(Renderer.FinalTarget.Width, Renderer.FinalTarget.Height);
+            else
+                Renderer.SetLetterboxedBackbufferViewport();
+        }
 
         if (GameState == GameState.Running)
         {
@@ -382,15 +387,21 @@ public class GameClient : Game
         //Renderer.End();
 
         // restore the viewport before drawing the UI
-        GraphicsDevice.Viewport = new Viewport(
-            0,
-            0,
-            GraphicsDevice.PresentationParameters.BackBufferWidth,
-            GraphicsDevice.PresentationParameters.BackBufferHeight
-        );
+        GraphicsDevice.Viewport = Renderer.FinalTarget is not null
+            ? new Viewport(0, 0, Renderer.FinalTarget.Width, Renderer.FinalTarget.Height)
+            : new Viewport(
+                0,
+                0,
+                GraphicsDevice.PresentationParameters.BackBufferWidth,
+                GraphicsDevice.PresentationParameters.BackBufferHeight
+            );
 
-        InterfaceManager.Draw(GameTime.DeltaTime);
-        WindowManager.Draw(GameTime.DeltaTime);
+        // A captured frame (Renderer.FinalTarget set) shouldn't bake in Myra UI.
+        if (Renderer.FinalTarget is null)
+        {
+            InterfaceManager.Draw(GameTime.DeltaTime);
+            WindowManager.Draw(GameTime.DeltaTime);
+        }
 
         //base.Draw(gameTime);
     }

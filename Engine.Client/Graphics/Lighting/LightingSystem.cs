@@ -166,7 +166,7 @@ public sealed class LightingSystem : EntityDrawSystem
         if (scene is null || _lightmap.Target is null)
             return;
 
-        GameClient.GraphicsDevice.SetRenderTarget(null);
+        GameClient.GraphicsDevice.SetRenderTarget(_render.FinalTarget);
         GameClient.GraphicsDevice.Viewport = _render.LastBackbufferViewport;
 
         if (_lighting.DebugDraw)
