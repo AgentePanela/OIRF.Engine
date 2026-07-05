@@ -135,13 +135,13 @@ public sealed class LightingSystem : EntityDrawSystem
         _occlusionMaskEffect = _shaders.GetShader("OcclusionMask")?.Clone();
 
         if (_applyEffect is null)
-            Log.Warn("LightingApply.fx not found — apply pass will be skipped.");
+            Log.Warn("LightingApply.fx not found - apply pass will be skipped.");
         if (_shadowDepthEffect is null)
-            Log.Warn("ShadowDepth.fx not found — shadows will be disabled.");
+            Log.Warn("ShadowDepth.fx not found - shadows will be disabled.");
         if (_lightSoftEffect is null)
-            Log.Warn("LightSoft.fx not found — point/spot lights will not render.");
+            Log.Warn("LightSoft.fx not found - point/spot lights will not render.");
         if (_occlusionMaskEffect is null)
-            Log.Warn("OcclusionMask.fx not found — wall bleed will be unrestricted.");
+            Log.Warn("OcclusionMask.fx not found - wall bleed will be unrestricted.");
     }
 
     public override void Draw(float dt)
