@@ -92,6 +92,10 @@ public class DefaultLoadingScene : LoadingScene
                 throw new NullReferenceException("Initial scene type instance is invalid/null.");
             _scene.ChangeScene(ins);
         }
+        else
+        {
+            _scene.DisposeCurrentScene();
+        }
 
         _renderer.Resizing = true;
     }

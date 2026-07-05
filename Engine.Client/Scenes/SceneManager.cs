@@ -99,16 +99,20 @@ public sealed class SceneManager : DrawableGameComponent
         _nextScene = next;
     }
 
+    public void DisposeCurrentScene()
+    {
+        if (CurrentScene is null)
+            return;
+        
+        CurrentScene.Dispose(); // Dispose active scene.
+        GC.Collect(); // Force the garbage collector to collect to ensure memory is cleared.
+        CurrentScene = null;
+
+    }
+
     private void TransitionScene()
     {
-        // Dispose active scene.
-        if (CurrentScene is not null)
-            CurrentScene?.Dispose();
-
-        // Force the garbage collector to collect to ensure memory is cleared.
-        GC.Collect();
-
-        // Change the currently active scene to the new scene.
+        DisposeCurrentScene();
         Log.Debug($"Changing current scene - {CurrentScene?.GetType().Name ?? "null"} > {_nextScene?.GetType().Name ?? "null"}");
         CurrentScene = _nextScene;
         _nextScene = null;

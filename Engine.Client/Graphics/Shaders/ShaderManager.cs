@@ -26,6 +26,9 @@ public sealed class ShaderManager
 
     private void Scan(string root)
     {
+        if (!Directory.Exists(root))
+            return;
+
         var dir = Directory.GetFiles(root, "*.xnb", SearchOption.AllDirectories);
         foreach (var file in dir)
         {
@@ -46,8 +49,10 @@ public sealed class ShaderManager
     {
         if (name is null)
             return null;
+
+        _effects.TryGetValue(name, out var effect);
         
-        return _effects[name] ?? null;
+        return effect;
     }
 
     public bool HasShader(string? shaderName)

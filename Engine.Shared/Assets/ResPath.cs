@@ -11,15 +11,23 @@ namespace Engine.Shared.Assets;
 /// </summary>
 public readonly struct ResPath
 {
+    private static readonly Dictionary<string, ResPath> _registry = new();
+
+    /// <summary>
+    /// Every distinct ResPath root ever constructed, e.g. "Prototypes", "Locale", "Textures".
+    /// </summary>
+    public static IReadOnlyCollection<ResPath> Registered => _registry.Values;
+
     public readonly string Directory;
     public ResPath(string path)
     {
         Directory = path;
+        _registry.TryAdd(path, this);
     }
 
     public ResFile[] GetFiles(string fileType)
         => IoCManager.Resolve<SharedResourceManager>().GetResPathFiles(this, fileType);
-    
+
     public string[] GetFolders()
         => IoCManager.Resolve<SharedResourceManager>().GetResPathFolders(this);
 }

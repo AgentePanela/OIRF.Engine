@@ -41,7 +41,7 @@ internal sealed class AudioManager : IAudioManager
     /// </summary>
     public readonly List<(FileStream? stream, StreamPackage package)> RunningStreams = new();
 
-    public readonly ResPath resPath = new("audio");
+    public readonly ResPath resPath = new("Audio");
 
     public AudioManager()
         => IoCManager.ResolveDependencies(this);
