@@ -7,8 +7,10 @@ namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
 /// Builds the occluder edge geometry for the shadow depth shader. Every
-/// occluder AABB becomes 4 edges, every edge becomes a quad (4 verts, 6
-/// indices) that the vertex shader stretches across the shadow map row.
+/// occluder AABB becomes 4 edges, every edge becomes a quad that the vertex
+/// shader stretches across the shadow map row. The geometry doesn't depend
+/// on the light, so it's built once per frame and drawn for every light.
+/// Indices are a fixed 0,1,2 0,2,3 pattern owned by the LightingSystem.
 /// </summary>
 internal static class ShadowGeometry
 {
@@ -29,23 +31,22 @@ internal static class ShadowGeometry
     }
 
     /// <summary>
-    /// Fills the vertex/index arrays from the occluder list. Returns the
-    /// number of indices written; <paramref name="vertexCount"/> gets the
-    /// number of vertices. Stops early if the arrays run out of room.
+    /// Fills the vertex array from the occluder list (16 verts per occluder).
+    /// Returns the number of vertices written; stops early if the array
+    /// runs out of room.
     /// </summary>
     public static int Build(
         IReadOnlyList<(Rectangle Bounds, TransformComponent Transform)> occluders,
-        OccluderVertex[] destVertices,
-        short[] destIndices,
-        out int vertexCount)
+        OccluderVertex[] destVertices)
     {
         int vIdx = 0;
-        int iIdx = 0;
         int vCap = destVertices.Length;
-        int iCap = destIndices.Length;
 
         for (int o = 0; o < occluders.Count; o++)
         {
+            if (vIdx + 16 > vCap)
+                break;
+
             var bounds = occluders[o].Bounds;
 
             float x0 = bounds.Left;
@@ -56,12 +57,6 @@ internal static class ShadowGeometry
             // unrolled so we don't allocate an edge array per occluder
             for (int e = 0; e < 4; e++)
             {
-                if (vIdx + 4 > vCap || iIdx + 6 > iCap)
-                {
-                    vertexCount = 0;
-                    return iIdx;
-                }
-
                 float ax, ay, bx, by;
                 switch (e)
                 {
@@ -71,30 +66,14 @@ internal static class ShadowGeometry
                     default: ax = x0; ay = y1; bx = x0; by = y0; break; // left
                 }
 
-                int vBase = vIdx;
-
                 var aPos = new Vector4(ax, ay, bx, by);
                 destVertices[vIdx++] = new OccluderVertex { aPos = aPos, subVertex = new Vector2(0, 0) };
                 destVertices[vIdx++] = new OccluderVertex { aPos = aPos, subVertex = new Vector2(1, 0) };
                 destVertices[vIdx++] = new OccluderVertex { aPos = aPos, subVertex = new Vector2(1, 1) };
                 destVertices[vIdx++] = new OccluderVertex { aPos = aPos, subVertex = new Vector2(0, 1) };
-
-                short v0 = (short)vBase;
-                short v1 = (short)(vBase + 1);
-                short v2 = (short)(vBase + 2);
-                short v3 = (short)(vBase + 3);
-
-                destIndices[iIdx++] = v0;
-                destIndices[iIdx++] = v1;
-                destIndices[iIdx++] = v2;
-
-                destIndices[iIdx++] = v0;
-                destIndices[iIdx++] = v2;
-                destIndices[iIdx++] = v3;
             }
         }
 
-        vertexCount = vIdx;
-        return iIdx;
+        return vIdx;
     }
 }

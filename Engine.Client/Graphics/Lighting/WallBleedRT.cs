@@ -4,8 +4,9 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
-/// Ping-pong pair of render targets for the lightmap blur passes,
-/// sized to match the lightmap.
+/// Ping-pong pair of render targets for the wall bleed blur. Runs at half
+/// the lightmap resolution — the bleed is a low frequency glow, so the
+/// smaller targets look the same and cost a quarter of the fill.
 /// </summary>
 internal sealed class WallBleedRT
 {
@@ -32,12 +33,12 @@ internal sealed class WallBleedRT
         _a = new RenderTarget2D(
             GameClient.GraphicsDevice, width, height,
             false, SurfaceFormat.Color, DepthFormat.None,
-            0, RenderTargetUsage.PreserveContents);
+            0, RenderTargetUsage.DiscardContents);
 
         _b = new RenderTarget2D(
             GameClient.GraphicsDevice, width, height,
             false, SurfaceFormat.Color, DepthFormat.None,
-            0, RenderTargetUsage.PreserveContents);
+            0, RenderTargetUsage.DiscardContents);
 
         _w = width;
         _h = height;

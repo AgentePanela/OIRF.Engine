@@ -141,7 +141,7 @@ _lighting.LightIntensity = 1.2f;              // global brightness multiplier
 _lighting.MaxLights = 64;                     // hard cap, sorted by distance to camera
 _lighting.MaxShadowcastingLights = 16;        // shadow-map row budget
 _lighting.HardShadows = true;                 // cheap single-sample shadows
-_lighting.WallBleedEnabled = true;            // soft glow bleeding through walls
+_lighting.WallBleedEnabled = true;            // walls pick up the glow of nearby lights
 _lighting.LightBlurEnabled = true;            // blur final lightmap
 ```
 
@@ -178,11 +178,11 @@ Anything using the `Unshaded` technique is drawn at full brightness after the li
 
 Each frame, `LightingSystem`:
 
-1. Collects all `PointLight`/`SpotLight`/`TextureLight` entities and all `Occluder` entities.
-2. Renders a 1D cylindrical shadow map (one row per shadow-casting light — point and spot share the same map and row budget).
-3. Builds an occlusion mask of which pixels are reachable by lit area (cone-shaped for spotlights).
-4. Draws every light additively into a lightmap render target, sampling the shadow map for occlusion. Spotlights additionally discard pixels outside their cone.
-5. Optionally blurs the lightmap (wall-bleed pass and/or final Gaussian blur), depending on `LightingManager` settings.
+1. Collects visible `PointLight`/`SpotLight` entities and all `Occluder` entities near the view (padded by the largest light radius, so off-screen walls still cast shadows into view).
+2. Builds the occluder edge geometry once and renders a 1D cylindrical shadow map (one row per shadow-casting light — point and spot share the same map and row budget).
+3. Draws every light additively into a lightmap render target, sampling the shadow map for occlusion. Spotlights additionally discard pixels outside their cone. Texture lights are drawn on top with plain additive sprites.
+4. Wall bleed (optional): blurs the lightmap at half resolution, then draws the occluder quads over the lightmap so each wall pixel shows the blurred glow of nearby lights.
+5. Light blur (optional): a final 2-pass separable Gaussian over the lightmap, smoothing shadow banding.
 6. Multiplies the rendered scene by the lightmap and writes the result to the backbuffer; `Unshaded` sprites are drawn on top afterward at full brightness.
 
 ---
@@ -191,4 +191,4 @@ Each frame, `LightingSystem`:
 
 - `TextureLightComponent.CastShadows` is not yet wired up — texture lights never occlude and are always drawn unoccluded regardless of the field's value. (`PointLight` and `SpotLight` both cast shadows correctly.)
 - Shadows use standard PCF, not true variance shadow mapping — soft shadow quality is driven by `Softness` / `LightSoftness`, not VSM probability falloff.
-- All occluders are evaluated against every shadow-casting light; there is no per-light occluder culling by distance yet.
+- Occluder bounds are axis-aligned and ignore entity rotation/scale.

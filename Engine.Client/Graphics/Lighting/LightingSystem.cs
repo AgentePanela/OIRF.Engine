@@ -14,8 +14,8 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
-/// Builds the lightmap every frame: shadow map, occlusion mask, light pass,
-/// optional blurs. <see cref="ApplyAfterWorld"/> then multiplies the result
+/// Builds the lightmap every frame: shadow map, light pass, optional wall
+/// bleed and blur. <see cref="ApplyAfterWorld"/> then multiplies the result
 /// over the rendered scene.
 /// </summary>
 public sealed class LightingSystem : EntityDrawSystem
@@ -32,19 +32,26 @@ public sealed class LightingSystem : EntityDrawSystem
     private readonly LightingRenderTarget _lightmap = new();
     private readonly ShadowMapRT _shadowMap = new();
     private readonly WallBleedRT _wallBleed = new();
-    private readonly OcclusionMaskRT _occlusionMask = new();
+    private readonly ScratchRT _blurScratch = new();
 
-    // 256 occluders x 4 edges x 4 verts = 4096 verts, 6144 indices
-    private const int MaxOccluders = 256;
-    private ShadowGeometry.OccluderVertex[] _shadowVerts = new ShadowGeometry.OccluderVertex[MaxOccluders * 16];
-    private short[] _shadowIndices = new short[MaxOccluders * 24];
+    // occluder edge geometry, built once per frame and drawn for every
+    // shadow light. Capped at 4096 occluders by the 16 bit index range
+    private const int MaxOccluderCap = 4096;
+    private int _occluderCapacity = 256;
+    private ShadowGeometry.OccluderVertex[] _shadowVerts = new ShadowGeometry.OccluderVertex[256 * 16];
+    private DynamicVertexBuffer? _shadowVB;
+    private IndexBuffer? _shadowIB;
+    private int _shadowTriCount;
 
     private readonly List<Rectangle> _scratchTileRects = new();
 
     // reused every frame to avoid allocations
     private readonly List<LightEntry> _lights = new();
     private readonly List<(Rectangle Bounds, TransformComponent Transform)> _occluders = new();
-    private readonly List<(Rectangle Bounds, TransformComponent Transform)> _culledOccluders = new();
+    private DiskVertex[] _wallVerts = new DiskVertex[256 * 6];
+
+    private float _maxLightRadius;
+    private bool _warnedShadowCap;
 
     // quad covering a 2r x 2r square around a light, in world space
     private struct DiskVertex
@@ -66,7 +73,15 @@ public sealed class LightingSystem : EntityDrawSystem
             new VertexElement(0, VertexElementFormat.Vector2, VertexElementUsage.Position, 0),
             new VertexElement(8, VertexElementFormat.Vector2, VertexElementUsage.TextureCoordinate, 0));
     }
-    private ScreenVertex[] _screenQuad = new ScreenVertex[6];
+    private static readonly ScreenVertex[] ScreenQuad =
+    {
+        new() { Position = new Vector2(-1, -1), TexCoord = new Vector2(0, 0) },
+        new() { Position = new Vector2( 1, -1), TexCoord = new Vector2(1, 0) },
+        new() { Position = new Vector2( 1,  1), TexCoord = new Vector2(1, 1) },
+        new() { Position = new Vector2(-1, -1), TexCoord = new Vector2(0, 0) },
+        new() { Position = new Vector2( 1,  1), TexCoord = new Vector2(1, 1) },
+        new() { Position = new Vector2(-1,  1), TexCoord = new Vector2(0, 1) },
+    };
 
     // plain additive blend, lights output premultiplied rgb + strength in alpha
     private static readonly BlendState AdditivePremultiplied = new BlendState
@@ -95,12 +110,20 @@ public sealed class LightingSystem : EntityDrawSystem
     };
 
     private Effect? _applyEffect;
-    private Effect? _debugEffect;
     private Effect? _shadowDepthEffect;
     private Effect? _lightSoftEffect;
     private Effect? _lightBlurEffect;
     private Effect? _wallMergeEffect;
-    private Effect? _occlusionMaskEffect;
+
+    // parameter lookups by name are dictionary hits, cache them once
+    private EffectParameter? _apTexelSize;
+    private EffectParameter? _sdLightPos, _sdLightRadius, _sdWrapPass;
+    private EffectParameter? _lpViewProj, _lpShadowMap, _lpShadowMapTexel,
+        _lpCenter, _lpColor, _lpRange, _lpPower, _lpSoftness, _lpFalloff,
+        _lpCurveFactor, _lpIndex, _lpContactBias,
+        _lpDirection, _lpConeAngle, _lpConeSoftness;
+    private EffectParameter? _blSourceMap, _blSourceTexel, _blIsHorizontal;
+    private EffectParameter? _wmBlurred, _wmViewProj;
 
     private readonly Stopwatch _passTimer = new();
     private readonly Stopwatch _frameTimer = new();
@@ -113,13 +136,11 @@ public sealed class LightingSystem : EntityDrawSystem
         _cfg.Subs(LightingCvars.PixelatedLighting, v => _lighting.PixelatedLighting = v);
         _cfg.Subs(LightingCvars.LightPixelSize,   v => _lighting.LightPixelSize   = v);
 
-        _applyEffect         = _shaders.GetShader("LightingApply")?.Clone();
-        _debugEffect         = _shaders.GetShader("LightingDebug")?.Clone();
-        _shadowDepthEffect   = _shaders.GetShader("ShadowDepth")?.Clone();
-        _lightSoftEffect     = _shaders.GetShader("LightSoft")?.Clone();
-        _lightBlurEffect     = _shaders.GetShader("LightBlur")?.Clone();
-        _wallMergeEffect     = _shaders.GetShader("WallMerge")?.Clone();
-        _occlusionMaskEffect = _shaders.GetShader("OcclusionMask")?.Clone();
+        _applyEffect       = _shaders.GetShader("LightingApply")?.Clone();
+        _shadowDepthEffect = _shaders.GetShader("ShadowDepth")?.Clone();
+        _lightSoftEffect   = _shaders.GetShader("LightSoft")?.Clone();
+        _lightBlurEffect   = _shaders.GetShader("LightBlur")?.Clone();
+        _wallMergeEffect   = _shaders.GetShader("WallMerge")?.Clone();
 
         if (_applyEffect is null)
             Log.Warn("LightingApply.fx not found - apply pass will be skipped.");
@@ -127,8 +148,58 @@ public sealed class LightingSystem : EntityDrawSystem
             Log.Warn("ShadowDepth.fx not found - shadows will be disabled.");
         if (_lightSoftEffect is null)
             Log.Warn("LightSoft.fx not found - point/spot lights will not render.");
-        if (_occlusionMaskEffect is null)
-            Log.Warn("OcclusionMask.fx not found - wall bleed will be unrestricted.");
+        if (_wallMergeEffect is null)
+            Log.Warn("WallMerge.fx not found - wall bleed will be disabled.");
+
+        CacheEffectParameters();
+    }
+
+    private void CacheEffectParameters()
+    {
+        _apTexelSize = _applyEffect?.Parameters["LightmapTexelSize"];
+
+        if (_shadowDepthEffect is not null)
+        {
+            var p = _shadowDepthEffect.Parameters;
+            _sdLightPos    = p["lightPos"];
+            _sdLightRadius = p["lightRadius"];
+            _sdWrapPass    = p["shadowWrapPass"];
+        }
+
+        if (_lightSoftEffect is not null)
+        {
+            var p = _lightSoftEffect.Parameters;
+            _lpViewProj       = p["viewProj"];
+            _lpShadowMap      = p["ShadowMap"];
+            _lpShadowMapTexel = p["shadowMapTexel"];
+            _lpCenter         = p["lightCenter"];
+            _lpColor          = p["lightColor"];
+            _lpRange          = p["lightRange"];
+            _lpPower          = p["lightPower"];
+            _lpSoftness       = p["lightSoftness"];
+            _lpFalloff        = p["lightFalloff"];
+            _lpCurveFactor    = p["lightCurveFactor"];
+            _lpIndex          = p["lightIndex"];
+            _lpContactBias    = p["shadowContactBias"];
+            _lpDirection      = p["lightDirection"];
+            _lpConeAngle      = p["lightConeAngle"];
+            _lpConeSoftness   = p["lightConeSoftness"];
+        }
+
+        if (_lightBlurEffect is not null)
+        {
+            var p = _lightBlurEffect.Parameters;
+            _blSourceMap    = p["SourceMap"];
+            _blSourceTexel  = p["SourceTexel"];
+            _blIsHorizontal = p["isHorizontal"];
+        }
+
+        if (_wallMergeEffect is not null)
+        {
+            var p = _wallMergeEffect.Parameters;
+            _wmBlurred  = p["BlurredLightMap"];
+            _wmViewProj = p["viewProj"];
+        }
     }
 
     public override void Draw(float dt)
@@ -157,9 +228,11 @@ public sealed class LightingSystem : EntityDrawSystem
 
         if (_lighting.DebugDraw)
         {
+            // SpriteBatch coords are viewport relative, so draw at 0,0 -
+            // the letterbox offset is already applied by the viewport
             var vp = GameClient.GraphicsDevice.Viewport;
             GameClient.SpriteBatch.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.Opaque);
-            GameClient.SpriteBatch.Draw(_lightmap.Target, new Rectangle(vp.X, vp.Y, vp.Width, vp.Height), Color.White);
+            GameClient.SpriteBatch.Draw(_lightmap.Target, new Rectangle(0, 0, vp.Width, vp.Height), Color.White);
             GameClient.SpriteBatch.End();
         }
         else if (_applyEffect is not null)
@@ -168,15 +241,11 @@ public sealed class LightingSystem : EntityDrawSystem
             if (_applyEffect.CurrentTechnique.Name != techniqueName)
                 _applyEffect.CurrentTechnique = _applyEffect.Techniques[techniqueName];
 
-            _applyEffect.Parameters["Intensity"]?.SetValue(1.0f);
-            _applyEffect.Parameters["AmbientColor"]?.SetValue(_lighting.AmbientLight.ToVector4());
-
-            if (_lighting.PixelatedLighting && _lightmap.Target is not null)
+            if (_lighting.PixelatedLighting)
             {
-                var texelSize = new Vector2(
+                _apTexelSize?.SetValue(new Vector2(
                     1f / _lightmap.Target.Width,
-                    1f / _lightmap.Target.Height);
-                _applyEffect.Parameters["LightmapTexelSize"]?.SetValue(texelSize);
+                    1f / _lightmap.Target.Height));
             }
 
             _render.SubmitFullscreenEffectWithTextures(_applyEffect, scene, _lightmap.Target);
@@ -188,13 +257,15 @@ public sealed class LightingSystem : EntityDrawSystem
         base.OnShutdown();
         _shadowMap.Dispose();
         _wallBleed.Dispose();
-        _occlusionMask.Dispose();
+        _blurScratch.Dispose();
+        _shadowVB?.Dispose(); _shadowVB = null;
+        _shadowIB?.Dispose(); _shadowIB = null;
     }
 
     private void BuildLightmap()
     {
         _frameTimer.Restart();
-        double shadowPassMs = 0, occlusionMaskMs = 0, lightPassMs = 0, wallBleedMs = 0, lightBlurMs = 0;
+        double shadowPassMs = 0, lightPassMs = 0, wallBleedMs = 0, lightBlurMs = 0;
 
         // highest priority AmbientLightComponent wins, fallback is the manager default
         var ambientColor = _lighting.AmbientLight;
@@ -233,14 +304,36 @@ public sealed class LightingSystem : EntityDrawSystem
         if (_shadowDepthEffect is not null && _shadowMap.Target is null)
             return;
 
-        _wallBleed.EnsureSize(lightW, lightH);
-        _occlusionMask.EnsureSize(lightW, lightH);
+        // blur targets only exist while their feature is on
+        bool wallBleed = _lighting.WallBleedEnabled && _wallMergeEffect is not null && _lightBlurEffect is not null;
+        bool lightBlur = _lighting.LightBlurEnabled && _lightBlurEffect is not null;
+
+        if (wallBleed)
+        {
+            // the bleed blur runs at half res, it's a low frequency glow
+            _wallBleed.EnsureSize(Math.Max(1, lightW / 2), Math.Max(1, lightH / 2));
+            wallBleed = _wallBleed.A is not null && _wallBleed.B is not null;
+        }
+        else
+        {
+            _wallBleed.Dispose();
+        }
+
+        if (lightBlur)
+        {
+            _blurScratch.EnsureSize(lightW, lightH);
+            lightBlur = _blurScratch.Target is not null;
+        }
+        else
+        {
+            _blurScratch.Dispose();
+        }
 
         CollectLights();
         CollectOccluders();
         int shadowLightCount = CountShadowLights();
 
-        // shared between DrawRadialLights and RenderOcclusionMask
+        // shared by every pass that rasterizes world-space quads
         var viewProj = _camera.GetViewMatrix() * Matrix.CreateOrthographicOffCenter(
             0, _viewport.VirtualWidth, _viewport.VirtualHeight, 0, -1, 1);
 
@@ -252,14 +345,6 @@ public sealed class LightingSystem : EntityDrawSystem
             shadowPassMs = _passTimer.Elapsed.TotalMilliseconds;
         }
 
-        if (_occlusionMaskEffect is not null && _occlusionMask.Usable)
-        {
-            _passTimer.Restart();
-            RenderOcclusionMask(viewProj);
-            _passTimer.Stop();
-            occlusionMaskMs = _passTimer.Elapsed.TotalMilliseconds;
-        }
-
         _passTimer.Restart();
         _render.BeginSceneRender(_lightmap.Target);
         GameClient.GraphicsDevice.Clear(baseAmbient);
@@ -269,15 +354,15 @@ public sealed class LightingSystem : EntityDrawSystem
         _passTimer.Stop();
         lightPassMs = _passTimer.Elapsed.TotalMilliseconds;
 
-        if (_lighting.WallBleedEnabled && _wallBleed.A is not null && _wallBleed.B is not null)
+        if (wallBleed && _occluders.Count > 0)
         {
             _passTimer.Restart();
-            RunWallBleed();
+            RunWallBleed(viewProj);
             _passTimer.Stop();
             wallBleedMs = _passTimer.Elapsed.TotalMilliseconds;
         }
 
-        if (_lighting.LightBlurEnabled && _wallBleed.A is not null && _wallBleed.B is not null)
+        if (lightBlur)
         {
             _passTimer.Restart();
             RunLightBlur();
@@ -290,7 +375,7 @@ public sealed class LightingSystem : EntityDrawSystem
             _lights.Count, shadowLightCount, _occluders.Count,
             shadowW, shadowH,
             _frameTimer.Elapsed.TotalMilliseconds,
-            shadowPassMs, occlusionMaskMs, lightPassMs, wallBleedMs, lightBlurMs);
+            shadowPassMs, lightPassMs, wallBleedMs, lightBlurMs);
     }
 
     private struct LightEntry
@@ -298,22 +383,42 @@ public sealed class LightingSystem : EntityDrawSystem
         public EntityUid Uid;
         public IRadialLight Comp;
         public Vector2 WorldPos;
+        public bool CastShadows;
+        public float DistSq;        // squared distance to the camera center
         public bool IsSpot;
         public float Direction;     // radians, spot only
         public float ConeHalfAngle; // radians, spot only
         public float ConeSoftness;  // radians, spot only
     }
 
+    // shadow casters go last so the MaxLights cut drops them first
+    private static readonly Comparison<LightEntry> ShadowsLastThenNearest = static (a, b) =>
+    {
+        int sgn = a.CastShadows.CompareTo(b.CastShadows);
+        return sgn != 0 ? sgn : a.DistSq.CompareTo(b.DistSq);
+    };
+
     private void CollectLights()
     {
         _lights.Clear();
+        _maxLightRadius = 0f;
+        var cam = _camera.WorldCenter;
 
         foreach (var (uid, point, transform) in GetEntitiesWithComp<PointLightComponent, TransformComponent>())
         {
             var worldPos = transform.Position + point.Offset;
             if (!_camera.IsOnScreen(worldPos, new Vector2(point.Radius * 2f)))
                 continue;
-            _lights.Add(new LightEntry { Uid = uid, Comp = point, WorldPos = worldPos });
+
+            _maxLightRadius = MathF.Max(_maxLightRadius, point.Radius);
+            _lights.Add(new LightEntry
+            {
+                Uid = uid,
+                Comp = point,
+                WorldPos = worldPos,
+                CastShadows = point.CastShadows,
+                DistSq = (worldPos - cam).LengthSquared(),
+            });
         }
 
         foreach (var (uid, spot, transform) in GetEntitiesWithComp<SpotLightComponent, TransformComponent>())
@@ -326,11 +431,14 @@ public sealed class LightingSystem : EntityDrawSystem
             float halfAngle = MathHelper.ToRadians(spot.ConeAngle) * 0.5f;
             float softness = MathHelper.Clamp(halfAngle * 0.25f, 0.01f, halfAngle);
 
+            _maxLightRadius = MathF.Max(_maxLightRadius, spot.Radius);
             _lights.Add(new LightEntry
             {
                 Uid = uid,
                 Comp = spot,
                 WorldPos = worldPos,
+                CastShadows = spot.CastShadows,
+                DistSq = (worldPos - cam).LengthSquared(),
                 IsSpot = true,
                 Direction = direction,
                 ConeHalfAngle = halfAngle,
@@ -338,14 +446,7 @@ public sealed class LightingSystem : EntityDrawSystem
             });
         }
 
-        // shadow casters go last so the MaxLights cut drops them first
-        var cam = _camera.WorldCenter;
-        _lights.Sort((a, b) =>
-        {
-            int sgn = a.Comp.CastShadows.CompareTo(b.Comp.CastShadows);
-            if (sgn != 0) return sgn;
-            return (a.WorldPos - cam).LengthSquared().CompareTo((b.WorldPos - cam).LengthSquared());
-        });
+        _lights.Sort(ShadowsLastThenNearest);
 
         if (_lights.Count > _lighting.MaxLights)
             _lights.RemoveRange(_lighting.MaxLights, _lights.Count - _lighting.MaxLights);
@@ -356,7 +457,7 @@ public sealed class LightingSystem : EntityDrawSystem
         int count = 0;
         foreach (var entry in _lights)
         {
-            if (!entry.Comp.CastShadows) continue;
+            if (!entry.CastShadows) continue;
             if (++count >= _lighting.MaxShadowcastingLights) return count;
         }
         return count;
@@ -366,20 +467,26 @@ public sealed class LightingSystem : EntityDrawSystem
     {
         _occluders.Clear();
 
+        // an occluder within a light radius of the view can still push a
+        // shadow into the view, so pad the culling bounds by the biggest one
+        var bounds = _camera.ViewportBounds;
+        int pad = (int)MathF.Ceiling(_maxLightRadius);
+        bounds.Inflate(pad, pad);
+
         foreach (var (uid, occluder, transform) in GetEntitiesWithComp<OccluderComponent, TransformComponent>())
         {
-            var bounds = _occlusionSys.GetOccluderBounds(uid, occluder, transform, _entManager);
-            if (bounds.Width <= 0 || bounds.Height <= 0) continue;
-            _occluders.Add((bounds, transform));
+            var b = _occlusionSys.GetOccluderBounds(uid, occluder, transform, _entManager);
+            if (b.Width <= 0 || b.Height <= 0) continue;
+            if (!bounds.Intersects(b)) continue;
+            _occluders.Add((b, transform));
         }
 
         var tilemapSys = _entManager.GetSystem<TilemapSystem>();
         if (tilemapSys is not null)
         {
-            var cameraBounds = _camera.ViewportBounds;
             foreach (var (_, tilemap, tmTransform) in GetEntitiesWithComp<TilemapComponent, TransformComponent>())
             {
-                tilemapSys.GetSolidTilesInArea(tilemap, tmTransform, cameraBounds, _scratchTileRects);
+                tilemapSys.GetSolidTilesInArea(tilemap, tmTransform, bounds, _scratchTileRects);
                 foreach (var rect in _scratchTileRects)
                 {
                     if (rect.Width <= 0 || rect.Height <= 0) continue;
@@ -397,61 +504,116 @@ public sealed class LightingSystem : EntityDrawSystem
         var shadowMap = _shadowMap.Target!;
         var depthEffect = _shadowDepthEffect!;
 
+        BuildShadowGeometry();
+
         // clear color = "no occluder", depth = far so the LESS test accepts the first write
         GameClient.GraphicsDevice.SetRenderTarget(shadowMap);
         GameClient.GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.DepthBuffer,
             new Color(255, 255, 0, 255), 1f, 0);
 
+        if (_shadowTriCount == 0 || _shadowVB is null || _shadowIB is null)
+            return;
+
         var prevBlend = GameClient.GraphicsDevice.BlendState;
         var prevDepth = GameClient.GraphicsDevice.DepthStencilState;
         GameClient.GraphicsDevice.BlendState = BlendState.Opaque;
         GameClient.GraphicsDevice.DepthStencilState = ShadowDepthState;
+        GameClient.GraphicsDevice.SetVertexBuffer(_shadowVB);
+        GameClient.GraphicsDevice.Indices = _shadowIB;
 
         int shadowIdx = 0;
         foreach (var entry in _lights)
         {
-            if (!entry.Comp.CastShadows) continue;
+            if (!entry.CastShadows) continue;
             if (shadowIdx >= _lighting.MaxShadowcastingLights)
             {
-                Log.Warn(
-                    $"LightingSystem: shadow cap ({_lighting.MaxShadowcastingLights}) reached. " +
-                    $"Light uid={entry.Uid.Id} at ({entry.WorldPos.X:0},{entry.WorldPos.Y:0}) " +
-                    "renders without shadows. Raise MaxShadowcastingLights or cull more lights.");
+                if (!_warnedShadowCap)
+                {
+                    Log.Warn(
+                        $"LightingSystem: shadow cap ({_lighting.MaxShadowcastingLights}) reached, " +
+                        "extra lights render without shadows. Raise MaxShadowcastingLights or cull more lights.");
+                    _warnedShadowCap = true;
+                }
                 continue;
             }
 
-            // only build geometry from occluders this light can actually reach
-            CullOccludersForLight(entry.WorldPos, entry.Comp.Radius);
-            int indexCount = ShadowGeometry.Build(_culledOccluders, _shadowVerts, _shadowIndices, out int vertexCount);
-
             GameClient.GraphicsDevice.Viewport = new Viewport(0, shadowIdx, shadowMap.Width, 1);
-            depthEffect.Parameters["lightPos"]?.SetValue(entry.WorldPos);
-            depthEffect.Parameters["lightRadius"]?.SetValue(entry.Comp.Radius);
+            _sdLightPos?.SetValue(entry.WorldPos);
+            _sdLightRadius?.SetValue(entry.Comp.Radius);
 
-            if (indexCount > 0)
+            // pass 0 = normal range, pass 1 = tail that wraps around the +-pi seam
+            for (int wrapPass = 0; wrapPass < 2; wrapPass++)
             {
-                int triangles = indexCount / 3;
-                // pass 0 = normal range, pass 1 = tail that wraps around the +-pi seam
-                for (int wrapPass = 0; wrapPass < 2; wrapPass++)
+                _sdWrapPass?.SetValue((float)wrapPass);
+                foreach (var pass in depthEffect.CurrentTechnique.Passes)
                 {
-                    depthEffect.Parameters["shadowWrapPass"]?.SetValue((float)wrapPass);
-                    foreach (var pass in depthEffect.CurrentTechnique.Passes)
-                    {
-                        pass.Apply();
-                        GameClient.GraphicsDevice.DrawUserIndexedPrimitives(
-                            PrimitiveType.TriangleList,
-                            _shadowVerts, 0, vertexCount,
-                            _shadowIndices, 0, triangles,
-                            ShadowGeometry.OccluderVertex.Declaration);
-                    }
+                    pass.Apply();
+                    GameClient.GraphicsDevice.DrawIndexedPrimitives(
+                        PrimitiveType.TriangleList, 0, 0, _shadowTriCount);
                 }
             }
 
             shadowIdx++;
         }
 
+        GameClient.GraphicsDevice.SetVertexBuffer(null);
+        GameClient.GraphicsDevice.Indices = null;
         GameClient.GraphicsDevice.BlendState = prevBlend;
         GameClient.GraphicsDevice.DepthStencilState = prevDepth;
+    }
+
+    // uploads the frame's occluder geometry to the shared vertex buffer.
+    // The geometry doesn't depend on the light (lightPos is a uniform), so
+    // every shadow light draws the same buffer
+    private void BuildShadowGeometry()
+    {
+        _shadowTriCount = 0;
+
+        int count = Math.Min(_occluders.Count, MaxOccluderCap);
+        if (count == 0) return;
+
+        if (count > _occluderCapacity || _shadowVB is null || _shadowIB is null)
+        {
+            while (_occluderCapacity < count)
+                _occluderCapacity *= 2;
+            _occluderCapacity = Math.Min(_occluderCapacity, MaxOccluderCap);
+
+            if (_shadowVerts.Length < _occluderCapacity * 16)
+                _shadowVerts = new ShadowGeometry.OccluderVertex[_occluderCapacity * 16];
+
+            _shadowVB?.Dispose();
+            _shadowIB?.Dispose();
+            _shadowVB = new DynamicVertexBuffer(GameClient.GraphicsDevice,
+                ShadowGeometry.OccluderVertex.Declaration, _occluderCapacity * 16, BufferUsage.WriteOnly);
+            _shadowIB = new IndexBuffer(GameClient.GraphicsDevice,
+                IndexElementSize.SixteenBits, _occluderCapacity * 24, BufferUsage.WriteOnly);
+            _shadowIB.SetData(BuildQuadIndices(_occluderCapacity * 4));
+        }
+
+        int vertexCount = ShadowGeometry.Build(_occluders, _shadowVerts);
+        if (vertexCount == 0) return;
+
+        _shadowVB.SetData(_shadowVerts, 0, vertexCount, SetDataOptions.Discard);
+        _shadowTriCount = vertexCount / 4 * 2;
+    }
+
+    // 0,1,2 0,2,3 for every quad. Built once per capacity, the pattern
+    // never changes
+    private static short[] BuildQuadIndices(int quadCount)
+    {
+        var indices = new short[quadCount * 6];
+        for (int q = 0; q < quadCount; q++)
+        {
+            int v = q * 4;
+            int i = q * 6;
+            indices[i]     = (short)v;
+            indices[i + 1] = (short)(v + 1);
+            indices[i + 2] = (short)(v + 2);
+            indices[i + 3] = (short)v;
+            indices[i + 4] = (short)(v + 2);
+            indices[i + 5] = (short)(v + 3);
+        }
+        return indices;
     }
 
     private void DrawRadialLights(Matrix viewProj)
@@ -460,9 +622,9 @@ public sealed class LightingSystem : EntityDrawSystem
 
         var lightEffect = _lightSoftEffect;
 
-        lightEffect.Parameters["viewProj"]?.SetValue(viewProj);
-        lightEffect.Parameters["ShadowMap"]?.SetValue(_shadowMap.Target);
-        lightEffect.Parameters["shadowMapTexel"]?.SetValue(new Vector2(
+        _lpViewProj?.SetValue(viewProj);
+        _lpShadowMap?.SetValue(_shadowMap.Target);
+        _lpShadowMapTexel?.SetValue(new Vector2(
             _shadowMap.Target is null ? 1f : 1f / _shadowMap.Target.Width,
             _shadowMap.Target is null ? 1f : 1f / _shadowMap.Target.Height));
 
@@ -481,7 +643,7 @@ public sealed class LightingSystem : EntityDrawSystem
             float radius = entry.Comp.Radius;
             BuildDiskQuad(entry.WorldPos, radius);
 
-            float lidx = (entry.Comp.CastShadows && shadowIdx < _lighting.MaxShadowcastingLights)
+            float lidx = (entry.CastShadows && shadowIdx < _lighting.MaxShadowcastingLights)
                 ? (shadowIdx + 0.5f) / _lighting.MaxShadowcastingLights
                 : -1f;
 
@@ -491,22 +653,21 @@ public sealed class LightingSystem : EntityDrawSystem
             if (lightEffect.CurrentTechnique.Name != techniqueName)
                 lightEffect.CurrentTechnique = lightEffect.Techniques[techniqueName];
 
-            lightEffect.Parameters["lightCenter"]?.SetValue(entry.WorldPos);
-            lightEffect.Parameters["lightColor"]?.SetValue(entry.Comp.Color.ToVector4());
-            lightEffect.Parameters["lightRange"]?.SetValue(radius);
-            lightEffect.Parameters["lightRadius"]?.SetValue(radius);
-            lightEffect.Parameters["lightPower"]?.SetValue(entry.Comp.Intensity * _lighting.LightIntensity);
-            lightEffect.Parameters["lightSoftness"]?.SetValue(entry.Comp.Softness * _lighting.LightSoftness);
-            lightEffect.Parameters["lightFalloff"]?.SetValue(FalloffScalar(entry.Comp.Falloff));
-            lightEffect.Parameters["lightCurveFactor"]?.SetValue(CurveFactorFor(entry.Comp.Falloff));
-            lightEffect.Parameters["lightIndex"]?.SetValue(lidx);
-            lightEffect.Parameters["shadowContactBias"]?.SetValue(_lighting.ShadowContactBias / MathF.Max(radius, 0.0001f));
+            _lpCenter?.SetValue(entry.WorldPos);
+            _lpColor?.SetValue(entry.Comp.Color.ToVector4());
+            _lpRange?.SetValue(radius);
+            _lpPower?.SetValue(entry.Comp.Intensity * _lighting.LightIntensity);
+            _lpSoftness?.SetValue(entry.Comp.Softness * _lighting.LightSoftness);
+            _lpFalloff?.SetValue(FalloffScalar(entry.Comp.Falloff));
+            _lpCurveFactor?.SetValue(CurveFactorFor(entry.Comp.Falloff));
+            _lpIndex?.SetValue(lidx);
+            _lpContactBias?.SetValue(_lighting.ShadowContactBias / MathF.Max(radius, 0.0001f));
 
             if (entry.IsSpot)
             {
-                lightEffect.Parameters["lightDirection"]?.SetValue(entry.Direction);
-                lightEffect.Parameters["lightConeAngle"]?.SetValue(entry.ConeHalfAngle);
-                lightEffect.Parameters["lightConeSoftness"]?.SetValue(entry.ConeSoftness);
+                _lpDirection?.SetValue(entry.Direction);
+                _lpConeAngle?.SetValue(entry.ConeHalfAngle);
+                _lpConeSoftness?.SetValue(entry.ConeSoftness);
             }
 
             GameClient.GraphicsDevice.ScissorRectangle = LightToScissor(entry.WorldPos, radius, viewProj, vpW, vpH);
@@ -518,7 +679,7 @@ public sealed class LightingSystem : EntityDrawSystem
                     PrimitiveType.TriangleList, _diskQuad, 0, 2, DiskVertex.Declaration);
             }
 
-            if (entry.Comp.CastShadows && shadowIdx < _lighting.MaxShadowcastingLights)
+            if (entry.CastShadows && shadowIdx < _lighting.MaxShadowcastingLights)
                 shadowIdx++;
         }
 
@@ -541,6 +702,14 @@ public sealed class LightingSystem : EntityDrawSystem
             if (!_assets.GetTexture(tex.Texture, out var spr, out var page)) continue;
 
             var worldPos = transform.Position + tex.Offset;
+
+            // 1.5 covers any rotation of the sprite rect
+            float maxDim = MathF.Max(
+                spr.Region.Width * MathF.Abs(tex.Scale.X),
+                spr.Region.Height * MathF.Abs(tex.Scale.Y)) * 1.5f;
+            if (!_camera.IsOnScreen(worldPos, new Vector2(maxDim)))
+                continue;
+
             var rotation = (tex.RotatesWithTransform ? transform.Angle : 0f) + tex.Rotation;
             var color = tex.Color * tex.Intensity * _lighting.LightIntensity;
 
@@ -559,106 +728,54 @@ public sealed class LightingSystem : EntityDrawSystem
         GameClient.SpriteBatch.End();
     }
 
-    private void RenderOcclusionMask(Matrix viewProj)
+    // blurs the lightmap at half res, then draws the occluder quads over
+    // the lightmap replacing each wall pixel with the blurred value, so
+    // walls show the glow of nearby lights (Robust's wall bleed)
+    private void RunWallBleed(Matrix viewProj)
     {
-        if (_occlusionMaskEffect is null || _occlusionMask.Target is null) return;
-
-        _occlusionMaskEffect.Parameters["viewProj"]?.SetValue(viewProj);
-        _occlusionMaskEffect.Parameters["ShadowMap"]?.SetValue(_shadowMap.Target);
-        _occlusionMaskEffect.Parameters["shadowMapTexel"]?.SetValue(new Vector2(
-            _shadowMap.Target is null ? 1f : 1f / _shadowMap.Target.Width,
-            _shadowMap.Target is null ? 1f : 1f / _shadowMap.Target.Height));
-
-        var prevBlend  = GameClient.GraphicsDevice.BlendState;
-        var prevDepth  = GameClient.GraphicsDevice.DepthStencilState;
-        var prevSamp0  = GameClient.GraphicsDevice.SamplerStates[0];
-        var prevSamp1  = GameClient.GraphicsDevice.SamplerStates[1];
-        var prevRaster = GameClient.GraphicsDevice.RasterizerState;
-
-        int vpW = _occlusionMask.Target.Width;
-        int vpH = _occlusionMask.Target.Height;
-
-        GameClient.GraphicsDevice.SetRenderTarget(_occlusionMask.Target);
-        GameClient.GraphicsDevice.Clear(Color.Transparent);
-        GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, vpW, vpH);
-        GameClient.GraphicsDevice.BlendState = BlendState.Additive;
-        GameClient.GraphicsDevice.DepthStencilState = DepthStencilState.None;
-        GameClient.GraphicsDevice.SamplerStates[0] = SamplerState.LinearClamp;
-        GameClient.GraphicsDevice.SamplerStates[1] = SamplerState.LinearClamp;
-        GameClient.GraphicsDevice.RasterizerState = ScissorRasterizer;
-
-        int shadowIdx = 0;
-        foreach (var entry in _lights)
-        {
-            if (!entry.Comp.CastShadows) continue;
-            if (shadowIdx >= _lighting.MaxShadowcastingLights) continue;
-
-            float radius = entry.Comp.Radius;
-            BuildDiskQuad(entry.WorldPos, radius);
-
-            var techniqueName = entry.IsSpot
-                ? (_lighting.HardShadows ? "SpotOcclusionMaskHard" : "SpotOcclusionMask")
-                : (_lighting.HardShadows ? "OcclusionMaskHard" : "OcclusionMask");
-            if (_occlusionMaskEffect.CurrentTechnique.Name != techniqueName)
-                _occlusionMaskEffect.CurrentTechnique = _occlusionMaskEffect.Techniques[techniqueName];
-
-            _occlusionMaskEffect.Parameters["lightCenter"]?.SetValue(entry.WorldPos);
-            _occlusionMaskEffect.Parameters["lightRange"]?.SetValue(radius);
-            _occlusionMaskEffect.Parameters["lightRadius"]?.SetValue(radius);
-            _occlusionMaskEffect.Parameters["lightSoftness"]?.SetValue(entry.Comp.Softness * _lighting.LightSoftness);
-            _occlusionMaskEffect.Parameters["lightIndex"]?.SetValue((shadowIdx + 0.5f) / _lighting.MaxShadowcastingLights);
-            _occlusionMaskEffect.Parameters["shadowContactBias"]?.SetValue(_lighting.ShadowContactBias / MathF.Max(radius, 0.0001f));
-
-            if (entry.IsSpot)
-            {
-                _occlusionMaskEffect.Parameters["lightDirection"]?.SetValue(entry.Direction);
-                _occlusionMaskEffect.Parameters["lightConeAngle"]?.SetValue(entry.ConeHalfAngle);
-                _occlusionMaskEffect.Parameters["lightConeSoftness"]?.SetValue(entry.ConeSoftness);
-            }
-
-            GameClient.GraphicsDevice.ScissorRectangle = LightToScissor(entry.WorldPos, radius, viewProj, vpW, vpH);
-
-            foreach (var pass in _occlusionMaskEffect.CurrentTechnique.Passes)
-            {
-                pass.Apply();
-                GameClient.GraphicsDevice.DrawUserPrimitives(
-                    PrimitiveType.TriangleList, _diskQuad, 0, 2, DiskVertex.Declaration);
-            }
-
-            shadowIdx++;
-        }
-
-        GameClient.GraphicsDevice.BlendState = prevBlend;
-        GameClient.GraphicsDevice.DepthStencilState = prevDepth;
-        GameClient.GraphicsDevice.SamplerStates[0] = prevSamp0;
-        GameClient.GraphicsDevice.SamplerStates[1] = prevSamp1;
-        GameClient.GraphicsDevice.RasterizerState = prevRaster;
-    }
-
-    private void RunWallBleed()
-    {
-        if (_lightBlurEffect is null || _wallMergeEffect is null ||
-            _wallBleed.A is null || _wallBleed.B is null || _lightmap.Target is null)
+        if (_wallMergeEffect is null || _wallBleed.A is null || _wallBleed.B is null || _lightmap.Target is null)
             return;
 
-        // blur the lightmap into wallBleed.B, then add it back where the
-        // occlusion mask says a shadow casting light reaches
-        BlurPass(_lightmap.Target, _wallBleed.A!, 1f);
-        BlurPass(_wallBleed.A!, _wallBleed.B!, 0f);
+        int needed = _occluders.Count * 6;
+        if (_wallVerts.Length < needed)
+            Array.Resize(ref _wallVerts, needed);
 
-        _wallMergeEffect.Parameters["BlurredLightMap"]?.SetValue(_wallBleed.B);
-        if (_occlusionMask.Usable)
-            _wallMergeEffect.Parameters["OcclusionMask"]?.SetValue(_occlusionMask.Target);
+        int n = 0;
+        foreach (var (b, _) in _occluders)
+        {
+            var tl = new Vector2(b.Left, b.Top);
+            var tr = new Vector2(b.Right, b.Top);
+            var br = new Vector2(b.Right, b.Bottom);
+            var bl = new Vector2(b.Left, b.Bottom);
+            _wallVerts[n++] = new DiskVertex { WorldPos = tl };
+            _wallVerts[n++] = new DiskVertex { WorldPos = tr };
+            _wallVerts[n++] = new DiskVertex { WorldPos = br };
+            _wallVerts[n++] = new DiskVertex { WorldPos = tl };
+            _wallVerts[n++] = new DiskVertex { WorldPos = br };
+            _wallVerts[n++] = new DiskVertex { WorldPos = bl };
+        }
+        if (n == 0) return;
+
+        // two blur iterations so the glow reaches deep enough into the walls
+        BlurPass(_lightmap.Target, _wallBleed.A, 1f);
+        BlurPass(_wallBleed.A, _wallBleed.B, 0f);
+        BlurPass(_wallBleed.B, _wallBleed.A, 1f);
+        BlurPass(_wallBleed.A, _wallBleed.B, 0f);
+
+        _wmBlurred?.SetValue(_wallBleed.B);
+        _wmViewProj?.SetValue(viewProj);
 
         GameClient.GraphicsDevice.SetRenderTarget(_lightmap.Target);
-        GameClient.GraphicsDevice.BlendState = BlendState.Additive;
-        BuildScreenQuad(_screenQuad, _lightmap.Target.Width, _lightmap.Target.Height);
+        GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, _lightmap.Target.Width, _lightmap.Target.Height);
+        GameClient.GraphicsDevice.BlendState = BlendState.Opaque;
+        GameClient.GraphicsDevice.DepthStencilState = DepthStencilState.None;
+        GameClient.GraphicsDevice.RasterizerState = RasterizerState.CullNone;
 
         foreach (var pass in _wallMergeEffect.CurrentTechnique.Passes)
         {
             pass.Apply();
             GameClient.GraphicsDevice.DrawUserPrimitives(
-                PrimitiveType.TriangleList, _screenQuad, 0, 2, ScreenVertex.Declaration);
+                PrimitiveType.TriangleList, _wallVerts, 0, n / 3, DiskVertex.Declaration);
         }
 
         GameClient.GraphicsDevice.BlendState = BlendState.AlphaBlend;
@@ -666,36 +783,33 @@ public sealed class LightingSystem : EntityDrawSystem
 
     private void RunLightBlur()
     {
-        if (_lightBlurEffect is null || _wallBleed.A is null || _wallBleed.B is null || _lightmap.Target is null)
+        if (_lightBlurEffect is null || _blurScratch.Target is null || _lightmap.Target is null)
             return;
 
-        // H -> V -> H so the last pass lands back on the lightmap
-        BlurPass(_lightmap.Target, _wallBleed.A!, 1f);
-        BlurPass(_wallBleed.A!, _wallBleed.B!, 0f);
-        BlurPass(_wallBleed.B!, _lightmap.Target, 1f);
+        BlurPass(_lightmap.Target, _blurScratch.Target, 1f);
+        BlurPass(_blurScratch.Target, _lightmap.Target, 0f);
 
         GameClient.GraphicsDevice.BlendState = BlendState.AlphaBlend;
     }
 
     private void BlurPass(Texture2D source, RenderTarget2D dest, float isHorizontal)
     {
-        if (_lightBlurEffect is null) return;
-
-        _lightBlurEffect.Parameters["SourceMap"]?.SetValue(source);
-        _lightBlurEffect.Parameters["SourceTexel"]?.SetValue(new Vector2(1f / source.Width, 1f / source.Height));
-        _lightBlurEffect.Parameters["isHorizontal"]?.SetValue(isHorizontal);
-        _lightBlurEffect.Parameters["blurStrength"]?.SetValue(1.0f);
+        _blSourceMap?.SetValue(source);
+        _blSourceTexel?.SetValue(new Vector2(1f / source.Width, 1f / source.Height));
+        _blIsHorizontal?.SetValue(isHorizontal);
 
         GameClient.GraphicsDevice.SetRenderTarget(dest);
         GameClient.GraphicsDevice.BlendState = BlendState.Opaque;
+        // SpriteBatch leaves CullCounterClockwise on, which would cull the quad
+        GameClient.GraphicsDevice.RasterizerState = RasterizerState.CullNone;
+        GameClient.GraphicsDevice.DepthStencilState = DepthStencilState.None;
         GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, dest.Width, dest.Height);
-        BuildScreenQuad(_screenQuad, dest.Width, dest.Height);
 
-        foreach (var pass in _lightBlurEffect.CurrentTechnique.Passes)
+        foreach (var pass in _lightBlurEffect!.CurrentTechnique.Passes)
         {
             pass.Apply();
             GameClient.GraphicsDevice.DrawUserPrimitives(
-                PrimitiveType.TriangleList, _screenQuad, 0, 2, ScreenVertex.Declaration);
+                PrimitiveType.TriangleList, ScreenQuad, 0, 2, ScreenVertex.Declaration);
         }
     }
 
@@ -714,16 +828,6 @@ public sealed class LightingSystem : EntityDrawSystem
         _diskQuad[5] = new DiskVertex { WorldPos = bl };
     }
 
-    private static void BuildScreenQuad(ScreenVertex[] quad, int w, int h)
-    {
-        quad[0] = new ScreenVertex { Position = new Vector2(-1, -1), TexCoord = new Vector2(0, 0) };
-        quad[1] = new ScreenVertex { Position = new Vector2( 1, -1), TexCoord = new Vector2(1, 0) };
-        quad[2] = new ScreenVertex { Position = new Vector2( 1,  1), TexCoord = new Vector2(1, 1) };
-        quad[3] = new ScreenVertex { Position = new Vector2(-1, -1), TexCoord = new Vector2(0, 0) };
-        quad[4] = new ScreenVertex { Position = new Vector2( 1,  1), TexCoord = new Vector2(1, 1) };
-        quad[5] = new ScreenVertex { Position = new Vector2(-1,  1), TexCoord = new Vector2(0, 1) };
-    }
-
     private static float FalloffScalar(FalloffMode mode) => mode switch
     {
         FalloffMode.Linear       => 1.0f,
@@ -739,23 +843,6 @@ public sealed class LightingSystem : EntityDrawSystem
         FalloffMode.InverseSquare => 1f,
         _ => 0.5f,
     };
-
-    // keeps only the occluders whose AABB touches the light circle
-    private void CullOccludersForLight(Vector2 lightPos, float radius)
-    {
-        _culledOccluders.Clear();
-        float r2 = radius * radius;
-        foreach (var occ in _occluders)
-        {
-            var b = occ.Bounds;
-            float cx = MathHelper.Clamp(lightPos.X, b.Left, b.Right);
-            float cy = MathHelper.Clamp(lightPos.Y, b.Top, b.Bottom);
-            float dx = lightPos.X - cx;
-            float dy = lightPos.Y - cy;
-            if (dx * dx + dy * dy <= r2)
-                _culledOccluders.Add(occ);
-        }
-    }
 
     // scissor rect (in lightmap pixels) that encloses the projected light quad
     private static Rectangle LightToScissor(Vector2 worldPos, float radius, Matrix viewProj, int vpW, int vpH)

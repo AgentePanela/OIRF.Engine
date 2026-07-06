@@ -179,7 +179,7 @@ public sealed class DebugOverlayScreen : UICanvas
             $"Lighting: {FormatMs(_lighting.LastLightingTotalMs)} | " +
             $"lights {_lighting.LastVisibleLights}/{_lighting.LastShadowLights} | " +
             $"occ {_lighting.LastOccluders} | shadow {_lighting.LastShadowMapWidth}x{_lighting.LastShadowMapHeight}\n" +
-            $"  shadow {FormatMs(_lighting.LastShadowPassMs)} | mask {FormatMs(_lighting.LastOcclusionMaskMs)} | " +
+            $"  shadow {FormatMs(_lighting.LastShadowPassMs)} | " +
             $"light {FormatMs(_lighting.LastLightPassMs)} | bleed {FormatMs(_lighting.LastWallBleedMs)} | blur {FormatMs(_lighting.LastLightBlurMs)}";
     }
 

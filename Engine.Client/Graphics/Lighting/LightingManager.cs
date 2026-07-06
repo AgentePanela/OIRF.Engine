@@ -53,7 +53,8 @@ public sealed class LightingManager
     public float LightSoftness { get; set; } = 1.0f;
 
     /// <summary>
-    /// Blurs light back over occluder edges to fake light scatter on walls.
+    /// Adds a blurred copy of the lightmap on top of walls, so they pick up
+    /// the glow of nearby lights instead of staying pitch black.
     /// </summary>
     public bool WallBleedEnabled { get; set; } = false;
 
@@ -107,7 +108,6 @@ public sealed class LightingManager
     public int LastShadowMapHeight { get; private set; }
     public double LastLightingTotalMs { get; private set; }
     public double LastShadowPassMs { get; private set; }
-    public double LastOcclusionMaskMs { get; private set; }
     public double LastLightPassMs { get; private set; }
     public double LastWallBleedMs { get; private set; }
     public double LastLightBlurMs { get; private set; }
@@ -120,7 +120,6 @@ public sealed class LightingManager
         int shadowMapHeight,
         double totalMs,
         double shadowPassMs,
-        double occlusionMaskMs,
         double lightPassMs,
         double wallBleedMs,
         double lightBlurMs)
@@ -132,7 +131,6 @@ public sealed class LightingManager
         LastShadowMapHeight = shadowMapHeight;
         LastLightingTotalMs = totalMs;
         LastShadowPassMs = shadowPassMs;
-        LastOcclusionMaskMs = occlusionMaskMs;
         LastLightPassMs = lightPassMs;
         LastWallBleedMs = wallBleedMs;
         LastLightBlurMs = lightBlurMs;

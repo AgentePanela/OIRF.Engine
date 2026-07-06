@@ -6,9 +6,11 @@ namespace Engine.Client.Graphics.Lighting;
 /// <summary>
 /// Shadow map render target. One row per shadow-casting light, each row is
 /// a 360° unwrap of occluder distances around that light. The depth buffer
-/// is what keeps the closest occluder per angle. Some drivers refuse the
-/// surface + depth format combo, so allocation failures are surfaced via
-/// <see cref="Usable"/> instead of crashing.
+/// is what keeps the closest occluder per angle.
+///
+/// Prefers Single (32-bit float) so the stored distance doesn't quantize to
+/// 256 steps like an 8-bit channel would; falls back to Color when the
+/// driver refuses it. Allocation failures surface via <see cref="Usable"/>.
 /// </summary>
 internal sealed class ShadowMapRT
 {
@@ -42,23 +44,30 @@ internal sealed class ShadowMapRT
         try
         {
             _target = new RenderTarget2D(
-                device,
-                width,
-                height,
-                false,
-                SurfaceFormat.Color,
-                DepthFormat.Depth16,
-                0,
-                RenderTargetUsage.PreserveContents);
+                device, width, height, false,
+                SurfaceFormat.Single, DepthFormat.Depth16,
+                0, RenderTargetUsage.DiscardContents);
             Usable = true;
         }
-        catch (System.Exception ex)
+        catch (System.Exception)
         {
-            Log.Warn(
-                $"ShadowMapRT: allocation failed ({ex.GetType().Name}: {ex.Message}). " +
-                "Shadow casting disabled for this session.");
-            Dispose();
-            Usable = false;
+            try
+            {
+                _target = new RenderTarget2D(
+                    device, width, height, false,
+                    SurfaceFormat.Color, DepthFormat.Depth16,
+                    0, RenderTargetUsage.DiscardContents);
+                Usable = true;
+                Log.Debug("ShadowMapRT: Single format not supported, using Color (8-bit shadow depth).");
+            }
+            catch (System.Exception ex)
+            {
+                Log.Warn(
+                    $"ShadowMapRT: allocation failed ({ex.GetType().Name}: {ex.Message}). " +
+                    "Shadow casting disabled for this session.");
+                Dispose();
+                Usable = false;
+            }
         }
 
         _allocatedWidth = width;

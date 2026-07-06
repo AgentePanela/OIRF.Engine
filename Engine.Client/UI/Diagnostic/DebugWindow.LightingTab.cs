@@ -188,7 +188,6 @@ public sealed class LightingDebugTab : TabItem, IDisposable
             $"Occluders: {_lighting.LastOccluders} | " +
             $"Total: {_lighting.LastLightingTotalMs:0.0}ms\n" +
             $"Shadow: {_lighting.LastShadowPassMs:0.0}ms | " +
-            $"OccMask: {_lighting.LastOcclusionMaskMs:0.0}ms | " +
             $"Light: {_lighting.LastLightPassMs:0.0}ms | " +
             $"WallBleed: {_lighting.LastWallBleedMs:0.0}ms | " +
             $"Blur: {_lighting.LastLightBlurMs:0.0}ms\n" +
