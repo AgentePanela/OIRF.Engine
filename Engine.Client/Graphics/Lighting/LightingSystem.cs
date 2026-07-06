@@ -14,17 +14,9 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
-/// Coordinates lighting components and produces the final lightmap each frame.
-///
-/// Pipeline (in order):
-/// 1. Shadow pass — writes per-angle occluder distance into a 1D unwrapped
-///    shadow map (one row per shadow-casting light).
-/// 2. Occlusion mask — marks pixels reached by shadow-casting lights.
-/// 3. Light pass — clears lightmap with ambient, then accumulates radial
-///    light disks (point and spot) additively with soft PCF shadows.
-/// 4. Wall bleed + light blur — separable Gaussian blur to soften banding.
-/// 5. Apply pass — done in <see cref="ApplyAfterWorld"/> after the world is
-///    drawn; multiplies the scene by the lightmap.
+/// Builds the lightmap every frame: shadow map, occlusion mask, light pass,
+/// optional blurs. <see cref="ApplyAfterWorld"/> then multiplies the result
+/// over the rendered scene.
 /// </summary>
 public sealed class LightingSystem : EntityDrawSystem
 {
@@ -42,22 +34,19 @@ public sealed class LightingSystem : EntityDrawSystem
     private readonly WallBleedRT _wallBleed = new();
     private readonly OcclusionMaskRT _occlusionMask = new();
 
-    // Occluder-edge geometry — rebuilt every frame.
-    // 256 occluders × 4 edges × 4 verts = 4096 vertices, 6144 indices.
+    // 256 occluders x 4 edges x 4 verts = 4096 verts, 6144 indices
     private const int MaxOccluders = 256;
     private ShadowGeometry.OccluderVertex[] _shadowVerts = new ShadowGeometry.OccluderVertex[MaxOccluders * 16];
     private short[] _shadowIndices = new short[MaxOccluders * 24];
 
-    // Reused scratch list for tile AABBs — cleared after CollectOccluders.
     private readonly List<Rectangle> _scratchTileRects = new();
 
-    // Cached per-frame collections — avoids a new List<> allocation each frame.
+    // reused every frame to avoid allocations
     private readonly List<LightEntry> _lights = new();
     private readonly List<(Rectangle Bounds, TransformComponent Transform)> _occluders = new();
-    // Per-light subset of _occluders — cleared and rebuilt inside RenderShadowMap for each shadow light.
     private readonly List<(Rectangle Bounds, TransformComponent Transform)> _culledOccluders = new();
 
-    // World-space disk quad: two triangles covering a 2r×2r square around a light.
+    // quad covering a 2r x 2r square around a light, in world space
     private struct DiskVertex
     {
         public Vector2 WorldPos;
@@ -67,7 +56,7 @@ public sealed class LightingSystem : EntityDrawSystem
     }
     private DiskVertex[] _diskQuad = new DiskVertex[6];
 
-    // Clip-space fullscreen quad for post-process passes.
+    // fullscreen quad in clip space, for the post-process passes
     private struct ScreenVertex
     {
         public Vector2 Position;
@@ -79,7 +68,7 @@ public sealed class LightingSystem : EntityDrawSystem
     }
     private ScreenVertex[] _screenQuad = new ScreenVertex[6];
 
-    // One, One blend — premultiplied RGB light contribution, A its strength.
+    // plain additive blend, lights output premultiplied rgb + strength in alpha
     private static readonly BlendState AdditivePremultiplied = new BlendState
     {
         ColorSourceBlend      = Blend.One,
@@ -90,16 +79,14 @@ public sealed class LightingSystem : EntityDrawSystem
         AlphaBlendFunction    = BlendFunction.Add,
     };
 
-    // Scissor test enabled; CullMode.None because disk quads may have
-    // arbitrary winding after the camera transform flips the Y axis.
+    // CullMode.None because the camera transform can flip the quad winding
     private static readonly RasterizerState ScissorRasterizer = new RasterizerState
     {
         CullMode = CullMode.None,
         ScissorTestEnable = true,
     };
 
-    // LESS (not LessEqual) so overlapping occluder slices resolve to the
-    // closest one without corrupting the VSM mean-of-squares in the G channel.
+    // LESS so overlapping occluder slices keep the closest distance
     private static readonly DepthStencilState ShadowDepthState = new DepthStencilState
     {
         DepthBufferEnable       = true,
@@ -153,9 +140,8 @@ public sealed class LightingSystem : EntityDrawSystem
     }
 
     /// <summary>
-    /// Multiply the lightmap over the rendered scene and blit to the backbuffer.
-    /// Must be called after <see cref="RenderManager.DrawQueue"/> has written the
-    /// world to <see cref="RenderManager.SceneTarget"/>.
+    /// Multiplies the lightmap over the scene. Call after the world has been
+    /// drawn to <see cref="RenderManager.SceneTarget"/>.
     /// </summary>
     public void ApplyAfterWorld()
     {
@@ -205,16 +191,12 @@ public sealed class LightingSystem : EntityDrawSystem
         _occlusionMask.Dispose();
     }
 
-    // -----------------------------------------------------------------------
-    //  Lightmap building
-    // -----------------------------------------------------------------------
-
     private void BuildLightmap()
     {
         _frameTimer.Restart();
         double shadowPassMs = 0, occlusionMaskMs = 0, lightPassMs = 0, wallBleedMs = 0, lightBlurMs = 0;
 
-        // Resolve ambient: highest-priority AmbientLightComponent wins.
+        // highest priority AmbientLightComponent wins, fallback is the manager default
         var ambientColor = _lighting.AmbientLight;
         var ambientIntensity = 1f;
         AmbientLightComponent? bestAmbient = null;
@@ -258,7 +240,7 @@ public sealed class LightingSystem : EntityDrawSystem
         CollectOccluders();
         int shadowLightCount = CountShadowLights();
 
-        // viewProj shared between DrawPointLights and RenderOcclusionMask.
+        // shared between DrawRadialLights and RenderOcclusionMask
         var viewProj = _camera.GetViewMatrix() * Matrix.CreateOrthographicOffCenter(
             0, _viewport.VirtualWidth, _viewport.VirtualHeight, 0, -1, 1);
 
@@ -311,19 +293,15 @@ public sealed class LightingSystem : EntityDrawSystem
             shadowPassMs, occlusionMaskMs, lightPassMs, wallBleedMs, lightBlurMs);
     }
 
-    // -----------------------------------------------------------------------
-    //  Light / occluder collection
-    // -----------------------------------------------------------------------
-
     private struct LightEntry
     {
         public EntityUid Uid;
         public IRadialLight Comp;
         public Vector2 WorldPos;
         public bool IsSpot;
-        public float Direction;     // radians, valid only when IsSpot
-        public float ConeHalfAngle; // radians, valid only when IsSpot
-        public float ConeSoftness;  // radians, valid only when IsSpot
+        public float Direction;     // radians, spot only
+        public float ConeHalfAngle; // radians, spot only
+        public float ConeSoftness;  // radians, spot only
     }
 
     private void CollectLights()
@@ -360,7 +338,7 @@ public sealed class LightingSystem : EntityDrawSystem
             });
         }
 
-        // Shadow casters last so closer non-shadow lights win the MaxLights cap.
+        // shadow casters go last so the MaxLights cut drops them first
         var cam = _camera.WorldCenter;
         _lights.Sort((a, b) =>
         {
@@ -412,10 +390,6 @@ public sealed class LightingSystem : EntityDrawSystem
         }
     }
 
-    // -----------------------------------------------------------------------
-    //  Shadow pass
-    // -----------------------------------------------------------------------
-
     private void RenderShadowMap()
     {
         if (!_shadowMap.Usable) return;
@@ -423,8 +397,7 @@ public sealed class LightingSystem : EntityDrawSystem
         var shadowMap = _shadowMap.Target!;
         var depthEffect = _shadowDepthEffect!;
 
-        // Clear to "infinity" (1,1,0,1) so un-written texels read as no occluder.
-        // Depth cleared to 1.0 (far) so the LESS test accepts the first write.
+        // clear color = "no occluder", depth = far so the LESS test accepts the first write
         GameClient.GraphicsDevice.SetRenderTarget(shadowMap);
         GameClient.GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.DepthBuffer,
             new Color(255, 255, 0, 255), 1f, 0);
@@ -447,8 +420,7 @@ public sealed class LightingSystem : EntityDrawSystem
                 continue;
             }
 
-            // Per-light occluder culling: skip occluders whose AABB doesn't
-            // overlap the light's circle, then build geometry only from what's left.
+            // only build geometry from occluders this light can actually reach
             CullOccludersForLight(entry.WorldPos, entry.Comp.Radius);
             int indexCount = ShadowGeometry.Build(_culledOccluders, _shadowVerts, _shadowIndices, out int vertexCount);
 
@@ -459,8 +431,7 @@ public sealed class LightingSystem : EntityDrawSystem
             if (indexCount > 0)
             {
                 int triangles = indexCount / 3;
-                // Two draws: pass 0 = primary angular range, pass 1 = wrapped tail
-                // around the ±π seam.
+                // pass 0 = normal range, pass 1 = tail that wraps around the +-pi seam
                 for (int wrapPass = 0; wrapPass < 2; wrapPass++)
                 {
                     depthEffect.Parameters["shadowWrapPass"]?.SetValue((float)wrapPass);
@@ -482,10 +453,6 @@ public sealed class LightingSystem : EntityDrawSystem
         GameClient.GraphicsDevice.BlendState = prevBlend;
         GameClient.GraphicsDevice.DepthStencilState = prevDepth;
     }
-
-    // -----------------------------------------------------------------------
-    //  Light pass
-    // -----------------------------------------------------------------------
 
     private void DrawRadialLights(Matrix viewProj)
     {
@@ -592,10 +559,6 @@ public sealed class LightingSystem : EntityDrawSystem
         GameClient.SpriteBatch.End();
     }
 
-    // -----------------------------------------------------------------------
-    //  Occlusion mask pass
-    // -----------------------------------------------------------------------
-
     private void RenderOcclusionMask(Matrix viewProj)
     {
         if (_occlusionMaskEffect is null || _occlusionMask.Target is null) return;
@@ -672,22 +635,17 @@ public sealed class LightingSystem : EntityDrawSystem
         GameClient.GraphicsDevice.RasterizerState = prevRaster;
     }
 
-    // -----------------------------------------------------------------------
-    //  Wall bleed + light blur
-    // -----------------------------------------------------------------------
-
     private void RunWallBleed()
     {
         if (_lightBlurEffect is null || _wallMergeEffect is null ||
             _wallBleed.A is null || _wallBleed.B is null || _lightmap.Target is null)
             return;
 
-        // 2-pass separable Gaussian blur of the lightmap into wallBleed.B.
+        // blur the lightmap into wallBleed.B, then add it back where the
+        // occlusion mask says a shadow casting light reaches
         BlurPass(_lightmap.Target, _wallBleed.A!, 1f);
         BlurPass(_wallBleed.A!, _wallBleed.B!, 0f);
 
-        // Merge blurred lightmap back additively, restricted to lit pixels via
-        // the occlusion mask — prevents the glow from bleeding into dark regions.
         _wallMergeEffect.Parameters["BlurredLightMap"]?.SetValue(_wallBleed.B);
         if (_occlusionMask.Usable)
             _wallMergeEffect.Parameters["OcclusionMask"]?.SetValue(_occlusionMask.Target);
@@ -711,7 +669,7 @@ public sealed class LightingSystem : EntityDrawSystem
         if (_lightBlurEffect is null || _wallBleed.A is null || _wallBleed.B is null || _lightmap.Target is null)
             return;
 
-        // 3-pass separable Gaussian: H → V → H, end on lightmap.
+        // H -> V -> H so the last pass lands back on the lightmap
         BlurPass(_lightmap.Target, _wallBleed.A!, 1f);
         BlurPass(_wallBleed.A!, _wallBleed.B!, 0f);
         BlurPass(_wallBleed.B!, _lightmap.Target, 1f);
@@ -740,10 +698,6 @@ public sealed class LightingSystem : EntityDrawSystem
                 PrimitiveType.TriangleList, _screenQuad, 0, 2, ScreenVertex.Declaration);
         }
     }
-
-    // -----------------------------------------------------------------------
-    //  Helpers
-    // -----------------------------------------------------------------------
 
     private void BuildDiskQuad(Vector2 center, float radius)
     {
@@ -786,8 +740,7 @@ public sealed class LightingSystem : EntityDrawSystem
         _ => 0.5f,
     };
 
-    // Fills _culledOccluders with every entry in _occluders whose AABB
-    // intersects the circle at lightPos with the given radius.
+    // keeps only the occluders whose AABB touches the light circle
     private void CullOccludersForLight(Vector2 lightPos, float radius)
     {
         _culledOccluders.Clear();
@@ -795,7 +748,6 @@ public sealed class LightingSystem : EntityDrawSystem
         foreach (var occ in _occluders)
         {
             var b = occ.Bounds;
-            // Nearest point on the AABB to the light center.
             float cx = MathHelper.Clamp(lightPos.X, b.Left, b.Right);
             float cy = MathHelper.Clamp(lightPos.Y, b.Top, b.Bottom);
             float dx = lightPos.X - cx;
@@ -805,9 +757,7 @@ public sealed class LightingSystem : EntityDrawSystem
         }
     }
 
-    // Returns the lightmap-space scissor rectangle that tightly encloses the
-    // projected disk quad for a given light. Coordinates are clamped to
-    // [0, vpW] × [0, vpH] so the rect is always valid for SetScissorRectangle.
+    // scissor rect (in lightmap pixels) that encloses the projected light quad
     private static Rectangle LightToScissor(Vector2 worldPos, float radius, Matrix viewProj, int vpW, int vpH)
     {
         float minX = float.MaxValue, minY = float.MaxValue;
@@ -832,7 +782,7 @@ public sealed class LightingSystem : EntityDrawSystem
         if (MathF.Abs(v.W) < 1e-6f) return;
         float ndcX = v.X / v.W;
         float ndcY = v.Y / v.W;
-        // NDC (+1 = top, −1 = bottom) → screen Y (0 = top, vpH = bottom).
+        // ndc y is +1 at the top, screen y is 0 at the top
         float sx = (ndcX + 1f) * 0.5f * vpW;
         float sy = (1f - ndcY) * 0.5f * vpH;
         if (sx < minX) minX = sx;

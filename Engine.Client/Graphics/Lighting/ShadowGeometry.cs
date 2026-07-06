@@ -6,21 +6,15 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
-/// Builds the per-frame occluder EDGE geometry fed to the shadow depth
-/// shader. For each occluder AABB we emit 4 edges. Each edge gets 4
-/// sub-vertices (the corners of the angular strip in the shadow map).
-/// The vertex shader picks the right one based on subVertex.xy:
-///
-///   subVertex.x = 0 → endpoint A,  1 → endpoint B
-///   subVertex.y = 0 → top of the current shadow row,  1 → bottom
-///
-/// 4 edges × 4 verts = 16 vertices per occluder, 24 indices (6 tris per edge).
+/// Builds the occluder edge geometry for the shadow depth shader. Every
+/// occluder AABB becomes 4 edges, every edge becomes a quad (4 verts, 6
+/// indices) that the vertex shader stretches across the shadow map row.
 /// </summary>
 internal static class ShadowGeometry
 {
     /// <summary>
-    /// Vertex format: aPos.xy = endpoint A, aPos.zw = endpoint B,
-    /// subVertex.xy = (endpoint 0/1, near/far).
+    /// aPos.xy = endpoint A, aPos.zw = endpoint B (world space).
+    /// subVertex.x picks the endpoint (0/1), subVertex.y the row side (0/1).
     /// </summary>
     public struct OccluderVertex
     {
@@ -35,13 +29,9 @@ internal static class ShadowGeometry
     }
 
     /// <summary>
-    /// Write per-occluder edge vertex data into <paramref name="destVertices"/>
-    /// and per-triangle indices into <paramref name="destIndices"/>.
-    /// Returns the number of indices written (multiple of 3).
-    /// <paramref name="vertexCount"/> is set to the number of vertices actually
-    /// written — pass it to DrawUserIndexedPrimitives instead of the full array
-    /// length to avoid uploading stale data from prior frames.
-    /// Stops at the destArrays bound if there isn't enough room.
+    /// Fills the vertex/index arrays from the occluder list. Returns the
+    /// number of indices written; <paramref name="vertexCount"/> gets the
+    /// number of vertices. Stops early if the arrays run out of room.
     /// </summary>
     public static int Build(
         IReadOnlyList<(Rectangle Bounds, TransformComponent Transform)> occluders,
@@ -58,15 +48,12 @@ internal static class ShadowGeometry
         {
             var bounds = occluders[o].Bounds;
 
-            // 4 AABB corners.
             float x0 = bounds.Left;
             float y0 = bounds.Top;
             float x1 = bounds.Right;
             float y1 = bounds.Bottom;
 
-            // 4 edges (TL→TR, TR→BR, BR→BL, BL→TL). Hand-unrolled
-            // (instead of an inner (A,B)[] loop) so we don't allocate a
-            // 4-element tuple array per occluder per frame.
+            // unrolled so we don't allocate an edge array per occluder
             for (int e = 0; e < 4; e++)
             {
                 if (vIdx + 4 > vCap || iIdx + 6 > iCap)
@@ -78,26 +65,20 @@ internal static class ShadowGeometry
                 float ax, ay, bx, by;
                 switch (e)
                 {
-                    case 0: ax = x0; ay = y0; bx = x1; by = y0; break; // TL→TR
-                    case 1: ax = x1; ay = y0; bx = x1; by = y1; break; // TR→BR
-                    case 2: ax = x1; ay = y1; bx = x0; by = y1; break; // BR→BL
-                    default: ax = x0; ay = y1; bx = x0; by = y0; break; // BL→TL
+                    case 0: ax = x0; ay = y0; bx = x1; by = y0; break; // top
+                    case 1: ax = x1; ay = y0; bx = x1; by = y1; break; // right
+                    case 2: ax = x1; ay = y1; bx = x0; by = y1; break; // bottom
+                    default: ax = x0; ay = y1; bx = x0; by = y0; break; // left
                 }
 
                 int vBase = vIdx;
 
-                // subVertex = (endpoint 0/1, near/far)
-                //   (0, 0) → A/top
-                //   (1, 0) → B/top
-                //   (1, 1) → B/bottom
-                //   (0, 1) → A/bottom
                 var aPos = new Vector4(ax, ay, bx, by);
                 destVertices[vIdx++] = new OccluderVertex { aPos = aPos, subVertex = new Vector2(0, 0) };
                 destVertices[vIdx++] = new OccluderVertex { aPos = aPos, subVertex = new Vector2(1, 0) };
                 destVertices[vIdx++] = new OccluderVertex { aPos = aPos, subVertex = new Vector2(1, 1) };
                 destVertices[vIdx++] = new OccluderVertex { aPos = aPos, subVertex = new Vector2(0, 1) };
 
-                // Two triangles forming the quad (CCW): 0,1,2 and 0,2,3.
                 short v0 = (short)vBase;
                 short v1 = (short)(vBase + 1);
                 short v2 = (short)(vBase + 2);

@@ -4,9 +4,8 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
-/// Two ping-pong render targets used to blur the lightmap for the
-/// wall-bleed effect. Sized to match the main lightmap; the engine
-/// writes into one, reads from the other, then swaps.
+/// Ping-pong pair of render targets for the lightmap blur passes,
+/// sized to match the lightmap.
 /// </summary>
 internal sealed class WallBleedRT
 {

@@ -5,83 +5,66 @@ using Microsoft.Xna.Framework;
 namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
-/// Central service that owns lighting configuration for the engine.
-/// Resolved via IoC: <c>IoCManager.Resolve&lt;LightingManager&gt;()</c> or
-/// injected with <c>[Dependency] private readonly LightingManager _lighting;</c>.
+/// Runtime configuration for the lighting pipeline. Resolve via IoC.
 /// </summary>
 public sealed class LightingManager
 {
     /// <summary>
-    /// Master toggle. When <c>false</c>, the <see cref="LightingSystem"/>
-    /// does nothing in either Update or Draw — zero overhead, the scene
-    /// is rendered with raw sprite colors.
+    /// Master toggle. When false the lighting system does no work at all.
     /// </summary>
     public bool Enabled { get; private set; } = false;
 
     /// <summary>
-    /// Default ambient color used when no <see cref="Components.Lighting.AmbientLightComponent"/>
-    /// is present in the scene.
+    /// Ambient color used when the scene has no AmbientLightComponent.
     /// </summary>
     public Color AmbientLight { get; set; } = new Color(0, 0, 0);
 
     /// <summary>
-    /// Global multiplier on top of every light's intensity. (1.0 = normal.)
+    /// Global multiplier applied on top of every light's intensity.
     /// </summary>
     public float LightIntensity { get; set; } = 1f;
 
     /// <summary>
-    /// Hard cap on the number of lights processed per frame. Lights beyond
-    /// this cap (sorted by distance to the camera) are skipped.
+    /// Max lights processed per frame, sorted by distance to the camera.
     /// </summary>
     public int MaxLights { get; set; } = 64;
 
     /// <summary>
-    /// Number of shadow-casting lights allowed per frame. Determines the
-    /// height of the shadow map render target. Lights beyond this cap
-    /// have shadows disabled (still render as plain lights).
+    /// Shadow-casting light budget. Also the height of the shadow map (one
+    /// row per light). Lights over the cap still render, just without shadows.
     /// </summary>
     public int MaxShadowcastingLights { get; set; } = 16;
 
     /// <summary>
-    /// Width of the shadow map (in texels) — each row is a 1D unwrapped
-    /// 360° view around a single shadow-casting light. 1024 keeps angular
-    /// shadows from looking like visible ray slices around small occluders.
+    /// Shadow map width in texels. Each row is a full 360° unwrap around one
+    /// light, so too few texels makes shadows look like ray slices.
     /// </summary>
     public int ShadowMapSize { get; set; } = 1024;
 
     /// <summary>
-    /// Extra shadow bias, in world pixels, subtracted from the blocker depth.
-    /// This makes shadows start slightly before the occluder edge so filtered
-    /// lighting cannot leave a bright fringe around walls.
+    /// Extra shadow bias in world pixels, so filtered light doesn't leave a
+    /// bright fringe around wall edges.
     /// </summary>
     public float ShadowContactBias { get; set; } = 1.5f;
 
     /// <summary>
-    /// Multiplier on the soft-shadow kernel size (per-light via
-    /// <see cref="Components.Lighting.PointLightComponent.Softness"/>).
-    /// Larger values = softer/wider penumbra.
+    /// Multiplier on the soft-shadow kernel size. Larger = wider penumbra.
     /// </summary>
     public float LightSoftness { get; set; } = 1.0f;
 
     /// <summary>
-    /// When true, light that "bleeds" through walls is blurred back into
-    /// the occluders' footprints, simulating subsurface light scatter /
-    /// glow. Off = cheaper, slightly harsher edges.
+    /// Blurs light back over occluder edges to fake light scatter on walls.
     /// </summary>
     public bool WallBleedEnabled { get; set; } = false;
 
     /// <summary>
-    /// When true, the accumulated lightmap is blurred (3-pass separable
-    /// Gaussian) before being applied to the scene, smoothing shadow
-    /// banding and angular aliasing.
+    /// Gaussian blur over the finished lightmap, smooths shadow banding.
     /// </summary>
     public bool LightBlurEnabled { get; set; } = false;
 
     /// <summary>
-    /// Fraction of the virtual viewport used for the lightmap.
-    /// 1.0 = native resolution (sharpest, most expensive).
-    /// 0.5 = half resolution (blurrier edges, ~4× cheaper fill).
-    /// Clamped to [0.1, 1.0].
+    /// Fraction of the viewport resolution used for the lightmap.
+    /// 1.0 = native, 0.5 = half res (~4x cheaper fill, blurrier edges).
     /// </summary>
     public float LightmapScale
     {
@@ -91,16 +74,13 @@ public sealed class LightingManager
     private float _lightmapScale = 1.0f;
 
     /// <summary>
-    /// When <c>true</c>, the lightmap is rendered at one texel per
-    /// <see cref="LightPixelSize"/> screen pixels and upscaled with
-    /// nearest-neighbour sampling. UV snapping in the shader guarantees
-    /// each screen pixel maps to exactly one lightmap texel (no mixels).
+    /// Renders the lightmap at one texel per LightPixelSize screen pixels
+    /// and upscales with nearest-neighbour, for a chunky pixel-art look.
     /// </summary>
     public bool PixelatedLighting { get; set; } = false;
 
     /// <summary>
-    /// Size of each light "pixel" in screen pixels when
-    /// <see cref="PixelatedLighting"/> is enabled. Clamped to [1, 64].
+    /// Size of each light "pixel" in screen pixels when PixelatedLighting is on.
     /// </summary>
     public int LightPixelSize
     {
@@ -110,15 +90,13 @@ public sealed class LightingManager
     private int _lightPixelSize = 8;
 
     /// <summary>
-    /// When <c>true</c>, the raw lightmap is drawn on top of the screen
-    /// instead of being applied. Used for debugging.
+    /// Draws the raw lightmap instead of applying it. Debug only.
     /// </summary>
     public bool DebugDraw { get; set; } = false;
 
     /// <summary>
-    /// When <c>true</c>, shadows use a single shadow-map sample (hard edges)
-    /// instead of the 7-tap PCF kernel. Significantly cheaper on the GPU —
-    /// use on low-end hardware or when shadow softness is not important.
+    /// Single-sample shadows instead of the 7-tap PCF kernel. Cheaper,
+    /// hard edges.
     /// </summary>
     public bool HardShadows { get; set; } = false;
 
@@ -161,14 +139,11 @@ public sealed class LightingManager
     }
 
     /// <summary>
-    /// Fired when <see cref="Enabled"/> changes. Useful for systems that
-    /// need to (re)allocate render targets.
+    /// Fired when Enabled changes, in case something needs to reallocate
+    /// render targets.
     /// </summary>
     public event Action<bool>? OnEnabledChanged;
 
-    /// <summary>
-    /// Enable or disable the lighting system at runtime.
-    /// </summary>
     public void SetEnabled(bool value)
     {
         if (Enabled == value) return;

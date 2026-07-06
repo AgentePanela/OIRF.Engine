@@ -7,12 +7,7 @@ using Microsoft.Xna.Framework;
 namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
-/// Resolves the world-space AABB of <see cref="OccluderComponent"/> instances
-/// for the lighting system. Kept as an EntitySystem so it shares the standard
-/// system lifecycle (Init/Update/Draw), but currently no per-frame work is
-/// required — the AABB calculation is pure data and is exposed as a
-/// method that <see cref="LightingSystem"/> calls directly while iterating
-/// its own entity query.
+/// Resolves the world-space AABB of occluders for the lighting system.
 /// </summary>
 public sealed class LightOcclusionSystem : EntitySystem
 {
@@ -24,11 +19,9 @@ public sealed class LightOcclusionSystem : EntitySystem
     }
 
     /// <summary>
-    /// Get the world-space AABB for an occluder. For <see cref="OccluderShape.Rectangle"/>
-    /// and <see cref="OccluderShape.Circle"/> this is computed from the shape
-    /// parameters. For <see cref="OccluderShape.Sprite"/> the entity's
-    /// <see cref="SpriteComponent"/> is queried for the resolved atlas
-    /// region; a 32×32 fallback is used when no sprite can be resolved.
+    /// AABB for an occluder. Rectangle and Circle come from the shape
+    /// parameters; Sprite uses the resolved sprite region, with a 32x32
+    /// fallback when nothing can be resolved.
     /// </summary>
     public Rectangle GetOccluderBounds(
         EntityUid uid,
@@ -66,12 +59,7 @@ public sealed class LightOcclusionSystem : EntitySystem
         TransformComponent transform,
         EntityManager? entMan)
     {
-        // The CachedRegion on the sprite is the atlas-space bounding box of
-        // the chosen tile — the physical world size is the region's
-        // width/height (the atlas is 1:1 with the world for non-tilemap
-        // sprites). Fall back to 32×32 if nothing is resolved, so we never
-        // return a zero-size box (which would be silently ignored by
-        // ShadowGeometry).
+        // the atlas region is 1:1 with world size for regular sprites
         const int Fallback = 32;
         if (entMan is null) return SizedBox(transform, Fallback, Fallback);
 

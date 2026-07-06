@@ -3,16 +3,9 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
-/// Single-channel alpha render target used as an occlusion mask. Built
-/// once per frame by summing per-light "is this pixel lit?" contributions
-/// from <see cref="OcclusionMask.fx"/>. The wall-bleed pass samples it to
-/// restrict the blur-add to pixels actually reached by a shadow-casting
-/// light, instead of bleeding light everywhere like the original
-/// fullscreen-add approach.
-///
-/// We use <see cref="SurfaceFormat.Alpha8"/> because the mask only needs
-/// a single channel — additive blending of 0..1 contributions is enough.
-/// On Reach profiles where Alpha8 isn't supported we fall back to Color.
+/// Single-channel mask of "which pixels are reached by a shadow-casting
+/// light", consumed by the wall bleed merge pass. Alpha8 when the device
+/// supports it, Color otherwise.
 /// </summary>
 internal sealed class OcclusionMaskRT
 {
@@ -28,8 +21,7 @@ internal sealed class OcclusionMaskRT
     public bool Usable { get; private set; }
 
     /// <summary>
-    /// Resize the target to match the lightmap. Cheap to call every frame —
-    /// only allocates on size change.
+    /// Cheap to call every frame, only reallocates when the size changes.
     /// </summary>
     public void EnsureSize(int width, int height)
     {
@@ -43,8 +35,6 @@ internal sealed class OcclusionMaskRT
 
         var device = GameClient.GraphicsDevice;
 
-        // Prefer Alpha8 (1 byte/pixel, ~4× cheaper than Color). Fall back
-        // to Color if the device rejects it.
         try
         {
             _target = new RenderTarget2D(
