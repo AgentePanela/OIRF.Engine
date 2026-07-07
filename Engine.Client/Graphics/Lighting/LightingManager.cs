@@ -56,12 +56,12 @@ public sealed class LightingManager
     /// Adds a blurred copy of the lightmap on top of walls, so they pick up
     /// the glow of nearby lights instead of staying pitch black.
     /// </summary>
-    public bool WallBleedEnabled { get; set; } = false;
+    public bool WallBleedEnabled { get; set; } = true;
 
     /// <summary>
     /// Gaussian blur over the finished lightmap, smooths shadow banding.
     /// </summary>
-    public bool LightBlurEnabled { get; set; } = false;
+    public bool LightBlurEnabled { get; set; } = true;
 
     /// <summary>
     /// Fraction of the viewport resolution used for the lightmap.
