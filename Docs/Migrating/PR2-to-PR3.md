@@ -1,4 +1,4 @@
-## Migrating from pre-release 2.0.0 to pre-release 3.0.0
+## Migrating from pre-release 0.2.0 to pre-release 0.3.0
 A bit of csproj changes has happend.
 
 ### 1. Add new contentless nuget package
