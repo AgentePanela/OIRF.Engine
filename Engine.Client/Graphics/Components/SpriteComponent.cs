@@ -11,7 +11,16 @@ public class SpriteComponent : Component
 {
     // devnote: everything that is here that sprite2d already have is for easily prototype component serialization.
     public string Key { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The layer where this sprite will be drawed
+    /// </summary>
     public int Layer { get; set; } = 0;
+
+    /// <summary>
+    /// Z-order inside Layer, higher draws on top. See SpriteSystem.BringToFront/SendToBack.
+    /// </summary>
+    public float Depth { get; set; } = 0f;
     public Color Color { get; set; } = Color.White;
     public Vector2? Origin { get; set; }
     public SamplerState? SamplerState { get; set; }

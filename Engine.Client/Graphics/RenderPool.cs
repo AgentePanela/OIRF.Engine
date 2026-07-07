@@ -30,6 +30,12 @@ internal sealed class Boxed<T> : IRenderable, IPooledRenderable where T : struct
         set => Value.Layer = value;
     }
 
+    public float Depth
+    {
+        get => Value.Depth;
+        set => Value.Depth = value;
+    }
+
     public SamplerState? SamplerState => Value.SamplerState;
 
     public void Draw(RenderManager renderer, Microsoft.Xna.Framework.Vector2 pos)

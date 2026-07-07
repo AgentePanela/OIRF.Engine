@@ -187,3 +187,25 @@ Set the layer on the renderable:
 sprite.Layer = 5;
 _renderer.Submit(sprite, position);
 ```
+
+### Z-order within a layer
+
+Every `IRenderable` also has a `Depth` (float). Within a single `Layer`, renderables
+are drawn in ascending `Depth` order — higher `Depth` draws later, i.e. on top. This
+is the same two-level model as Construct 3's Layers + per-instance Z-order: `Layer`
+picks the coarse bucket, `Depth` orders things within it. Renderables that don't set
+`Depth` default to `0` and keep drawing in submit order relative to each other, so
+existing content is unaffected.
+
+```csharp
+sprite.Layer = 5;
+sprite.Depth = 1; // drawn on top of other Layer-5 sprites with lower/default Depth
+```
+
+On `SpriteComponent`, set `depth:` from a prototype, or use the convenience helpers
+on `SpriteSystem` for the common "always on top/bottom" case:
+
+```csharp
+_spriteSystem.BringToFront(comp); // comp.Depth = float.MaxValue
+_spriteSystem.SendToBack(comp);   // comp.Depth = float.MinValue
+```

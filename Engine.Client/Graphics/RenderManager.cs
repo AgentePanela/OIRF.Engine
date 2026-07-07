@@ -42,6 +42,15 @@ public sealed partial class RenderManager
     private readonly SortedDictionary<int, List<RenderQueue>> _unshadedQueue = new();
     private readonly List<IPooledRenderable> _unshadedPooledEntries = new();
 
+    // Stamped on every RenderQueue entry as it's enqueued, so same-Depth entries
+    // in a layer keep their submit order instead of jumping around.
+    private int _submitCounter;
+    private static readonly Comparison<RenderQueue> DepthComparison = (a, b) =>
+    {
+        var cmp = a.Target.Depth.CompareTo(b.Target.Depth);
+        return cmp != 0 ? cmp : a.SubmitOrder.CompareTo(b.SubmitOrder);
+    };
+
     // Screen
     private SpriteBatch _spriteBatch;
 
@@ -126,6 +135,7 @@ public sealed partial class RenderManager
             layerQueue = new List<RenderQueue>();
             _renderQueue.Add(layer, layerQueue);
         }
+        queue.SubmitOrder = _submitCounter++;
         layerQueue.Add(queue);
     }
 
@@ -137,6 +147,7 @@ public sealed partial class RenderManager
             layerQueue = new List<RenderQueue>();
             _unshadedQueue.Add(layer, layerQueue);
         }
+        queue.SubmitOrder = _submitCounter++;
         layerQueue.Add(queue);
     }
 
@@ -173,6 +184,7 @@ public sealed partial class RenderManager
 
         foreach (var (_, queue) in _unshadedQueue)
         {
+            queue.Sort(DepthComparison);
             foreach (var r in queue)
             {
                 if (r.Shader != currentShader || r.Target.SamplerState != currentSampler)
@@ -335,6 +347,7 @@ public sealed partial class RenderManager
 
         foreach (var (_, queue) in _renderQueue)
         {
+            queue.Sort(DepthComparison);
             foreach (var r in queue)
             {
                 if (r.Shader != currentShader || r.Target.SamplerState != currentSampler)

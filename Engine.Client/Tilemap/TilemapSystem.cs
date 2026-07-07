@@ -40,6 +40,7 @@ public sealed class TilemapSystem : EntityDrawSystem
         public Texture2D?[,] BlendOverlays;
 
         public int Layer { get; set; }
+        public float Depth { get; set; }
         public SamplerState? SamplerState { get; set; }
 
         public void Draw(RenderManager renderer, Vector2 pos)

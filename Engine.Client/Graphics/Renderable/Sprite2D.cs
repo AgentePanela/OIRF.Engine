@@ -39,7 +39,7 @@ public struct Sprite2D : IRenderable
 
     /// Rendering
     public Color Color = Color.White;
-    public float Depth;
+    public float Depth { get; set; }
     public SpriteEffects Effects = SpriteEffects.None;
 
     public bool Visible = true;

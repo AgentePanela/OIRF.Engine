@@ -37,7 +37,7 @@ public struct Label2D : IRenderable
 
     /// Rendering
     public Color Color = Color.White;
-    public float Depth;
+    public float Depth { get; set; }
 
     public bool Visible = true;
 

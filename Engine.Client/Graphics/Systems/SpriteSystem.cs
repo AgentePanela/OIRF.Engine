@@ -126,6 +126,7 @@ public sealed class SpriteSystem : EntityDrawSystem
         sprite.Rotation = trans.Angle;
         sprite.Visible = trans.Visible;
         sprite.Layer = comp.Layer;
+        sprite.Depth = comp.Depth;
         sprite.SamplerState = comp.SamplerState;
         sprite.Scale = trans.Scale ?? Vector2.One;
         sprite.Color = comp.Color;
@@ -262,4 +263,16 @@ public sealed class SpriteSystem : EntityDrawSystem
         comp.Layers.Remove(layer);
         return true;
     }
+
+    /// <summary>
+    /// Puts this sprite above everything else on the same Layer.
+    /// </summary>
+    public void BringToFront(SpriteComponent comp) 
+        => comp.Depth = float.MaxValue;
+
+    /// <summary>
+    /// Puts this sprite below everything else on the same Layer.
+    /// </summary>
+    public void SendToBack(SpriteComponent comp) 
+        => comp.Depth = float.MinValue;
 }

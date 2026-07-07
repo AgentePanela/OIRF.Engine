@@ -21,7 +21,7 @@ public struct TextureRect : IRenderable
     /// Rendering
     public Color Color = Color.White;
     public Rectangle Region;
-    public float Depth;
+    public float Depth { get; set; }
 
     public bool Visible = true;
 
