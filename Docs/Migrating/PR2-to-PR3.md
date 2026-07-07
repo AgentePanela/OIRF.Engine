@@ -21,8 +21,7 @@ after this, in your Content\ folder add a `Contentless.json` file and insert thi
         "obj/*",
         "bin/*"
     ],
-    "logSkipped": false,
-    "references": ["MonoGame.Extended.Content.Pipeline"]
+    "logSkipped": false
 }
 ```
 
@@ -40,4 +39,14 @@ mklink /D EngineShaders ..\..\Engine\Engine.Client\EngineShaders
 **On Linux/macOS:**
 ```bash
 ln -s ../../Engine/Engine.Client/EngineShaders EngineShaders
+```
+
+### 3. Clear Content.mgcb content
+
+Open Content.mgcb and clear everything below
+
+```
+#---------------------------------- Content ---------------------------------#
+
+[...]
 ```
