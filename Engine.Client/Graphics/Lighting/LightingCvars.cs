@@ -6,7 +6,7 @@ namespace Engine.Client.Graphics.Lighting;
 public static class LightingCvars
 {
     public static readonly CVarDef<float> LightmapScale =
-        CVarDef.Create("lighting.lightmap-scale", 1.0f);
+        CVarDef.Create("lighting.lightmap-scale", 0.5f);
 
     public static readonly CVarDef<bool> PixelatedLighting =
         CVarDef.Create("lighting.pixelated", false);

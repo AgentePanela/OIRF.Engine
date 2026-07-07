@@ -4,9 +4,7 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
-/// Owns the <see cref="RenderTarget2D"/> used to bake the lightmap each frame.
-/// Sized to match the virtual viewport (1:1 with the final frame) so the
-/// <c>LightingApply.fx</c> shader can sample it directly without scaling.
+/// Owns the render target the lightmap is baked into each frame.
 /// </summary>
 internal sealed class LightingRenderTarget
 {
@@ -22,8 +20,8 @@ internal sealed class LightingRenderTarget
         => IoCManager.ResolveDependencies(this);
 
     /// <summary>
-    /// Make sure the backing texture matches the requested size.
-    /// Cheap to call every frame — only allocates on resize.
+    /// Cheap to call every frame, only reallocates when the size changes.
+    /// Defaults to the virtual viewport size when no size is given.
     /// </summary>
     public void EnsureSize(int w = 0, int h = 0)
     {
