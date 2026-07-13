@@ -44,13 +44,46 @@ public sealed class SpriteSystem : EntityDrawSystem
                 continue;
 
             UpdateSpriteFields(comp, transform, ref spr);
-            _renderMan.Submit(spr, transform.Position, comp.Effect);
-            if (comp.Layers is not null)
-            {
-                foreach (var layer in comp.Layers)
-                    DrawLayer(comp, transform, layer);
-            }
+            SubmitWithLayers(comp, transform, spr);
         }
+    }
+
+    /// <summary>
+    /// Submits the base sprite and its layers. Base sits at Order 0: layers with
+    /// a negative Order draw under it, the rest over.
+    /// </summary>
+    private void SubmitWithLayers(SpriteComponent comp, TransformComponent transform, Sprite2D spr)
+    {
+        if (comp.Layers is null || comp.Layers.Count == 0)
+        {
+            _renderMan.Submit(spr, transform.Position, comp.Effect);
+            return;
+        }
+
+        if (comp.LayersDirty)
+            SortLayers(comp);
+
+        var baseSubmitted = false;
+        foreach (var layer in comp.Layers)
+        {
+            if (!baseSubmitted && layer.Order >= 0)
+            {
+                _renderMan.Submit(spr, transform.Position, comp.Effect);
+                baseSubmitted = true;
+            }
+            DrawLayer(comp, transform, layer);
+        }
+
+        if (!baseSubmitted)
+            _renderMan.Submit(spr, transform.Position, comp.Effect);
+    }
+
+    private static void SortLayers(SpriteComponent comp)
+    {
+        foreach (var layer in comp.Layers)
+            layer.Owner = comp;
+        comp.Layers.Sort((a, b) => a.Order.CompareTo(b.Order));
+        comp.LayersDirty = false;
     }
 
     // keeping for compatibility?
@@ -248,8 +281,9 @@ public sealed class SpriteSystem : EntityDrawSystem
         if (string.IsNullOrEmpty(layer.Id))
             layer.Id = Guid.NewGuid().ToString();
 
+        layer.Owner = comp;
         comp.Layers.Add(layer);
-        comp.Layers.Sort((a, b) => a.Order.CompareTo(b.Order));
+        comp.LayersDirty = true;
 
         return layer;
     }

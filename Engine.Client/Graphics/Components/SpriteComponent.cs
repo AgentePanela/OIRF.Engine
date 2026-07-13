@@ -42,19 +42,37 @@ public class SpriteComponent : Component
     public Effect? Effect { get; set; }
 
     public List<SpriteLayer> Layers { get; set; } = new();
+
+    /// <summary>
+    /// set when a layer Order changes so SpriteSystem re-sorts before the next draw.
+    /// </summary>
+    internal bool LayersDirty = true;
 }
 
 public sealed class SpriteLayer
 {
+    internal SpriteComponent? Owner;
+
     /// <summary>
     /// Used to identify layers in the SpriteSystem api - e.g. ID = Clotching (for a clotching layer)
     /// </summary>
     public string Id { get; set; } = Guid.NewGuid().ToString();
 
+    private int _order;
+
     /// <summary>
     /// Define the sprite layer order in the component.
     /// </summary>
-    public int Order { get; set; } = 0;
+    public int Order
+    {
+        get => _order;
+        set
+        {
+            _order = value;
+            if (Owner is not null)
+                Owner.LayersDirty = true;
+        }
+    }
 
     public bool Visible { get; set; } = true;    
     public string Key { get; set; } = string.Empty;

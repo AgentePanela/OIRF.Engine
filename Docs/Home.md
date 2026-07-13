@@ -37,6 +37,11 @@ Internals and extension guides for contributors.
 |------|-------------|
 | [Engine Home](Engine/Home.md) | Engine architecture overview *(Under Development)* |
 
+### 🚲 Migration - Updating from one version to another.
+| Page | Description |
+|------|-------------|
+| [PR0.2.0 > PR0.3.0](Migrating/PR2-to-PR3.md) | Learn how to migrate from pre-release 0.2.0 > pr0.3.0 |
+
 ---
 
 ## Assembly Overview

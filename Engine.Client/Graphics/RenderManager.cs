@@ -174,40 +174,42 @@ public sealed partial class RenderManager
             ? new Viewport(0, 0, FinalTarget.Width, FinalTarget.Height)
             : LastBackbufferViewport;
 
+        DrawRenderQueue(_unshadedQueue, _unshadedPooledEntries);
+    }
+
+    // shared draw loop for the lit and unshaded queues. target/viewport must already be set.
+    private void DrawRenderQueue(
+        SortedDictionary<int, List<RenderQueue>> queues,
+        List<IPooledRenderable> pooled)
+    {
         Effect? currentShader = null;
         SamplerState? currentSampler = null;
 
-        _spriteBatch.Begin(
-            samplerState: DefaultSampler,
-            transformMatrix: _camera.GetViewMatrix(),
-            blendState: BlendState);
+        Begin(null, null);
 
-        foreach (var (_, queue) in _unshadedQueue)
+        foreach (var (_, queue) in queues)
         {
             queue.Sort(DepthComparison);
             foreach (var r in queue)
             {
                 if (r.Shader != currentShader || r.Target.SamplerState != currentSampler)
                 {
-                    _spriteBatch.End();
-                    _spriteBatch.Begin(
-                        samplerState: r.Target.SamplerState ?? DefaultSampler,
-                        transformMatrix: _camera.GetViewMatrix(),
-                        blendState: BlendState,
-                        effect: r.Shader);
+                    End();
+                    Begin(r.Shader, r.Target.SamplerState);
                     currentShader = r.Shader;
                     currentSampler = r.Target.SamplerState;
                 }
+
                 r.Target.Draw(this, r.Position);
             }
         }
 
-        _spriteBatch.End();
-        _unshadedQueue.Clear();
+        End();
+        queues.Clear();
 
-        foreach (var p in _unshadedPooledEntries)
+        foreach (var p in pooled)
             p.ReturnToPool();
-        _unshadedPooledEntries.Clear();
+        pooled.Clear();
     }
 
     /// <summary>
@@ -297,10 +299,11 @@ public sealed partial class RenderManager
     /// </summary>
     public void DrawQueue()
     {
+        _submitCounter = 0; // reset per frame so SubmitOrder doesnt climb toward int overflow
         DrawStopwatch.Reset();
         if (_renderQueue.Count == 0)
             return;
-        
+
         DrawStopwatch.Start();
 
         // When the lighting system is active, draw the world into the
@@ -340,35 +343,7 @@ public sealed partial class RenderManager
             didSwitchTarget = true;
         }
 
-        Effect? currentShader = null;
-        SamplerState? currentSampler = null;
-
-        Begin(null, null);
-
-        foreach (var (_, queue) in _renderQueue)
-        {
-            queue.Sort(DepthComparison);
-            foreach (var r in queue)
-            {
-                if (r.Shader != currentShader || r.Target.SamplerState != currentSampler)
-                {
-                    End();
-                    Begin(r.Shader, r.Target.SamplerState);
-                    currentShader = r.Shader;
-                    currentSampler = r.Target.SamplerState;
-                }
-
-                r.Target.Draw(this, r.Position);
-            }
-        }
-
-        End();
-        _renderQueue.Clear();
-
-        // return pooled wrappers for reuse next frame
-        foreach (var p in _pooledEntries)
-            p.ReturnToPool();
-        _pooledEntries.Clear();
+        DrawRenderQueue(_renderQueue, _pooledEntries);
 
         if (didSwitchTarget)
         {
