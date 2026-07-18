@@ -19,6 +19,12 @@ public sealed class Camera2DSystem : EntitySystem
 
     private void OnCompAdded(EntityUid uid, Camera2DComponent comp, CompAddedEvent args)
     {
+        if (FreezeUpdate)
+        {
+            comp.Active = false;
+            return;
+        }
+
         if (!comp.Active || comp.InitialZoom is null)
             return;
         _cam.Zoom = comp.InitialZoom.Value;

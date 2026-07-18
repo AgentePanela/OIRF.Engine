@@ -57,7 +57,10 @@ public sealed partial class EntityManager
         {
             var comp = _compFac.CreateInstanceFromSanitized(entry.Type)
                 ?? _compFac.CreateInstance(entry.Type)
-                ?? throw new Exception($"Unknown component '{entry.Type}' in prototype '{proto.ID}'.");
+                ?? null; //throw new Exception($"Unknown component '{entry.Type}' in prototype '{proto.ID}'.");
+
+            if (comp == null) // since we now have server and client, we should just ignore the unknow comps :p
+                continue;
 
             ApplyComponentData(comp, entry.Data);
             AddComponentInstance(uid, comp);

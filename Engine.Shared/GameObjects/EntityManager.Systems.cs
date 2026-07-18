@@ -91,6 +91,9 @@ public sealed partial class EntityManager
     {
         foreach ((var type, var system) in Systems)
         {
+            if (system.FreezeUpdate)
+                continue;
+
             _systemTimer.Restart();
             system.Update(dt);
             _systemTimer.Stop();

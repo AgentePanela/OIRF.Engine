@@ -10,6 +10,11 @@ namespace Engine.Shared.GameObjects;
 public abstract class EntitySystem
 {
     [Dependency] protected readonly EntityManager _entManager;
+
+    /// <summary>
+    /// Stops the update calls in this system.
+    /// </summary>
+    public bool FreezeUpdate = false;
     protected EventBus _bus;
 
     // just for entity registration
@@ -30,7 +35,6 @@ public abstract class EntitySystem
     /// <param name="dt">Delta time in seconds since the last frame.</param>
     public virtual void Update(float dt)
     {
-        
     }
 
     /// <summary>

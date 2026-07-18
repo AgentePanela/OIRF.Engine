@@ -6,8 +6,15 @@ using Engine.Shared.GameObjects;
 public abstract class EntityDrawSystem : EntitySystem
 {
     /// <summary>
+    /// Stops the draw calls in this system.
+    /// </summary>
+    public bool FreezeDraw = false;
+
+    /// <summary>
     /// Called every frame to render the system. 
     /// Should contain rendering logic only. 
     /// </summary>
-    public virtual void Draw(float dt) { }
+    public virtual void Draw(float dt)
+    {
+    }
 }
