@@ -145,6 +145,20 @@ public sealed class SpriteSystem : EntityDrawSystem
     }
 
     /// <summary>
+    /// Same as <see cref="GetSprite(SpriteComponent)"/> but with updated properties.
+    /// </summary>
+    public Sprite2D? GetLiveSprite(SpriteComponent comp, TransformComponent trans)
+    {
+        var sprite = GetSprite(comp);
+        if (sprite is null)
+            return null;
+
+        var spr = sprite.Value;
+        UpdateSpriteFields(comp, trans, ref spr);
+        return spr;
+    }
+
+    /// <summary>
     /// Set the shader of a sprite comp.
     /// </summary>
     public Effect? SetShader(SpriteComponent comp, string? shaderName)
