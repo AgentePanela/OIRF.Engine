@@ -113,4 +113,28 @@ public sealed partial class EntityManager
 
         ent.Delete();
     }
+
+    /// <summary>
+    /// Creates a copy of an existing entity, copying its metadata and compononents
+    /// </summary>
+    public EntityUid CloneEntity(EntityUid source)
+    {
+        if (!HasEntity(source, out var srcEnt))
+            return EntityUid.Empty;
+
+        var newEnt = CreateEmptyEntity(srcEnt.Name, true);
+
+        foreach (var comp in GetEntityComps(source) ?? [])
+        {
+            var newComp = _compFac.CreateInstance(comp.GetType());
+            if (newComp is null)
+                continue;
+
+            DataFieldConverter.CopyByReflection(comp, newComp);
+            AddComponentInstance(newEnt.Uid, newComp);
+        }
+
+        EventBus.RaiseEvent(newEnt.Uid, new EntityAddedEvent());
+        return newEnt.Uid;
+    }
 }

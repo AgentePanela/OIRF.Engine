@@ -87,6 +87,39 @@ public static partial class DataFieldConverter
         }
     }
 
+    // Members declared on the Component base that are per-instance identity, not data -
+    // cloning an entity must not copy these onto the new component instance.
+    private static readonly HashSet<string> ClonedMemberSkipNames = new() { "Owner", "Deleted", "State" };
+
+    /// <summary>
+    /// Shallow-copies every public/non-public instance property and field from
+    /// source onto target (same type), skipping per-instance identity members.
+    /// </summary>
+    public static void CopyByReflection(object source, object target)
+    {
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+        var type = source.GetType();
+
+        foreach (var prop in type.GetProperties(flags))
+        {
+            if (ClonedMemberSkipNames.Contains(prop.Name) || prop.GetIndexParameters().Length > 0)
+                continue;
+
+            if (prop.GetGetMethod(true) is null || prop.GetSetMethod(true) is null)
+                continue;
+
+            prop.SetValue(target, prop.GetValue(source));
+        }
+
+        foreach (var field in type.GetFields(flags))
+        {
+            if (ClonedMemberSkipNames.Contains(field.Name) || field.IsInitOnly || field.Name.Contains('<'))
+                continue;
+
+            field.SetValue(target, field.GetValue(source));
+        }
+    }
+
     public static Type GetMemberType(MemberInfo member) => member switch
     {
         PropertyInfo p => p.PropertyType,
