@@ -16,21 +16,6 @@ public interface IRenderable
     public float Depth { get; set; }
     public SamplerState? SamplerState { get; }
 
-    /// <summary>
-    /// True when this renderable draws through <see cref="GameClient.ShapeBatch"/>
-    /// (Apos.Shapes) instead of <see cref="GameClient.SpriteBatch"/>.
-    /// </summary>
-    public bool UsesShapeBatch => false;
-
-    /// <summary>
-    /// True to opt this renderable out of the lighting multiply — it's diverted
-    /// to the unshaded queue and drawn at full brightness on top of the composed
-    /// lightmap. Equivalent to a sprite's Effect carrying the "Unshaded"
-    /// technique, but independent of Effect so shapes (which carry no Effect)
-    /// can opt in too.
-    /// </summary>
-    public bool Unshaded => false;
-
     void Draw(RenderManager renderer, Vector2 pos);
 }
 

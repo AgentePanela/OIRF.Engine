@@ -38,10 +38,6 @@ internal sealed class Boxed<T> : IRenderable, IPooledRenderable where T : struct
 
     public SamplerState? SamplerState => Value.SamplerState;
 
-    public bool UsesShapeBatch => Value.UsesShapeBatch;
-
-    public bool Unshaded => Value.Unshaded;
-
     public void Draw(RenderManager renderer, Microsoft.Xna.Framework.Vector2 pos)
         => Value.Draw(renderer, pos);
 
@@ -63,6 +59,55 @@ internal static class RenderPool<T> where T : struct, IRenderable
     }
 
     public static void Return(Boxed<T> box)
+    {
+        Pool.Push(box);
+    }
+}
+
+/// <summary>
+/// Same boxing trick as <see cref="Boxed{T}"/>, but for <see cref="IShapeRenderable"/>
+/// </summary>
+internal sealed class ShapeBoxed<T> : IShapeRenderable, IPooledRenderable where T : struct, IShapeRenderable
+{
+    public T Value;
+
+    public int Layer
+    {
+        get => Value.Layer;
+        set => Value.Layer = value;
+    }
+
+    public float Depth
+    {
+        get => Value.Depth;
+        set => Value.Depth = value;
+    }
+
+    public SamplerState? SamplerState => Value.SamplerState;
+
+    public bool Unshaded
+    {
+        get => Value.Unshaded;
+        set => Value.Unshaded = value;
+    }
+
+    public void Draw(RenderManager renderer, Microsoft.Xna.Framework.Vector2 pos)
+        => Value.Draw(renderer, pos);
+
+    public void ReturnToPool()
+        => ShapeRenderPool<T>.Return(this);
+}
+
+internal static class ShapeRenderPool<T> where T : struct, IShapeRenderable
+{
+    private static readonly Stack<ShapeBoxed<T>> Pool = new();
+
+    public static ShapeBoxed<T> Rent()
+    {
+        return Pool.Count > 0 ? Pool.Pop() : new ShapeBoxed<T>();
+    }
+
+    public static void Return(ShapeBoxed<T> box)
     {
         Pool.Push(box);
     }

@@ -7,7 +7,7 @@ namespace Engine.Client.Graphics;
 /// <summary>
 /// A equilateral triangle shape queued to be drawn through
 /// </summary>
-public struct EquilateralTriangleRenderable : IRenderable
+public struct EquilateralTriangleRenderable : IShapeRenderable
 {
     public Vector2 Center;
     public float Radius;
@@ -20,7 +20,6 @@ public struct EquilateralTriangleRenderable : IRenderable
     public int Layer { get; set; } = 9999;
     public float Depth { get; set; } = 0f;
     public SamplerState? SamplerState { get; set; } = null;
-    public bool UsesShapeBatch => true;
     public bool Unshaded { get; set; } = false;
 
     public EquilateralTriangleRenderable()

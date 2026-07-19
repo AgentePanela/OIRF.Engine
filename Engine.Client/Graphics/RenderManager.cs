@@ -89,15 +89,14 @@ public sealed partial class RenderManager
 
     /// <summary>
     /// Add a IRenderable to be draw queued.
-    /// If the shader declares IsUnshaded=true, or the renderable itself opts in via
-    /// <see cref="IRenderable.Unshaded"/>, and lighting is active, the renderable is
-    /// automatically diverted to the unshaded queue and will draw on top of the
-    /// lightmap at full brightness.
+    /// If the shader declares IsUnshaded=true and lighting is active, the
+    /// renderable is automatically diverted to the unshaded queue and will
+    /// draw on top of the lightmap at full brightness.
     /// </summary>
     public void Submit(IRenderable renderable, Vector2 position, Effect? shader = null)
     {
         var queue = new RenderQueue(renderable, position, shader);
-        if (_lighting?.Enabled == true && (IsEffectUnshaded(shader) || renderable.Unshaded))
+        if (_lighting?.Enabled == true && IsEffectUnshaded(shader))
             EnqueueUnshaded(queue);
         else
             Enqueue(queue);
@@ -106,7 +105,7 @@ public sealed partial class RenderManager
     public void Submit<T>(T renderable, Vector2 position, Effect? shader = null)
         where T : struct, IRenderable
     {
-        if (_lighting?.Enabled == true && (IsEffectUnshaded(shader) || renderable.Unshaded))
+        if (_lighting?.Enabled == true && IsEffectUnshaded(shader))
         {
             var box = RenderPool<T>.Rent();
             box.Value = renderable;
@@ -124,10 +123,33 @@ public sealed partial class RenderManager
 
     public void Submit(RenderQueue queue)
     {
-        if (_lighting?.Enabled == true && (IsEffectUnshaded(queue.Shader) || queue.Target.Unshaded))
+        if (_lighting?.Enabled == true && IsEffectUnshaded(queue.Shader))
             EnqueueUnshaded(queue);
         else
             Enqueue(queue);
+    }
+
+    /// <summary>
+    /// Add an <see cref="IShapeRenderable"/> to be draw
+    /// queued.
+    /// </summary>
+    public void SubmitShape<T>(T renderable, Vector2 position)
+        where T : struct, IShapeRenderable
+    {
+        if (_lighting?.Enabled == true && renderable.Unshaded)
+        {
+            var box = ShapeRenderPool<T>.Rent();
+            box.Value = renderable;
+            _unshadedPooledEntries.Add(box);
+            EnqueueUnshaded(new RenderQueue(box, position));
+        }
+        else
+        {
+            var box = ShapeRenderPool<T>.Rent();
+            box.Value = renderable;
+            _pooledEntries.Add(box);
+            Enqueue(new RenderQueue(box, position));
+        }
     }
 
     private void Enqueue(RenderQueue queue)
@@ -197,7 +219,7 @@ public sealed partial class RenderManager
             queue.Sort(DepthComparison);
             foreach (var r in queue)
             {
-                if (r.Target.UsesShapeBatch)
+                if (r.Target is IShapeRenderable)
                 {
                     if (spriteOpen)
                     {

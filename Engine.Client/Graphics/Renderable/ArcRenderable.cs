@@ -7,7 +7,7 @@ namespace Engine.Client.Graphics;
 /// <summary>
 /// A arc shape queued to be drawn through
 /// </summary>
-public struct ArcRenderable : IRenderable
+public struct ArcRenderable : IShapeRenderable
 {
     public Vector2 Center;
     public float Angle1;
@@ -21,7 +21,6 @@ public struct ArcRenderable : IRenderable
     public int Layer { get; set; } = 9999;
     public float Depth { get; set; } = 0f;
     public SamplerState? SamplerState { get; set; } = null;
-    public bool UsesShapeBatch => true;
     public bool Unshaded { get; set; } = false;
 
     public ArcRenderable()

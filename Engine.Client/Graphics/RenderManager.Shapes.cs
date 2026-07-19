@@ -7,7 +7,7 @@ public sealed partial class RenderManager
 {
     public void DrawRect(Rectangle rect, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, CornerRadii rounded = default, float rotation = 0f, bool unshaded = false)
     {
-        Submit(new RectRenderable
+        SubmitShape(new RectRenderable
         {
             XY = new Vector2(rect.Left, rect.Top),
             Size = new Vector2(rect.Width, rect.Height),
@@ -27,7 +27,7 @@ public sealed partial class RenderManager
 
     public void DrawCircle(Vector2 center, float radius, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, float rotation = 0f, bool unshaded = false)
     {
-        Submit(new CircleRenderable
+        SubmitShape(new CircleRenderable
         {
             Center = center,
             Radius = radius,
@@ -41,7 +41,7 @@ public sealed partial class RenderManager
 
     public void DrawEllipse(Vector2 center, float radiusX, float radiusY, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, float rotation = 0f, bool unshaded = false)
     {
-        Submit(new EllipseRenderable
+        SubmitShape(new EllipseRenderable
         {
             Center = center,
             RadiusX = radiusX,
@@ -56,7 +56,7 @@ public sealed partial class RenderManager
 
     public void DrawLine(Vector2 from, Vector2 to, float radius, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0f, bool unshaded = false)
     {
-        Submit(new LineRenderable
+        SubmitShape(new LineRenderable
         {
             A = from,
             B = to,
@@ -70,7 +70,7 @@ public sealed partial class RenderManager
 
     public void DrawHexagon(Vector2 center, float radius, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, float rounded = 0f, float rotation = 0f, bool unshaded = false)
     {
-        Submit(new HexagonRenderable
+        SubmitShape(new HexagonRenderable
         {
             Center = center,
             Radius = radius,
@@ -85,7 +85,7 @@ public sealed partial class RenderManager
 
     public void DrawEquilateralTriangle(Vector2 center, float radius, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, float rounded = 0f, float rotation = 0f, bool unshaded = false)
     {
-        Submit(new EquilateralTriangleRenderable
+        SubmitShape(new EquilateralTriangleRenderable
         {
             Center = center,
             Radius = radius,
@@ -100,7 +100,7 @@ public sealed partial class RenderManager
 
     public void DrawTriangle(Vector2 a, Vector2 b, Vector2 c, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, float rounded = 0f, bool unshaded = false)
     {
-        Submit(new TriangleRenderable
+        SubmitShape(new TriangleRenderable
         {
             A = a,
             B = b,
@@ -115,7 +115,7 @@ public sealed partial class RenderManager
 
     public void DrawArc(Vector2 center, float angle1, float angle2, float radius1, float radius2, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, bool unshaded = false)
     {
-        Submit(new ArcRenderable
+        SubmitShape(new ArcRenderable
         {
             Center = center,
             Angle1 = angle1,
@@ -131,7 +131,7 @@ public sealed partial class RenderManager
 
     public void DrawRing(Vector2 center, float angle1, float angle2, float radius1, float radius2, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, bool unshaded = false)
     {
-        Submit(new RingRenderable
+        SubmitShape(new RingRenderable
         {
             Center = center,
             Angle1 = angle1,

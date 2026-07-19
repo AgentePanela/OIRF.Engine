@@ -7,7 +7,7 @@ namespace Engine.Client.Graphics;
 /// <summary>
 /// A ellipse shape queued to be drawn through=
 /// </summary>
-public struct EllipseRenderable : IRenderable
+public struct EllipseRenderable : IShapeRenderable
 {
     public Vector2 Center;
     public float RadiusX;
@@ -20,7 +20,6 @@ public struct EllipseRenderable : IRenderable
     public int Layer { get; set; } = 9999;
     public float Depth { get; set; } = 0f;
     public SamplerState? SamplerState { get; set; } = null;
-    public bool UsesShapeBatch => true;
     public bool Unshaded { get; set; } = false;
 
     public EllipseRenderable()

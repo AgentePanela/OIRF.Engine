@@ -7,7 +7,7 @@ namespace Engine.Client.Graphics;
 /// <summary>
 /// A circle shape queued to be drawn through
 /// </summary>
-public struct CircleRenderable : IRenderable
+public struct CircleRenderable : IShapeRenderable
 {
     public Vector2 Center;
     public float Radius;
@@ -19,7 +19,6 @@ public struct CircleRenderable : IRenderable
     public int Layer { get; set; } = 9999;
     public float Depth { get; set; } = 0f;
     public SamplerState? SamplerState { get; set; } = null;
-    public bool UsesShapeBatch => true;
     public bool Unshaded { get; set; } = false;
 
     public CircleRenderable()
