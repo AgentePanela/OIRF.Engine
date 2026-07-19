@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using Engine.Shared.Prototypes;
@@ -122,9 +123,17 @@ public sealed partial class EntityManager
         if (!HasEntity(source, out var srcEnt))
             return EntityUid.Empty;
 
-        var newEnt = CreateEmptyEntity(srcEnt.Name, true);
+        return RestoreEntity(srcEnt.Name, GetEntityComps(source) ?? []);
+    }
 
-        foreach (var comp in GetEntityComps(source) ?? [])
+    /// <summary>
+    /// Creates a new entity from a list of components and them copy their values via reflection.
+    /// </summary>
+    public EntityUid RestoreEntity(string name, IReadOnlyList<Component> snapshot)
+    {
+        var newEnt = CreateEmptyEntity(name, true);
+
+        foreach (var comp in snapshot)
         {
             var newComp = _compFac.CreateInstance(comp.GetType());
             if (newComp is null)
