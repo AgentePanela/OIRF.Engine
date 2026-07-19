@@ -1,3 +1,4 @@
+using Apos.Shapes;
 using Engine.Client.Assets;
 using Engine.Client.Assets.Atlas;
 using Engine.Client.Graphics.Fonts;
@@ -53,6 +54,7 @@ public sealed partial class RenderManager
 
     // Screen
     private SpriteBatch _spriteBatch;
+    private ShapeBatch _shapeBatch;
 
     /// <summary>
     /// Controls the time that is loose trying to draw each frame.
@@ -64,10 +66,10 @@ public sealed partial class RenderManager
         IoCManager.ResolveDependencies(this);
     }
 
-    internal void UpdateBatch(SpriteBatch batch)
+    internal void UpdateBatch(SpriteBatch batch, ShapeBatch shapeBatch)
     {
         _spriteBatch = batch;
-        InitShapes(GameClient.GraphicsDevice);
+        _shapeBatch = shapeBatch;
     }
 
     internal void UpdateScaleMatrix()
@@ -87,14 +89,15 @@ public sealed partial class RenderManager
 
     /// <summary>
     /// Add a IRenderable to be draw queued.
-    /// If the shader declares IsUnshaded=true and lighting is active, the
-    /// renderable is automatically diverted to the unshaded queue and will
-    /// draw on top of the lightmap at full brightness.
+    /// If the shader declares IsUnshaded=true, or the renderable itself opts in via
+    /// <see cref="IRenderable.Unshaded"/>, and lighting is active, the renderable is
+    /// automatically diverted to the unshaded queue and will draw on top of the
+    /// lightmap at full brightness.
     /// </summary>
     public void Submit(IRenderable renderable, Vector2 position, Effect? shader = null)
     {
         var queue = new RenderQueue(renderable, position, shader);
-        if (_lighting?.Enabled == true && IsEffectUnshaded(shader))
+        if (_lighting?.Enabled == true && (IsEffectUnshaded(shader) || renderable.Unshaded))
             EnqueueUnshaded(queue);
         else
             Enqueue(queue);
@@ -103,7 +106,7 @@ public sealed partial class RenderManager
     public void Submit<T>(T renderable, Vector2 position, Effect? shader = null)
         where T : struct, IRenderable
     {
-        if (_lighting?.Enabled == true && IsEffectUnshaded(shader))
+        if (_lighting?.Enabled == true && (IsEffectUnshaded(shader) || renderable.Unshaded))
         {
             var box = RenderPool<T>.Rent();
             box.Value = renderable;
@@ -121,7 +124,7 @@ public sealed partial class RenderManager
 
     public void Submit(RenderQueue queue)
     {
-        if (_lighting?.Enabled == true && IsEffectUnshaded(queue.Shader))
+        if (_lighting?.Enabled == true && (IsEffectUnshaded(queue.Shader) || queue.Target.Unshaded))
             EnqueueUnshaded(queue);
         else
             Enqueue(queue);
@@ -178,33 +181,72 @@ public sealed partial class RenderManager
     }
 
     // shared draw loop for the lit and unshaded queues. target/viewport must already be set.
+    // Interleaves two batchers (SpriteBatch for sprites/text, ShapeBatch for debug
+    // shapes)
     private void DrawRenderQueue(
         SortedDictionary<int, List<RenderQueue>> queues,
         List<IPooledRenderable> pooled)
     {
+        bool spriteOpen = false;
+        bool shapeOpen = false;
         Effect? currentShader = null;
         SamplerState? currentSampler = null;
-
-        Begin(null, null);
 
         foreach (var (_, queue) in queues)
         {
             queue.Sort(DepthComparison);
             foreach (var r in queue)
             {
-                if (r.Shader != currentShader || r.Target.SamplerState != currentSampler)
+                if (r.Target.UsesShapeBatch)
                 {
-                    End();
-                    Begin(r.Shader, r.Target.SamplerState);
-                    currentShader = r.Shader;
-                    currentSampler = r.Target.SamplerState;
+                    if (spriteOpen)
+                    {
+                        End();
+                        spriteOpen = false;
+                        currentShader = null;
+                        currentSampler = null;
+                    }
+
+                    if (!shapeOpen || r.Target.SamplerState != currentSampler)
+                    {
+                        if (shapeOpen)
+                            EndShapes();
+
+                        BeginShapes(r.Target.SamplerState);
+                        shapeOpen = true;
+                        currentSampler = r.Target.SamplerState;
+                    }
+                }
+                else
+                {
+                    if (shapeOpen)
+                    {
+                        EndShapes();
+                        shapeOpen = false;
+                        currentSampler = null;
+                    }
+
+                    if (!spriteOpen || r.Shader != currentShader || r.Target.SamplerState != currentSampler)
+                    {
+                        if (spriteOpen)
+                            End();
+
+                        Begin(r.Shader, r.Target.SamplerState);
+                        spriteOpen = true;
+                        currentShader = r.Shader;
+                        currentSampler = r.Target.SamplerState;
+                    }
                 }
 
                 r.Target.Draw(this, r.Position);
             }
         }
 
-        End();
+        if (spriteOpen)
+            End();
+        if (shapeOpen)
+            EndShapes();
+
         queues.Clear();
 
         foreach (var p in pooled)
@@ -212,12 +254,9 @@ public sealed partial class RenderManager
         pooled.Clear();
     }
 
-    /// <summary>
-    /// Prepares and begins a new sprite and text batch with the specified render state.
-    /// This should be called before any draw call.
-    /// <code>RenderManager.End()</code> should be called after all draw calls.
-    /// </summary>
-    public void Begin(Effect? effect = null, SamplerState? samplerState = null)
+    // Shared viewport/transform-matrix setup used by both Begin() (SpriteBatch)
+    // and BeginShapes() (ShapeBatch)
+    private Matrix ComputeTransform()
     {
         // Only force a viewport swap when we're rendering directly to the
         // backbuffer. When the caller has already configured a target
@@ -249,13 +288,22 @@ public sealed partial class RenderManager
             );
         }
 
-        Matrix transform;
         if (Resizing && isOnBackbuffer)
-            transform = _camera.GetViewMatrix();
+            return _camera.GetViewMatrix();
         else if (isOnBackbuffer)
-            transform = Matrix.Identity;
+            return Matrix.Identity;
         else
-            transform = _camera.GetViewMatrix(); // world-space draws into SceneTarget
+            return _camera.GetViewMatrix(); // world-space draws into SceneTarget
+    }
+
+    /// <summary>
+    /// Prepares and begins a new sprite and text batch with the specified render state.
+    /// This should be called before any draw call.
+    /// <code>RenderManager.End()</code> should be called after all draw calls.
+    /// </summary>
+    public void Begin(Effect? effect = null, SamplerState? samplerState = null)
+    {
+        var transform = ComputeTransform();
 
         _spriteBatch.Begin(
             samplerState: samplerState ?? DefaultSampler,
@@ -271,6 +319,28 @@ public sealed partial class RenderManager
     public void End()
     {
         _spriteBatch.End();
+    }
+
+    /// <summary>
+    /// Prepares and begins a new Apos.Shapes batch for debug/gizmo shapes.
+    /// <see cref="EndShapes"/> should be called after all shape draw calls.
+    /// </summary>
+    public void BeginShapes(SamplerState? samplerState = null)
+    {
+        var transform = ComputeTransform();
+
+        _shapeBatch.Begin(
+            view: transform,
+            samplerState: samplerState ?? DefaultSampler,
+            blendState: BlendState);
+    }
+
+    /// <summary>
+    /// Ends the ShapeBatch and draw in the screen.
+    /// </summary>
+    public void EndShapes()
+    {
+        _shapeBatch.End();
     }
 
     /// <summary>

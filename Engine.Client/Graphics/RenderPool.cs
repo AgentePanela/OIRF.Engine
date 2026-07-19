@@ -38,6 +38,10 @@ internal sealed class Boxed<T> : IRenderable, IPooledRenderable where T : struct
 
     public SamplerState? SamplerState => Value.SamplerState;
 
+    public bool UsesShapeBatch => Value.UsesShapeBatch;
+
+    public bool Unshaded => Value.Unshaded;
+
     public void Draw(RenderManager renderer, Microsoft.Xna.Framework.Vector2 pos)
         => Value.Draw(renderer, pos);
 

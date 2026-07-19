@@ -1,3 +1,4 @@
+using Apos.Shapes;
 using Engine.Client.Audio;
 using Engine.Client.Assets;
 using Engine.Shared.Configuration;
@@ -73,6 +74,11 @@ public class GameClient : Game
     /// Gets the sprite batch used for all 2D rendering.
     /// </summary>
     public static SpriteBatch SpriteBatch { get; private set; }
+
+    /// <summary>
+    /// Gets the shapes batch used for shape rendering.
+    /// </summary>
+    public static ShapeBatch ShapeBatch { get; private set; }
 
     /// <summary>
     /// Gets the content manager used to load global assets.
@@ -192,6 +198,7 @@ public class GameClient : Game
         Graphics.PreferredBackBufferWidth = options.Width;
         Graphics.PreferredBackBufferHeight = options.Height;
         Graphics.IsFullScreen = options.FullScreen;
+        Graphics.GraphicsProfile = GraphicsProfile.HiDef; // required by Apos.Shapes
 
         // Apply the graphic presentation changes.
         Graphics.ApplyChanges();
@@ -264,7 +271,8 @@ public class GameClient : Game
 
         // Create the sprite batch instance.
         SpriteBatch = new SpriteBatch(GraphicsDevice);
-        Renderer.UpdateBatch(SpriteBatch);
+        ShapeBatch = new ShapeBatch(GraphicsDevice);
+        Renderer.UpdateBatch(SpriteBatch, ShapeBatch);
         InterfaceManager.Init();
         Components.Add(Scenes);
 

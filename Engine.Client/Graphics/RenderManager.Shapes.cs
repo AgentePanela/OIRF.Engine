@@ -1,140 +1,185 @@
-using System;
+using Apos.Shapes;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 
 namespace Engine.Client.Graphics;
 
 public sealed partial class RenderManager
 {
-    private Texture2D _pixel = default!;
-    private Texture2D _circleTexture = default!;
-
-    private static readonly Color DebugFill = new(0, 255, 0, 40);
-    private static readonly Color DebugBorder = new(0, 255, 0, 150);
-
-    internal void InitShapes(GraphicsDevice gd)
+    public void DrawRect(Rectangle rect, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, CornerRadii rounded = default, float rotation = 0f, bool unshaded = false)
     {
-        _pixel = new Texture2D(gd, 1, 1);
-        _pixel.SetData(new[] { Color.White });
-
-        _circleTexture = GenerateCircleTexture(gd, 128);
-    }
-
-    public void DrawRect(Rectangle rect, Color? fillColor = null, Color? borderColor = null, int thickness = 1)
-    {
-        var fill = fillColor ?? DebugFill;
-        var border = borderColor ?? DebugBorder;
-        SubmitPixel(
-            new Vector2(rect.Left, rect.Top),
-            new Vector2(rect.Width, rect.Height),
-            fill
-        );
-
-        DrawLine(new Vector2(rect.Left, rect.Top), new Vector2(rect.Right, rect.Top), border, thickness);
-        DrawLine(new Vector2(rect.Left, rect.Bottom), new Vector2(rect.Right, rect.Bottom), border, thickness);
-        DrawLine(new Vector2(rect.Left, rect.Top), new Vector2(rect.Left, rect.Bottom), border, thickness);
-        DrawLine(new Vector2(rect.Right, rect.Top), new Vector2(rect.Right, rect.Bottom), border, thickness);
-    }
-
-    public void FillRectImmediate(Rectangle rect, Color color)
-    {
-        _spriteBatch.Draw(_pixel, rect, color);
-    }
-
-    public void DrawCircle(Vector2 center, float radius, Color? fillColor = null, Color? borderColor = null)
-    {
-        var fill = fillColor ?? new Color(0, 200, 255, 40);
-        var border = borderColor ?? new Color(0, 200, 255, 180);
-        float diameter = radius * 2f;
-        var fillRect = new TextureRect(_circleTexture)
+        Submit(new RectRenderable
         {
-            Region = _circleTexture.Bounds,
-            Color = fill,
-            Origin = new Vector2(_circleTexture.Width / 2f, _circleTexture.Height / 2f),
-            Scale = new Vector2(diameter / _circleTexture.Width, diameter / _circleTexture.Height),
-            Layer = 9999,
-            Depth = 0f,
-        };
-        Submit(fillRect, center);
-
-        var borderRect = new TextureRect(_circleTexture)
-        {
-            Region = _circleTexture.Bounds,
-            Color = border,
-            Origin = new Vector2(_circleTexture.Width / 2f, _circleTexture.Height / 2f),
-            Scale = new Vector2(diameter / _circleTexture.Width, diameter / _circleTexture.Height),
-            Layer = 9999,
-            Depth = 0f,
-        };
-        Submit(borderRect, center);
+            XY = new Vector2(rect.Left, rect.Top),
+            Size = new Vector2(rect.Width, rect.Height),
+            Fill = fillColor ?? Color.Transparent,
+            Border = borderColor ?? Color.Transparent,
+            Thickness = thickness,
+            Rounded = rounded,
+            Rotation = rotation,
+            Unshaded = unshaded,
+        }, Vector2.Zero);
     }
 
-    public void DrawPolygon(Vector2[] worldVerts, Color? fillColor = null, Color? borderColor = null, int thickness = 1)
+    public void FillRectImmediate(Rectangle rect, Gradient color)
     {
-        var border = borderColor ?? new Color(255, 200, 0, 180);
+        GameClient.ShapeBatch.FillRectangle(new Vector2(rect.X, rect.Y), new Vector2(rect.Width, rect.Height), color);
+    }
+
+    public void DrawCircle(Vector2 center, float radius, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, float rotation = 0f, bool unshaded = false)
+    {
+        Submit(new CircleRenderable
+        {
+            Center = center,
+            Radius = radius,
+            Fill = fillColor ?? Color.Transparent,
+            Border = borderColor ?? Color.Transparent,
+            Thickness = thickness,
+            Rotation = rotation,
+            Unshaded = unshaded,
+        }, Vector2.Zero);
+    }
+
+    public void DrawEllipse(Vector2 center, float radiusX, float radiusY, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, float rotation = 0f, bool unshaded = false)
+    {
+        Submit(new EllipseRenderable
+        {
+            Center = center,
+            RadiusX = radiusX,
+            RadiusY = radiusY,
+            Fill = fillColor ?? Color.Transparent,
+            Border = borderColor ?? Color.Transparent,
+            Thickness = thickness,
+            Rotation = rotation,
+            Unshaded = unshaded,
+        }, Vector2.Zero);
+    }
+
+    public void DrawLine(Vector2 from, Vector2 to, float radius, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0f, bool unshaded = false)
+    {
+        Submit(new LineRenderable
+        {
+            A = from,
+            B = to,
+            Radius = radius,
+            Fill = fillColor ?? Color.Transparent,
+            Border = borderColor ?? Color.Transparent,
+            Thickness = thickness,
+            Unshaded = unshaded,
+        }, Vector2.Zero);
+    }
+
+    public void DrawHexagon(Vector2 center, float radius, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, float rounded = 0f, float rotation = 0f, bool unshaded = false)
+    {
+        Submit(new HexagonRenderable
+        {
+            Center = center,
+            Radius = radius,
+            Fill = fillColor ?? Color.Transparent,
+            Border = borderColor ?? Color.Transparent,
+            Thickness = thickness,
+            Rounded = rounded,
+            Rotation = rotation,
+            Unshaded = unshaded,
+        }, Vector2.Zero);
+    }
+
+    public void DrawEquilateralTriangle(Vector2 center, float radius, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, float rounded = 0f, float rotation = 0f, bool unshaded = false)
+    {
+        Submit(new EquilateralTriangleRenderable
+        {
+            Center = center,
+            Radius = radius,
+            Fill = fillColor ?? Color.Transparent,
+            Border = borderColor ?? Color.Transparent,
+            Thickness = thickness,
+            Rounded = rounded,
+            Rotation = rotation,
+            Unshaded = unshaded,
+        }, Vector2.Zero);
+    }
+
+    public void DrawTriangle(Vector2 a, Vector2 b, Vector2 c, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, float rounded = 0f, bool unshaded = false)
+    {
+        Submit(new TriangleRenderable
+        {
+            A = a,
+            B = b,
+            C = c,
+            Fill = fillColor ?? Color.Transparent,
+            Border = borderColor ?? Color.Transparent,
+            Thickness = thickness,
+            Rounded = rounded,
+            Unshaded = unshaded,
+        }, Vector2.Zero);
+    }
+
+    public void DrawArc(Vector2 center, float angle1, float angle2, float radius1, float radius2, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, bool unshaded = false)
+    {
+        Submit(new ArcRenderable
+        {
+            Center = center,
+            Angle1 = angle1,
+            Angle2 = angle2,
+            Radius1 = radius1,
+            Radius2 = radius2,
+            Fill = fillColor ?? Color.Transparent,
+            Border = borderColor ?? Color.Transparent,
+            Thickness = thickness,
+            Unshaded = unshaded,
+        }, Vector2.Zero);
+    }
+
+    public void DrawRing(Vector2 center, float angle1, float angle2, float radius1, float radius2, Gradient? fillColor = null, Gradient? borderColor = null, float thickness = 0, bool unshaded = false)
+    {
+        Submit(new RingRenderable
+        {
+            Center = center,
+            Angle1 = angle1,
+            Angle2 = angle2,
+            Radius1 = radius1,
+            Radius2 = radius2,
+            Fill = fillColor ?? Color.Transparent,
+            Border = borderColor ?? Color.Transparent,
+            Thickness = thickness,
+            Unshaded = unshaded,
+        }, Vector2.Zero);
+    }
+
+    public void DrawPolygon(Vector2[] worldVerts, Gradient? borderColor = null, float thickness = 1, bool unshaded = false)
+    {
+        var border = borderColor ?? Color.Transparent;
         for (int i = 0; i < worldVerts.Length; i++)
         {
             var a = worldVerts[i];
             var b = worldVerts[(i + 1) % worldVerts.Length];
-            DrawLine(a, b, border, thickness);
+            DrawLine(a, b, thickness / 2f, border, unshaded: unshaded);
         }
     }
 
-    public void DrawLine(Vector2 from, Vector2 to, Color color, int thickness = 1)
-    {
-        var diff = to - from;
-        float length = diff.Length();
-        float angle = MathF.Atan2(diff.Y, diff.X);
+    internal void DrawRectShape(RectRenderable r)
+        => _shapeBatch.DrawRectangle(r.XY, r.Size, r.Fill, r.Border, r.Thickness, r.Rounded, r.Rotation);
 
-        var rect = new TextureRect(_pixel)
-        {
-            Region = _pixel.Bounds,
-            Color = color,
-            Rotation = angle,
-            Origin = Vector2.Zero,
-            Scale = new Vector2(length, thickness),
-            Layer = 9999,
-            Depth = 0f,
-        };
+    internal void DrawCircleShape(CircleRenderable r)
+        => _shapeBatch.DrawCircle(r.Center, r.Radius, r.Fill, r.Border, r.Thickness, r.Rotation);
 
-        Submit(rect, from);
-    }
+    internal void DrawEllipseShape(EllipseRenderable r)
+        => _shapeBatch.DrawEllipse(r.Center, r.RadiusX, r.RadiusY, r.Fill, r.Border, r.Thickness, r.Rotation);
 
+    internal void DrawLineShape(LineRenderable r)
+        => _shapeBatch.DrawLine(r.A, r.B, r.Radius, r.Fill, r.Border, r.Thickness);
 
+    internal void DrawHexagonShape(HexagonRenderable r)
+        => _shapeBatch.DrawHexagon(r.Center, r.Radius, r.Fill, r.Border, r.Thickness, r.Rounded, r.Rotation);
 
-    private void SubmitPixel(Vector2 position, Vector2 size, Color color)
-    {
-        var rect = new TextureRect(_pixel)
-        {
-            Region = _pixel.Bounds,
-            Color = color,
-            Origin = Vector2.Zero,
-            Scale = size,
-            Layer = 9999,
-            Depth = 0f,
-        };
+    internal void DrawEquilateralTriangleShape(EquilateralTriangleRenderable r)
+        => _shapeBatch.DrawEquilateralTriangle(r.Center, r.Radius, r.Fill, r.Border, r.Thickness, r.Rounded, r.Rotation);
 
-        Submit(rect, position);
-    }
+    internal void DrawTriangleShape(TriangleRenderable r)
+        => _shapeBatch.DrawTriangle(r.A, r.B, r.C, r.Fill, r.Border, r.Thickness, r.Rounded);
 
-    private static Texture2D GenerateCircleTexture(GraphicsDevice gd, int size)
-    {
-        var texture = new Texture2D(gd, size, size);
-        var data = new Color[size * size];
-        float center = size / 2f;
-        float radiusSq = (size / 2f) * (size / 2f);
+    internal void DrawArcShape(ArcRenderable r)
+        => _shapeBatch.DrawArc(r.Center, r.Angle1, r.Angle2, r.Radius1, r.Radius2, r.Fill, r.Border, r.Thickness);
 
-        for (int y = 0; y < size; y++)
-            for (int x = 0; x < size; x++)
-            {
-                float dx = x - center;
-                float dy = y - center;
-                data[y * size + x] = dx * dx + dy * dy <= radiusSq
-                    ? Color.White
-                    : Color.Transparent;
-            }
-
-        texture.SetData(data);
-        return texture;
-    }
+    internal void DrawRingShape(RingRenderable r)
+        => _shapeBatch.DrawRing(r.Center, r.Angle1, r.Angle2, r.Radius1, r.Radius2, r.Fill, r.Border, r.Thickness);
 }
