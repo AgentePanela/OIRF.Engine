@@ -201,6 +201,11 @@ public sealed class LightingSystem : EntityDrawSystem
             return;
 
         BuildLightmap();
+
+        // Exposed so shaded sprite shaders can sample the lightmap themselves
+        // (RenderManager pushes this onto any shader declaring a LightMap
+        // parameter) instead of relying on a full-screen post-process.
+        _lighting.CurrentLightMap = _lightmap.Target;
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 using System;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace Engine.Client.Graphics.Lighting;
 
@@ -94,6 +95,14 @@ public sealed class LightingManager
     /// Draws the raw lightmap instead of applying it. Debug only.
     /// </summary>
     public bool DebugDraw { get; set; } = false;
+
+    /// <summary>
+    /// The lightmap built this frame, set by <see cref="LightingSystem"/> once
+    /// per frame after building it. Sprite shaders that want to sample light
+    /// themselves (see RenderManager's per-sprite lightmap sampling) read this
+    /// instead of taking a direct dependency on LightingSystem.
+    /// </summary>
+    public Texture2D? CurrentLightMap { get; internal set; }
 
     /// <summary>
     /// Single-sample shadows instead of the 7-tap PCF kernel. Cheaper,

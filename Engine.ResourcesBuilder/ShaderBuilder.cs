@@ -18,12 +18,17 @@ public static class ShaderBuilder
 
         foreach (var root in resourceFolders)
         {
+            // Sprite shaders get lighting support injected in memory (source
+            // files under Shaders/ are never touched) - see
+            // ShaderLightingInjector for the rename+wrap mechanism.
+            var generatedRoot = ShaderLightingInjector.GenerateRoot(root);
+
             // A fresh ContentBuilder per root
             var builder = new ShaderContentBuilder();
             var parameters = new ContentBuilderParams
             {
                 WorkingDirectory = AppContext.BaseDirectory,
-                SourceDirectory = root,
+                SourceDirectory = generatedRoot,
                 OutputDirectory = "",
                 IntermediateDirectory = "obj/ContentBuilder",
                 Platform = platform,

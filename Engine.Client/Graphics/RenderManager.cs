@@ -94,14 +94,15 @@ public sealed partial class RenderManager
         AlphaDestinationBlend = Blend.One,
     };
 
-    // Lazily resolved: default (no custom shader) sprites need an alpha-clip so
-    // fully-transparent atlas padding never writes into the stencil buffer (see
-    // Unshaded.fx's own clip() for the equivalent fix on that path).
-    private Effect? _alphaClipEffect;
-    private Effect? GetAlphaClipEffect()
+    // Lazily resolved: default (no custom shader) sprites use this instead of
+    // MonoGame's built-in effect while lighting is active, so they can sample
+    // the lightmap themselves (see DrawRenderQueue) instead of relying on a
+    // full-screen post-process. See DefaultLit.fx.
+    private Effect? _defaultLitEffect;
+    private Effect? GetDefaultLitEffect()
     {
-        _alphaClipEffect ??= _shaders.GetShader("AlphaClip")?.Clone();
-        return _alphaClipEffect;
+        _defaultLitEffect ??= _shaders.GetShader("DefaultLit")?.Clone();
+        return _defaultLitEffect;
     }
 
     // Screen
@@ -204,9 +205,15 @@ public sealed partial class RenderManager
 
     // Single draw loop for the merged queue. target/viewport must already be set.
     // Interleaves two batchers (SpriteBatch for sprites/text, ShapeBatch for debug
-    // shapes). When writeStencil is true (lighting active), every entry also stamps
-    // stencil 0 (shaded) or 1 (unshaded) so LightingSystem.ApplyAfterWorld can
-    // multiply the lightmap onto shaded pixels only, in place, afterward.
+    // shapes). When writeStencil is true (lighting active):
+    // - Shapes stamp stencil 0 (shaded, needs the post-multiply) or 1 (unshaded,
+    //   skip it) per r.Unshaded, same as before - Apos.Shapes' own shader can't
+    //   sample the lightmap, so this is still the only way shapes support
+    //   Unshaded (see LightingSystem.ApplyAfterWorld's StencilTestShadedOnly).
+    // - Sprites/text always stamp 1 ("skip me"), regardless of r.Unshaded, since
+    //   they now sample the lightmap themselves (DefaultLit/Grayscale/MetallicFloor)
+    //   or intentionally don't (Unshaded.fx) - the shared post-multiply must never
+    //   touch them, or a shaded sprite would get lit twice.
     private void DrawRenderQueue(
         SortedDictionary<int, List<RenderQueue>> queues,
         List<IPooledRenderable> pooled,
@@ -261,12 +268,34 @@ public sealed partial class RenderManager
                         if (spriteOpen)
                             End();
 
-                        // Default (no custom shader) sprites need an alpha-clip so
-                        // transparent atlas padding never writes into the stencil
-                        // buffer; shaders we own (Unshaded.fx) do their own clip().
-                        var shaderToUse = (writeStencil && r.Shader is null) ? GetAlphaClipEffect() : r.Shader;
+                        // Default (no custom shader) sprites use DefaultLit so they
+                        // can sample the lightmap themselves; Unshaded.fx and any
+                        // other custom shader (Grayscale/MetallicFloor) are used as-is.
+                        var shaderToUse = (writeStencil && r.Shader is null) ? GetDefaultLitEffect() : r.Shader;
 
-                        Begin(shaderToUse, r.Target.SamplerState, StencilFor(r.Unshaded));
+                        if (shaderToUse is not null)
+                        {
+                            // LightingEnabled must always be pushed, not just when
+                            // writeStencil is true: Grayscale/MetallicFloor's
+                            // injected lighting wrapper is baked into the compiled
+                            // shader unconditionally, so when lighting is off it
+                            // still runs - without this flag it would sample an
+                            // unbound LightMap (black) and multiply every sprite
+                            // to solid black instead of skipping the multiply.
+                            shaderToUse.Parameters["LightingEnabled"]?.SetValue(writeStencil);
+                            shaderToUse.Parameters["LightMap"]?.SetValue(_lighting.CurrentLightMap);
+                            shaderToUse.Parameters["ViewportSize"]?.SetValue(new Vector2(SceneTarget?.Width ?? 0, SceneTarget?.Height ?? 0));
+                            shaderToUse.Parameters["PixelatedLighting"]?.SetValue(_lighting.PixelatedLighting);
+                        }
+
+                        // Sprites always self-light or self-bypass now, so the
+                        // shape-oriented post-multiply must never touch them -
+                        // always mark "skip me", regardless of r.Unshaded, so a
+                        // sprite drawn over a shape overwrites any stale "shape
+                        // needs multiply" stencil value left underneath it.
+                        var dss = !writeStencil ? DepthStencilState.None : StencilWriteUnshaded;
+
+                        Begin(shaderToUse, r.Target.SamplerState, dss);
                         spriteOpen = true;
                         currentShader = r.Shader;
                         currentSampler = r.Target.SamplerState;
