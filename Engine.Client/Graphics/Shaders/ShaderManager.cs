@@ -5,6 +5,7 @@ using System.Linq;
 using Engine.Client.Assets;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
+using Engine.Shared.Assets;
 
 namespace Engine.Client.Graphics.Shaders;
 
@@ -15,6 +16,7 @@ public sealed class ShaderManager
 {
     private ContentManager _content; 
     private Dictionary<string, Effect> _effects = new();
+    public ResPath ShadersResPath = new("Shaders");
 
     internal void Init()
     {
