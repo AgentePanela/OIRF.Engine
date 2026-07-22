@@ -99,10 +99,10 @@ You generally do not need to use `ResPath` directly in game code — it is used 
 
 ## Atlas Size Configuration
 
-Set the texture atlas page size via `EntryPointOptions.TextureAtlasSize`:
+Set the texture atlas page size via `ClientOptions.TextureAtlasSize`:
 
 ```csharp
-new EntryPointOptions
+new ClientOptions
 {
     TextureAtlasSize = AtlasSize.Size2048, // default
 }
@@ -115,7 +115,7 @@ new EntryPointOptions
 | `Size2048` | 2048 × 2048 (default) |
 | `Size4096` | 4096 × 4096 |
 
-If a single texture is too large to fit on a standard atlas page, the engine automatically creates a dedicated atlas page for it (controlled by `EntryPointOptions.CreateDedicatedAtlas`).
+If a single texture is too large to fit on a standard atlas page, the engine automatically creates a dedicated atlas page for it (controlled by `ClientOptions.CreateDedicatedAtlas`).
 
 ---
 
@@ -124,3 +124,9 @@ If a single texture is too large to fit on a standard atlas page, the engine aut
 The asset manager supports hot-reloading textures from disk during development. When a texture file changes, the atlas is updated automatically without restarting the game.
 
 This is enabled by default in debug builds.
+
+---
+
+## Shaders
+
+Custom shaders are compiled from `Resources/Shaders/*.fx` by a separate build-time tool. See [Shaders](Shaders.md) for setup and the automatic lighting support built into it.

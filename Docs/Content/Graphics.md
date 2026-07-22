@@ -73,27 +73,27 @@ if (GameClient.Assets.GetSprite("player/idle", out var sprite))
 
 ### Label2D
 
-`Label2D` draws text with optional shadow and outline.
+`Label2D` draws text with optional shadow and outline. It can be driven three ways: a raw `SpriteFontBase`, a managed `FontKey`, or a high-level `TextStyle` (see [Fonts](Fonts.md) for how those resolve to an actual font).
 
 ```csharp
-var label = new Label2D
+// Managed font-key path
+var label = new Label2D(FontKey.UiBody, "Hello, World!")
 {
-    String   = "Hello, World!",
-    FontKey  = "fonts/myFont",
-    Color    = Color.White,
-    Scale    = Vector2.One,
-    Layer    = 10,
-    // Shadow
-    Shadow        = true,
+    Color = Color.White,
+    Layer = 10,
+    ShadowEnabled = true,
     ShadowColor   = Color.Black,
     ShadowOffset  = new Vector2(1, 1),
-    // Outline
-    Outline          = true,
+    OutlineEnabled   = true,
     OutlineColor     = Color.Black,
-    OutlineThickness = 1f,
+    OutlineThickness = 1,
 };
 
 _renderer.Submit(label, position);
+
+// High-level style path, font/size/color/effects all come from the style
+var title = new Label2D(TextStyle.Title, "Game Over");
+_renderer.Submit(title, position);
 ```
 
 ### TextureRect
@@ -138,6 +138,49 @@ components:
 
 ---
 
+## Shapes
+
+Beyond sprites and text, `RenderManager` can draw vector shapes directly: circles, rectangles, lines, polygons, and more, without needing a texture. These are backed by [Apos.Shapes](https://github.com/Apos-Games/Apos.Shapes) and queued through the same submit pipeline as everything else, so they respect `Layer`/`Depth` and participate in lighting like any other renderable.
+
+```csharp
+_renderer.DrawCircle(center: new Vector2(400, 300), radius: 32, fillColor: Color.Orange);
+
+_renderer.DrawRect(new Rectangle(100, 100, 200, 80),
+    fillColor: Color.CornflowerBlue,
+    borderColor: Color.White,
+    thickness: 2,
+    rounded: new CornerRadii(8));
+
+_renderer.DrawLine(from: a, to: b, radius: 2, fillColor: Color.Red);
+```
+
+| Method | Shape |
+|--------|-------|
+| `DrawRect(rect, fill?, border?, thickness, rounded, rotation, unshaded)` | Axis-aligned or rounded rectangle |
+| `DrawCircle(center, radius, fill?, border?, thickness, rotation, unshaded)` | Circle |
+| `DrawEllipse(center, radiusX, radiusY, fill?, border?, thickness, rotation, unshaded)` | Ellipse |
+| `DrawLine(from, to, radius, fill?, border?, thickness, unshaded)` | Line segment with thickness |
+| `DrawHexagon(center, radius, fill?, border?, thickness, rounded, rotation, unshaded)` | Regular hexagon |
+| `DrawEquilateralTriangle(center, radius, fill?, border?, thickness, rounded, rotation, unshaded)` | Equilateral triangle |
+| `DrawTriangle(a, b, c, fill?, border?, thickness, rounded, unshaded)` | Arbitrary 3-point triangle |
+| `DrawArc(center, angle1, angle2, radius1, radius2, fill?, border?, thickness, unshaded)` | Arc/pie slice between two angles and radii |
+| `DrawRing(center, angle1, angle2, radius1, radius2, fill?, border?, thickness, unshaded)` | Ring segment (arc with inner and outer radius) |
+| `DrawPolygon(worldVerts, border?, thickness, unshaded)` | Closed polygon outline, built from `DrawLine` segments |
+
+Each shape's `fillColor`/`borderColor` parameters are a `Gradient` (from `Apos.Shapes`). A plain `Color` is implicitly converted to a solid-color gradient, so you can pass `Color.Red` directly wherever a `Gradient` is expected, or construct an actual multi-stop gradient for fades.
+
+Every shape struct implements `IShapeRenderable` (which extends `IRenderable`) and carries its own `Unshaded` flag:
+
+```csharp
+_renderer.DrawCircle(center, radius, fillColor: Color.Yellow, unshaded: true);
+```
+
+This is a separate concept from the `Unshaded` **shader** used by sprites (see [Unshaded Sprites in Lighting.md](Lighting.md#unshaded-sprites)). Shapes can't hold a custom `Effect`, so `Unshaded` is just a bool that tells the renderer to skip lighting for that shape. As with unshaded sprites, `Layer`/`Depth` are still respected normally against everything else in the scene.
+
+For immediate-mode drawing outside the queue (rare, prefer the `Draw*` methods above), `GameClient.ShapeBatch` exposes the underlying `Apos.Shapes` batch directly, e.g. `_renderer.FillRectImmediate(rect, color)`.
+
+---
+
 ## Camera2D
 
 `Camera2D` (accessible via `GameClient.Camera`) controls the 2D view.
@@ -164,7 +207,7 @@ The camera transform is applied automatically when `RenderManager.DrawQueue()` r
 
 `ViewportAdapter` (accessible via `GameClient.Viewport`) manages virtual resolution scaling. It ensures the game renders at a consistent virtual size even when the window is resized.
 
-The adapter is initialized with the values from `EntryPointOptions.Width/Height`.
+The adapter is initialized with the values from `ClientOptions.Width/Height`.
 
 ---
 

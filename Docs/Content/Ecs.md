@@ -105,6 +105,15 @@ int count = _entManager.GetEntityCount();
 _entManager.DeleteEntity(uid);
 ```
 
+### Cloning Entities
+
+```csharp
+// Creates a new entity with a copy of every component on the source entity
+EntityUid clone = _entManager.CloneEntity(uid);
+```
+
+`CloneEntity` reads the source entity's current components and copies their field/property values by reflection onto freshly created instances of the same component types, then adds the clone as a brand new entity (raising `EntityAddedEvent` as usual). This copies the entity's live runtime state, not its original prototype: if the source entity was modified after spawning, the clone gets those modifications too, not the prototype's original values.
+
 ---
 
 ## EntityManager — Component API

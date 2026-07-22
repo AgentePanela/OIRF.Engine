@@ -1,52 +1,48 @@
 ## Migrating from pre-release 0.2.0 to pre-release 0.3.0
-A bit of csproj changes has happend.
+The whole content/shader setup from 0.2.0 is gone. If your project still has the `Contentless` package, a `Content.mgcb` file, or an `EngineShaders` symlink from following the old steps below, remove all of that: it's replaced by a small in-process shader builder.
 
-### 1. Add new contentless nuget package
-Install it by using:
-```bash
-dotnet add package Contentless --version 4.2.2
-```
+### 1. Remove the old Contentless setup
 
-and add this in your game client csproj:
+Delete, if present:
+- The `Contentless` package reference and the `<MonoGameContentReference Include="Content\Content.mgcb" />` item in your game csproj.
+- Your `Content\Content.mgcb` file and `Content\Contentless.json`.
+- The `EngineShaders` symlink inside your Content folder.
+
+### 2. Reference Engine.ResourcesBuilder
+
+Add a project reference to the new resource builder project in your game csproj:
+
 ```xml
 <ItemGroup>
-    <MonoGameContentReference Include="Content\Content.mgcb" />
+    <ProjectReference Include="..\Engine\Engine.ResourcesBuilder\ResourcesBuilder.csproj" />
 </ItemGroup>
 ```
 
-after this, in your Content\ folder add a `Contentless.json` file and insert this:
-```json
-{
-    "exclude": [
-        "obj/*",
-        "bin/*"
-    ],
-    "logSkipped": false
-}
+### 3. Build shaders at startup
+
+In `Program.cs`, call `ShaderBuilder.Build()` before `game.Run()`
+
+```csharp
+Engine.ResourcesBuilder.ShaderBuilder.Build();
+
+using var game = new MyGame(options);
+game.Run();
 ```
 
-### 2. Adding engine shaders syslinks
-Inside your game Content folder, open your OS terminal.
+### 4. Move your shaders
 
-**On Windows:**
-If your game is using git, please make sure `git config --get core.symlinks` is set to `true`.
+Custom `.fx` shaders now live in a plain `Resources\Shaders\` folder (no symlink, no `Content.mgcb`, no manual `.xnb` step). `ShaderBuilder.Build()` compiles them automatically and `ShaderManager` picks them up at runtime by file name.
 
-> Open CMD as administrator in Windows to this works.
-```bash
-mklink /D EngineShaders ..\..\Engine\Engine.Client\EngineShaders
-```
+See [Shaders](../Content/Shaders.md) for the full picture, including how lighting support gets injected into ordinary sprite shaders automatically.
 
-**On Linux/macOS:**
-```bash
-ln -s ../../Engine/Engine.Client/EngineShaders EngineShaders
-```
+### 5. Publishing
 
-### 3. Clear Content.mgcb content
+`ShaderBuilder.Build()` is meant to run in Debug only; Release publishes skip it on purpose. Run a Debug build at least once before publishing so the compiled `.xnb` files exist to be copied into the publish output. See the `ContentPipelinePublish` MSBuild target in `Project.Eptus.csproj` for a working example of copying `Resources\` and the built `Content\**\*.xnb` into a publish folder.
 
-Open Content.mgcb and clear everything below
+---
 
-```
-#---------------------------------- Content ---------------------------------#
+## Other relevant changes
 
-[...]
-```
+- `EntryPointOptions` was renamed to `ClientOptions` (same fields, plus `LoadingScene` and a now-nullable `InitialScene`, see [Getting Started](../Content/GettingStarted.md)).
+- `IFontManager.Load(ContentManager, ...)` and `TryLoadFirstAvailable(...)` were removed. Fonts are now TrueType files loaded directly from disk, not compiled through the content pipeline. See [Fonts](../Content/Fonts.md) if your game called these directly.
+- `GraphicsProfile` is now forced to `HiDef` (required by the shape rendering library, `Apos.Shapes`). If your game explicitly requested `Reach`, that setting no longer applies.

@@ -124,6 +124,12 @@ See the [UI docs](UI.md) for details on creating canvases.
 
 ---
 
+## Loading Scenes
+
+`LoadingScene` is a special `Scene` subtype used only during the engine's startup phase (`GameState.Loading`), before your `InitialScene` ever runs. It's not something you `ChangeScene()` into like a regular scene: `SceneManager` instantiates it automatically based on `ClientOptions.LoadingScene`. See [Boot](Boot.md) for the full walkthrough, including how to write your own loading scene with a custom splash screen or progress bar.
+
+---
+
 ## Accessing Engine Services in a Scene
 
 `Scene` has several pre-injected dependencies for convenience:

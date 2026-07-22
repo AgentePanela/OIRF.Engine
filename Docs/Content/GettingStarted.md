@@ -19,14 +19,14 @@ using Engine.Client;
 
 public sealed class MyGame : GameClient
 {
-    public MyGame(EntryPointOptions options) : base(options) { }
+    public MyGame(ClientOptions options) : base(options) { }
 }
 
 class Program
 {
     static void Main(string[] args)
     {
-        var options = new EntryPointOptions
+        var options = new ClientOptions
         {
             Title        = "My Awesome Game",
             Version      = "1.0.0",
@@ -43,13 +43,13 @@ class Program
 }
 ```
 
-`GameClient` is a singleton — only one instance may exist at a time.
+`GameClient` is a singleton, only one instance may exist at a time.
 
 ---
 
-## 3. EntryPointOptions
+## 3. ClientOptions
 
-`EntryPointOptions` controls the engine's startup behaviour. All fields have sensible defaults.
+`ClientOptions` controls the engine's startup behaviour. All fields have sensible defaults.
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
@@ -60,11 +60,13 @@ class Program
 | `FullScreen` | `bool` | `false` | Start in fullscreen |
 | `BackgroundColor` | `Color` | `Color.Black` | Clear colour each frame |
 | `WindowResizing` | `bool` | `true` | Allow window resize |
-| `InitialScene` | `Type` | — | **Required.** The first scene type to load |
+| `InitialScene` | `Type?` | `null` | The first scene type to load once loading finishes |
+| `LoadingScene` | `Type` | `typeof(DefaultLoadingScene)` | The loading scene type used while assets/prototypes load, see [Boot](Boot.md) |
 | `DataPath` | `string` | `"MyCompany\MyGame"` | Subfolder inside `%AppData%` for user data |
 | `SaveConfigOnExit` | `bool` | `false` | Auto-save CVars on shutdown |
 | `PauseOnUnfocus` | `bool` | `false` | Freeze update loop when window loses focus |
 | `TextureAtlasSize` | `AtlasSize` | `Size2048` | Texture atlas page dimensions |
+| `CreateDedicatedAtlas` | `bool` | `true` | Create a dedicated atlas page for oversized textures |
 | `Assemblies` | `Assembly[]` | `[]` | Content assemblies for prototype & component scanning |
 | `Samplimg` | `SamplerState` | `PointClamp` | Default sampler for sprites |
 | `Args` | `string[]` | `[]` | Raw command-line arguments |
@@ -81,6 +83,7 @@ Once the game is running you can access engine subsystems from anywhere via `Gam
 GameClient.EntityManager   // EntityManager
 GameClient.Scenes          // SceneManager
 GameClient.Renderer        // RenderManager
+GameClient.ShapeBatch      // ShapeBatch, backs shape drawing (see Graphics.md)
 GameClient.InputManager    // InputManager
 GameClient.Assets          // IAssetManager
 GameClient.Audio           // IAudioManager
@@ -113,6 +116,10 @@ Booting  →  Loading  →  Running
 
 `EntityManager.Update()` and the ECS are **only called** while the state is `Running`. Wait for `Running` before spawning entities or running game logic that depends on loaded prototypes.
 
+If you need to run custom setup after IoC registrations but before the rest of the engine initializes (asset manager, input, UI, etc.), override the protected virtual `BeforeInit()` method on your `GameClient` subclass.
+
+For the full walkthrough from `Program.cs` to your first running scene, including how to write a custom loading scene, see [Boot](Boot.md).
+
 ---
 
 ## 6. Next Steps
@@ -120,3 +127,4 @@ Booting  →  Loading  →  Running
 - Learn about the [ECS architecture](Ecs.md) to start building gameplay.
 - Define your first game objects with [Prototypes](Prototypes.md).
 - Organize your game into [Scenes](Scenes.md).
+- See what happens during startup and how to customize the loading scene in [Boot](Boot.md).

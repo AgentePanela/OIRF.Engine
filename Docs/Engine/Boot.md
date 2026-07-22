@@ -7,13 +7,13 @@ This document explains the initialization sequence of the OIRF Engine, tracing e
 ## 1. Entry Point (`Program.cs`)
 
 Execution begins in the client executable's entry point (e.g. `Content.Client/Program.cs`):
-1. Instantiates `EntryPointOptions` to configure window parameters (width, height, title, full screen, etc.) and lists the assemblies containing custom components.
+1. Instantiates `ClientOptions` to configure window parameters (width, height, title, full screen, etc.) and lists the assemblies containing custom components.
 2. Instantiates the game instance (a subclass of `GameClient` like `Content.EntryPoint`).
 3. Invokes MonoGame's native `Run()` loop.
 
 ```csharp
 // Content.Client/Program.cs
-var options = new EntryPointOptions()
+var options = new ClientOptions()
 {
     Assemblies = new[] { typeof(EntryPoint).Assembly },
     Title = "ORIF Engine (Client)",

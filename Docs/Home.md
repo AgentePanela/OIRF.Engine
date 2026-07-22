@@ -15,12 +15,15 @@ Everything you need to build a game on top of ORIF.
 |------|-------------|
 | [Home](Content/Home.md) | Engine API overview |
 | [Getting Started](Content/GettingStarted.md) | Project setup, entry point, and game boot |
+| [Boot](Content/Boot.md) | Startup sequence from Program.cs to your first scene, and custom loading scenes |
 | [ECS](Content/Ecs.md) | Entities, Components, Systems, and Events |
 | [Scenes](Content/Scenes.md) | Scene lifecycle and scene management |
 | [Prototypes](Content/Prototypes.md) | YAML-driven data definitions |
-| [Graphics](Content/Graphics.md) | Rendering, sprites, labels, and camera |
+| [Graphics](Content/Graphics.md) | Rendering, sprites, labels, shapes, and camera |
 | [Animations](Content/Animations.md) | Spritesheet/frame-based animations via info.yml |
 | [Lighting](Content/Lighting.md) | Dynamic 2D lighting, shadows, and ambient light |
+| [Fonts](Content/Fonts.md) | Font registration, FontKey, and TextStyle |
+| [Shaders](Content/Shaders.md) | Custom shaders and the resource builder pipeline |
 | [Input](Content/Input.md) | Keyboard, mouse, gamepad, and action maps |
 | [Physics](Content/Physics.md) | Collision, physics components, and raycasting |
 | [Tilemaps](Content/Tilemaps.md) | Tile-based maps and chunks |
