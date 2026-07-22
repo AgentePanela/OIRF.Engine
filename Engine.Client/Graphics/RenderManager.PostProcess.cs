@@ -61,7 +61,7 @@ public sealed partial class RenderManager
             0,
             RenderTargetUsage.PreserveContents);
 
-        Log.Debug($"RenderManager.SceneTarget resized to {width}x{height}");
+        //Log.Debug($"RenderManager.SceneTarget resized to {width}x{height}");
     }
 
     /// <summary>

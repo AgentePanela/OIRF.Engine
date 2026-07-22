@@ -49,6 +49,6 @@ internal sealed class LightingRenderTarget
         _allocatedWidth = w;
         _allocatedHeight = h;
 
-        Log.Debug($"LightingRenderTarget resized to {w}x{h}");
+        //Log.Debug($"LightingRenderTarget resized to {w}x{h}");
     }
 }
