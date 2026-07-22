@@ -5,6 +5,7 @@ using Engine.Client.Graphics.Fonts;
 using Engine.Client.Graphics.Lighting;
 using Engine.Client.Graphics.Shaders;
 using Engine.Shared.IoC;
+using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System;
@@ -580,7 +581,6 @@ public sealed partial class RenderManager
             label.Rotation,
             label.Origin,
             drawScale,
-            SpriteEffects.None,
             label.Depth);
     }
 }

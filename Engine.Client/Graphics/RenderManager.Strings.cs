@@ -1,6 +1,8 @@
 using Engine.Client.Graphics.Fonts;
+using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using TextStyle = Engine.Client.Graphics.Fonts.TextStyle;
 
 namespace Engine.Client.Graphics;
 
@@ -15,7 +17,7 @@ public sealed partial class RenderManager
             77248cf6501c262a6e550a8a5dae1ebff8e76f71, f0219d37c31972b102c241c3bd1a944405a04076, 5fc64c8936cb758a14fda624c6777b39ad953050, this commit too
     */
 
-    private SpriteFont ResolveFont(Label2D label)
+    private SpriteFontBase ResolveFont(Label2D label)
     {
         if (label.Font is not null)
             return label.Font;
@@ -105,7 +107,7 @@ public sealed partial class RenderManager
     }
 
     private void DrawShadow(
-        SpriteFont font,
+        SpriteFontBase font,
         string text,
         Vector2 position,
         Label2D label,
@@ -121,12 +123,11 @@ public sealed partial class RenderManager
             label.Rotation,
             label.Origin,
             scale,
-            SpriteEffects.None,
             label.Depth);
     }
 
     private void DrawOutline(
-        SpriteFont font,
+        SpriteFontBase font,
         string text,
         Vector2 position,
         Label2D label,
@@ -152,7 +153,6 @@ public sealed partial class RenderManager
                     label.Rotation,
                     label.Origin,
                     scale,
-                    SpriteEffects.None,
                     label.Depth);
             }
         }

@@ -15,13 +15,17 @@ public sealed class TextStyleLibrary
         _styles[TextStyle.Body] = new TextStyleDefinition(
             FontKey.UiBody,
             Color.White,
-            1f);
+            1f)
+        {
+            Size = DefaultFontSizes.Get(FontKey.UiBody)
+        };
 
         _styles[TextStyle.Title] = new TextStyleDefinition(
             FontKey.UiTitle,
             Color.White,
             1f)
         {
+            Size = DefaultFontSizes.Get(FontKey.UiTitle),
             ShadowEnabled = true,
             ShadowColor = new Color(0, 0, 0, 180),
             ShadowOffset = new Vector2(2f, 2f)
@@ -32,6 +36,7 @@ public sealed class TextStyleLibrary
             Color.White,
             1f)
         {
+            Size = DefaultFontSizes.Get(FontKey.Debug),
             ShadowEnabled = true,
             ShadowColor = new Color(0, 0, 0, 160),
             ShadowOffset = new Vector2(1f, 1f)
@@ -42,6 +47,7 @@ public sealed class TextStyleLibrary
             Color.White,
             1f)
         {
+            Size = DefaultFontSizes.Get(FontKey.Loading),
             ShadowEnabled = true,
             ShadowColor = new Color(0, 0, 0, 160),
             ShadowOffset = new Vector2(1f, 1f)
@@ -52,6 +58,7 @@ public sealed class TextStyleLibrary
             Color.White,
             1f)
         {
+            Size = DefaultFontSizes.Get(FontKey.Tooltip),
             OutlineEnabled = true,
             OutlineColor = new Color(0, 0, 0, 160),
             OutlineThickness = 1
@@ -60,13 +67,17 @@ public sealed class TextStyleLibrary
         _styles[TextStyle.Button] = new TextStyleDefinition(
             FontKey.Button,
             Color.White,
-            1f);
+            1f)
+        {
+            Size = DefaultFontSizes.Get(FontKey.Button)
+        };
 
         _styles[TextStyle.ButtonText] = new TextStyleDefinition(
             FontKey.Button,
             Color.White,
             1f)
         {
+            Size = DefaultFontSizes.Get(FontKey.Button),
             ShadowEnabled = true,
             ShadowColor = new Color(0, 0, 0, 140),
             ShadowOffset = new Vector2(1f, 1f)
@@ -75,13 +86,17 @@ public sealed class TextStyleLibrary
         _styles[TextStyle.Caption] = new TextStyleDefinition(
             FontKey.UiSmall,
             Color.LightGray,
-            1f);
+            1f)
+        {
+            Size = DefaultFontSizes.Get(FontKey.UiSmall)
+        };
 
         _styles[TextStyle.Notification] = new TextStyleDefinition(
             FontKey.Notification,
             Color.White,
             1f)
         {
+            Size = DefaultFontSizes.Get(FontKey.Notification),
             OutlineEnabled = true,
             OutlineColor = new Color(0, 0, 0, 180),
             OutlineThickness = 1

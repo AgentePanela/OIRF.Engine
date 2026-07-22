@@ -11,6 +11,11 @@ public sealed class TextStyleDefinition
     public Color Color { get; set; } = Color.White;
     public float Scale { get; set; } = 1f;
 
+    /// <summary>
+    /// Pixel size the font is rasterized at via <see cref="Fonts.FontManager.MyraFontSystem"/>.
+    /// </summary>
+    public float Size { get; set; } = 16f;
+
     public bool ShadowEnabled { get; set; } = false;
     public Color ShadowColor { get; set; } = Color.Black;
     public Vector2 ShadowOffset { get; set; } = new Vector2(1f, 1f);

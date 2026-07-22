@@ -1,6 +1,7 @@
 using Engine.Client.Graphics.Fonts;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using SpriteFontBase = FontStashSharp.SpriteFontBase;
 
 namespace Engine.Client.Graphics;
 
@@ -16,7 +17,7 @@ public struct Label2D : IRenderable
     /// <summary>
     /// Legacy/raw font path. Still fully supported.
     /// </summary>
-    public SpriteFont? Font { get; set; }
+    public SpriteFontBase? Font { get; set; }
 
     /// <summary>
     /// Managed font lookup path.
@@ -64,7 +65,7 @@ public struct Label2D : IRenderable
     /// <summary>
     /// Backward-compatible raw font constructor.
     /// </summary>
-    public Label2D(SpriteFont font, string str)
+    public Label2D(SpriteFontBase font, string str)
     {
         Font = font;
         FontKey = FontKey.None;
@@ -155,7 +156,7 @@ public struct Label2D : IRenderable
     }
 
     public Label2D(
-        SpriteFont font,
+        SpriteFontBase font,
         string str,
         Vector2 origin,
         float rotation,

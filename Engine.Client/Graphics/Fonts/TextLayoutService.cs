@@ -50,7 +50,7 @@ public sealed class TextLayoutService
     public string TruncateText(string text, float maxWidth, TextStyle style, string ellipsis = "...")
         => TruncateTextInternal(text, maxWidth, Fonts.GetForStyle(style), ellipsis);
 
-    private static string WrapTextInternal(string text, float maxWidth, Microsoft.Xna.Framework.Graphics.SpriteFont font)
+    private static string WrapTextInternal(string text, float maxWidth, FontStashSharp.SpriteFontBase font)
     {
         if (string.IsNullOrEmpty(text))
             return string.Empty;
@@ -113,7 +113,7 @@ public sealed class TextLayoutService
         return builder.ToString();
     }
 
-    private static string TruncateTextInternal(string text, float maxWidth, Microsoft.Xna.Framework.Graphics.SpriteFont font, string ellipsis)
+    private static string TruncateTextInternal(string text, float maxWidth, FontStashSharp.SpriteFontBase font, string ellipsis)
     {
         text ??= string.Empty;
         ellipsis ??= "...";
