@@ -44,15 +44,15 @@ public sealed class CollisionDrawSystem : EntityDrawSystem
         switch (shape)
         {
             case BoxShape b:
-                _renderer.DrawRect(b.GetBounds(worldPos), new Color(Color.Lime, 60));
+                _renderer.DrawRect(b.GetBounds(worldPos), new Color(Color.Lime, 60), unshaded: true);
                 break;
 
             case CircleShape c:
-                _renderer.DrawCircle(c.GetCenter(worldPos), c.Radius, new Color(Color.Cyan, 60));
+                _renderer.DrawCircle(c.GetCenter(worldPos), c.Radius, new Color(Color.Cyan, 60), unshaded: true);
                 break;
             
             case PolygonShape p:
-                _renderer.DrawPolygon(p.GetWorldVertices(worldPos), new Color(Color.Yellow, 60));
+                _renderer.DrawPolygon(p.GetWorldVertices(worldPos), new Color(Color.Yellow, 60), unshaded: true);
                 break;
         }
     }

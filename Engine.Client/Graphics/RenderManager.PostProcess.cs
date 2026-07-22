@@ -9,10 +9,11 @@ namespace Engine.Client.Graphics;
 /// <summary>
 /// Post-processing extension of <see cref="RenderManager"/>. Provides:
 /// 1. Render-target swap so the scene can be drawn to an offscreen buffer.
-/// 2. A fullscreen effect submission that samples the offscreen scene and
-///    applies a shader to produce the final frame.
+/// 2. A fullscreen quad submission (screen-space, no camera transform) used by
+///    the lighting system to multiply the lightmap onto the scene in place and
+///    to blit the finished scene onto the backbuffer.
 ///
-/// This is the integration point used by the lighting system (Fase 2).
+/// This is the integration point used by the lighting system.
 /// </summary>
 public sealed partial class RenderManager
 {
@@ -56,7 +57,7 @@ public sealed partial class RenderManager
             height,
             false,
             SurfaceFormat.Color,
-            DepthFormat.None,
+            DepthFormat.Depth24Stencil8,
             0,
             RenderTargetUsage.PreserveContents);
 
@@ -104,39 +105,29 @@ public sealed partial class RenderManager
     }
 
     /// <summary>
-    /// Submits a fullscreen quad that samples <paramref name="sceneTexture"/>
-    /// (and optionally <paramref name="lightmap"/>) and applies the given effect.
-    /// The effect must expose <c>SceneTexture</c> and optionally <c>LightMap</c> parameters.
-    ///
-    /// Called automatically by <see cref="LightingSystem"/>.
+    /// Submits a fullscreen quad sampling <paramref name="texture"/>, stretched to
+    /// the current viewport, in screen space (no camera transform — the caller is
+    /// expected to have already set the active render target/viewport). Used by
+    /// <see cref="LightingSystem"/> both to multiply the lightmap onto
+    /// <see cref="SceneTarget"/> in place (with <paramref name="depthStencilState"/>
+    /// gating which pixels the blend affects) and to blit the finished
+    /// <see cref="SceneTarget"/> onto <see cref="FinalTarget"/>/the backbuffer.
     /// </summary>
-    public void SubmitFullscreenEffectWithTextures(Effect effect, Texture2D sceneTexture, Texture2D? lightmap)
+    public void DrawFullscreenQuad(
+        Texture2D texture,
+        BlendState blendState,
+        SamplerState samplerState,
+        DepthStencilState? depthStencilState = null)
     {
-        if (effect is null)
-            return;
+        var vp = GameClient.GraphicsDevice.Viewport;
 
-        if (effect.Parameters["SceneTexture"] is not null)
-            effect.Parameters["SceneTexture"].SetValue(sceneTexture);
-
-        if (lightmap is not null && effect.Parameters["LightMap"] is not null)
-            effect.Parameters["LightMap"].SetValue(lightmap);
-
-        // Always use Identity transform matrix here — the apply pass is a
-        // screen-space quad and the camera transform would distort the
-        // result. The caller is expected to have set the backbuffer as the
-        // active render target already.
         GameClient.SpriteBatch.Begin(
-            samplerState: SamplerState.PointClamp,
-            blendState: BlendState.Opaque,
-            transformMatrix: Matrix.Identity,
-            effect: effect);
+            samplerState: samplerState,
+            blendState: blendState,
+            depthStencilState: depthStencilState,
+            transformMatrix: Matrix.Identity);
 
-        GameClient.SpriteBatch.Draw(
-            sceneTexture,
-            new Rectangle(0, 0,
-                GameClient.GraphicsDevice.Viewport.Width,
-                GameClient.GraphicsDevice.Viewport.Height),
-            Color.White);
+        GameClient.SpriteBatch.Draw(texture, new Rectangle(0, 0, vp.Width, vp.Height), Color.White);
 
         GameClient.SpriteBatch.End();
     }

@@ -29,11 +29,18 @@ public struct RenderQueue
     public Effect? Shader { get; }
     public int SubmitOrder { get; set; }
 
-    public RenderQueue(IRenderable target, Vector2 pos, Effect? shader = null)
+    /// <summary>
+    /// True when this entry should bypass lighting (full brightness). Resolved once
+    /// at submit time from the shader's technique name
+    /// </summary>
+    public bool Unshaded { get; }
+
+    public RenderQueue(IRenderable target, Vector2 pos, Effect? shader = null, bool unshaded = false)
     {
         Target = target;
         Position = pos;
         Shader = shader;
         SubmitOrder = 0;
+        Unshaded = unshaded;
     }
 }

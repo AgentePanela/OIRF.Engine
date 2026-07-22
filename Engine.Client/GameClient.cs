@@ -141,6 +141,7 @@ public class GameClient : Game
         //
         IoCManager.Register<IAssetManager, AssetManager>();
         IoCManager.Register<IAudioManager, AudioManager>();
+        IoCManager.Register<ShaderManager>();
 
         // Text/font services
         IoCManager.Register<TextStyleLibrary>();
@@ -346,12 +347,11 @@ public class GameClient : Game
 
         // Lock the backbuffer viewport to the letterboxed rect before any
         // world draw. The lighting SceneTarget path in Renderer.DrawQueue
-        // bypasses Begin's on-backbuffer branch, so without this
+        // bypasses Begin on-backbuffer branch, so without this
         // LastBackbufferViewport ends up as the full backbuffer and the
         // apply pass stretches the (uniformly-scaled) SceneTarget to fill
         // it, producing a vertical squash whenever the window aspect ratio
-        // doesn't match the virtual resolution. Resizing=false during
-        // loading → skip and let the loading scene manage its own viewport.
+        // doesn't match the virtual resolution.
         if (Renderer.Resizing)
         {
             if (Renderer.FinalTarget is not null)
@@ -372,25 +372,13 @@ public class GameClient : Game
             EntityManager.Draw(GameTime.DeltaTime);
         }
 
-        //Renderer.Begin();
-        //CurrentScene?.Draw(Renderer); > SceneManager
         Renderer.DrawQueue();
 
         if (GameState == GameState.Running)
         {
-            // Apply the lighting pass over the rendered scene (must happen
-            // AFTER DrawQueue has written to SceneTarget, but BEFORE the UI).
-            // This draws the composited frame to the backbuffer. Gated on
-            // GameState.Running because EntityManager.RegisterSystems() runs on a
-            // background task during loading - fetching the system before that
-            // finishes resolving its [Dependency] fields crashes with an NRE.
             var lightingSystem = EntityManager.GetSystem<LightingSystem>();
             lightingSystem?.ApplyAfterWorld();
         }
-
-        // Draw sprites that opted out of lighting (shader declares IsUnshaded=true).
-        // Must run after ApplyAfterWorld but before the viewport is reset for UI.
-        Renderer.DrawUnshadedQueue();
 
         //Renderer.End();
 

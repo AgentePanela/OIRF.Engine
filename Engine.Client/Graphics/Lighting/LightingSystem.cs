@@ -109,14 +109,12 @@ public sealed class LightingSystem : EntityDrawSystem
         DepthBufferFunction     = CompareFunction.Less,
     };
 
-    private Effect? _applyEffect;
     private Effect? _shadowDepthEffect;
     private Effect? _lightSoftEffect;
     private Effect? _lightBlurEffect;
     private Effect? _wallMergeEffect;
 
     // parameter lookups by name are dictionary hits, cache them once
-    private EffectParameter? _apTexelSize;
     private EffectParameter? _sdLightPos, _sdLightRadius, _sdWrapPass;
     private EffectParameter? _lpViewProj, _lpShadowMap, _lpShadowMapTexel,
         _lpCenter, _lpColor, _lpRange, _lpPower, _lpSoftness, _lpFalloff,
@@ -136,14 +134,11 @@ public sealed class LightingSystem : EntityDrawSystem
         _cfg.Subs(LightingCvars.PixelatedLighting, v => _lighting.PixelatedLighting = v);
         _cfg.Subs(LightingCvars.LightPixelSize,   v => _lighting.LightPixelSize   = v);
 
-        _applyEffect       = _shaders.GetShader("LightingApply")?.Clone();
         _shadowDepthEffect = _shaders.GetShader("ShadowDepth")?.Clone();
         _lightSoftEffect   = _shaders.GetShader("LightSoft")?.Clone();
         _lightBlurEffect   = _shaders.GetShader("LightBlur")?.Clone();
         _wallMergeEffect   = _shaders.GetShader("WallMerge")?.Clone();
 
-        if (_applyEffect is null)
-            Log.Warn("LightingApply.fx not found - apply pass will be skipped.");
         if (_shadowDepthEffect is null)
             Log.Warn("ShadowDepth.fx not found - shadows will be disabled.");
         if (_lightSoftEffect is null)
@@ -156,8 +151,6 @@ public sealed class LightingSystem : EntityDrawSystem
 
     private void CacheEffectParameters()
     {
-        _apTexelSize = _applyEffect?.Parameters["LightmapTexelSize"];
-
         if (_shadowDepthEffect is not null)
         {
             var p = _shadowDepthEffect.Parameters;
@@ -211,8 +204,9 @@ public sealed class LightingSystem : EntityDrawSystem
     }
 
     /// <summary>
-    /// Multiplies the lightmap over the scene. Call after the world has been
-    /// drawn to <see cref="RenderManager.SceneTarget"/>.
+    /// Multiplies the lightmap onto the scene and blits the result to
+    /// <see cref="RenderManager.FinalTarget"/>/the backbuffer. Call after the
+    /// world has been drawn to <see cref="RenderManager.SceneTarget"/>.
     /// </summary>
     public void ApplyAfterWorld()
     {
@@ -223,33 +217,32 @@ public sealed class LightingSystem : EntityDrawSystem
         if (scene is null || _lightmap.Target is null)
             return;
 
-        GameClient.GraphicsDevice.SetRenderTarget(_render.FinalTarget);
-        GameClient.GraphicsDevice.Viewport = _render.LastBackbufferViewport;
-
         if (_lighting.DebugDraw)
         {
+            GameClient.GraphicsDevice.SetRenderTarget(_render.FinalTarget);
+            GameClient.GraphicsDevice.Viewport = _render.LastBackbufferViewport;
+
             // SpriteBatch coords are viewport relative, so draw at 0,0 -
             // the letterbox offset is already applied by the viewport
-            var vp = GameClient.GraphicsDevice.Viewport;
-            GameClient.SpriteBatch.Begin(samplerState: SamplerState.PointClamp, blendState: BlendState.Opaque);
-            GameClient.SpriteBatch.Draw(_lightmap.Target, new Rectangle(0, 0, vp.Width, vp.Height), Color.White);
-            GameClient.SpriteBatch.End();
+            _render.DrawFullscreenQuad(_lightmap.Target, BlendState.Opaque, SamplerState.PointClamp);
+            return;
         }
-        else if (_applyEffect is not null)
-        {
-            var techniqueName = _lighting.PixelatedLighting ? "PixelatedLight" : "SpriteDrawing";
-            if (_applyEffect.CurrentTechnique.Name != techniqueName)
-                _applyEffect.CurrentTechnique = _applyEffect.Techniques[techniqueName];
 
-            if (_lighting.PixelatedLighting)
-            {
-                _apTexelSize?.SetValue(new Vector2(
-                    1f / _lightmap.Target.Width,
-                    1f / _lightmap.Target.Height));
-            }
+        // Multiply the lightmap onto SceneTarget in place. StencilTestShadedOnly
+        // only lets the blend touch pixels stamped "shaded" (0) by DrawQueue, so
+        // unshaded pixels (stencil 1) are left untouched at full brightness.
+        // SceneTarget still holds its stencil contents from DrawQueue
+        // (RenderTargetUsage.PreserveContents).
+        GameClient.GraphicsDevice.SetRenderTarget(scene);
+        GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, scene.Width, scene.Height);
 
-            _render.SubmitFullscreenEffectWithTextures(_applyEffect, scene, _lightmap.Target);
-        }
+        var lightSampler = _lighting.PixelatedLighting ? SamplerState.PointClamp : SamplerState.LinearClamp;
+        _render.DrawFullscreenQuad(_lightmap.Target, RenderManager.LightMultiplyBlend, lightSampler, RenderManager.StencilTestShadedOnly);
+
+        // Blit the now fully-lit SceneTarget onto FinalTarget/the backbuffer.
+        GameClient.GraphicsDevice.SetRenderTarget(_render.FinalTarget);
+        GameClient.GraphicsDevice.Viewport = _render.LastBackbufferViewport;
+        _render.DrawFullscreenQuad(scene, BlendState.Opaque, SamplerState.PointClamp);
     }
 
     public override void OnShutdown()

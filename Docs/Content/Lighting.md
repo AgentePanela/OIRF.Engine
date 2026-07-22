@@ -170,7 +170,7 @@ components:
     shader: Unshaded
 ```
 
-Anything using the `Unshaded` technique is drawn at full brightness after the lit scene is composited, bypassing the lightmap.
+Anything using the `Unshaded` technique draws at full brightness, bypassing the lightmap - but its `Layer`/`Depth` is still respected normally against every other sprite and shape. An unshaded sprite on a lower `Layer` than a lit sprite gets occluded by it like any other sprite would; it isn't unconditionally drawn on top.
 
 ---
 
@@ -183,7 +183,7 @@ Each frame, `LightingSystem`:
 3. Draws every light additively into a lightmap render target, sampling the shadow map for occlusion. Spotlights additionally discard pixels outside their cone. Texture lights are drawn on top with plain additive sprites.
 4. Wall bleed (optional): blurs the lightmap at half resolution, then draws the occluder quads over the lightmap so each wall pixel shows the blurred glow of nearby lights.
 5. Light blur (optional): a final 2-pass separable Gaussian over the lightmap, smoothing shadow banding.
-6. Multiplies the rendered scene by the lightmap and writes the result to the backbuffer; `Unshaded` sprites are drawn on top afterward at full brightness.
+6. Draws every queued sprite/shape in one pass, sorted by `Layer`/`Depth`, into an offscreen scene target — stamping a stencil bit per pixel (0 = shaded, 1 = `Unshaded`) as it goes. Multiplies the lightmap onto that scene in place, gated by the stencil test so only shaded (0) pixels are affected, then blits the result to the backbuffer.
 
 ---
 

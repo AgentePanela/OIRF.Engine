@@ -11,7 +11,6 @@ namespace Engine.Client.Graphics.Shaders;
 /// <summary>
 /// Manages all shaders that are compiled in the Monogame Content Pipiline (Content/Shaders).
 /// </summary>
-[RegisterIoC]
 public sealed class ShaderManager
 {
     private ContentManager _content; 
