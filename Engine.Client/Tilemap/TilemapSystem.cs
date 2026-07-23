@@ -20,7 +20,6 @@ public sealed class TilemapSystem : EntityDrawSystem
     [Dependency] private readonly Camera2D _cam = default!;
     [Dependency] private readonly IPrototypeManager _proto = default!;
     [Dependency] private readonly TerrainBlendingSystem _blending = default!;
-    [Dependency] private readonly ShaderManager _shaders = default!;
 
     private float _totalTime;
     
@@ -100,28 +99,20 @@ public sealed class TilemapSystem : EntityDrawSystem
         var bounds = _cam.ViewportBounds;
         foreach ((_, var comp, var trans) in query)
         {
-            ResolveShader(comp);
             UpdateShaderParams(comp, vp);
             foreach (var chunk in comp.Chunks.Values)
                 DrawChunk(comp, trans, chunk, bounds);
         }
     }
 
-    private void ResolveShader(TilemapComponent comp)
-    {
-        if (comp.Shader is null || comp.Effect is not null)
-            return;
-
-        comp.Effect = _shaders.GetShader(comp.Shader)?.Clone();
-    }
-
     private void UpdateShaderParams(TilemapComponent comp, Viewport vp)
     {
-        if (comp.Effect is null)
+        var effect = comp.Shader.Effect;
+        if (effect is null)
             return;
 
-        comp.Effect.Parameters["Time"]?.SetValue(_totalTime);
-        comp.Effect.Parameters["ViewportSize"]?.SetValue(new Vector2(vp.Width, vp.Height));
+        effect.Parameters["Time"]?.SetValue(_totalTime);
+        effect.Parameters["ViewportSize"]?.SetValue(new Vector2(vp.Width, vp.Height));
     }
 
     private void DrawChunk(TilemapComponent comp, TransformComponent trans,
@@ -141,7 +132,7 @@ public sealed class TilemapSystem : EntityDrawSystem
             chunk.Dirty = false;
         }
 
-        _renderMan.Submit(chunk.CachedRenderable.Value, Vector2.Zero, comp.Effect);
+        _renderMan.Submit(chunk.CachedRenderable.Value, Vector2.Zero, comp.Shader.Effect);
     }
 
     private RenderableChunk MakeRenderable(TilemapComponent comp, TransformComponent trans, TilemapChunk chunk)

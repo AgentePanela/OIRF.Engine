@@ -13,7 +13,6 @@ public sealed class SpriteSystem : EntityDrawSystem
     [Dependency] private readonly RenderManager _renderMan = default!;
     [Dependency] private readonly IAssetManager _assetMan = default!;
     [Dependency] private readonly Camera2D _camera = default!;
-    [Dependency] private readonly ShaderManager _shader = default!;
 
     public override void Init()
     {
@@ -56,7 +55,7 @@ public sealed class SpriteSystem : EntityDrawSystem
     {
         if (comp.Layers is null || comp.Layers.Count == 0)
         {
-            _renderMan.Submit(spr, transform.Position, comp.Effect);
+            _renderMan.Submit(spr, transform.Position, comp.Shader.Effect);
             return;
         }
 
@@ -68,14 +67,14 @@ public sealed class SpriteSystem : EntityDrawSystem
         {
             if (!baseSubmitted && layer.Order >= 0)
             {
-                _renderMan.Submit(spr, transform.Position, comp.Effect);
+                _renderMan.Submit(spr, transform.Position, comp.Shader.Effect);
                 baseSubmitted = true;
             }
             DrawLayer(comp, transform, layer);
         }
 
         if (!baseSubmitted)
-            _renderMan.Submit(spr, transform.Position, comp.Effect);
+            _renderMan.Submit(spr, transform.Position, comp.Shader.Effect);
     }
 
     private static void SortLayers(SpriteComponent comp)
@@ -98,7 +97,7 @@ public sealed class SpriteSystem : EntityDrawSystem
         if (!_camera.IsOnScreen(spr, trans.Position))
             return;
 
-        _renderMan.Submit(spr, trans.Position, comp.Effect);
+        _renderMan.Submit(spr, trans.Position, comp.Shader.Effect);
     }
 
     private void DrawLayer(SpriteComponent comp, TransformComponent trans, SpriteLayer layer)
@@ -111,7 +110,7 @@ public sealed class SpriteSystem : EntityDrawSystem
 
         var spr = sprite.Value;
         UpdateLayerFields(layer, trans, comp, ref spr);
-        _renderMan.Submit(spr, trans.Position, layer.Effect);
+        _renderMan.Submit(spr, trans.Position, layer.Shader.Effect);
     }
 
     /// <summary>
@@ -138,7 +137,6 @@ public sealed class SpriteSystem : EntityDrawSystem
         CacheAtlasData(comp.Key, ref sprite);
 
         UpdateSpriteFields(comp, trans, ref sprite);
-        SetShader(comp, comp.Shader);
 
         comp.Spr = sprite; // cache sprite
         return sprite;
@@ -158,17 +156,6 @@ public sealed class SpriteSystem : EntityDrawSystem
         return spr;
     }
 
-    /// <summary>
-    /// Set the shader of a sprite comp.
-    /// </summary>
-    public Effect? SetShader(SpriteComponent comp, string? shaderName)
-    {
-        comp.Shader = shaderName;
-        comp.Effect = _shader.GetShader(shaderName)?.Clone();
-        comp.ShaderDirty = false;
-        return comp.Effect;
-    }
-
     private void UpdateSpriteFields(SpriteComponent comp, TransformComponent trans, ref Sprite2D sprite)
     {
         sprite.Rotation = trans.Angle;
@@ -185,12 +172,6 @@ public sealed class SpriteSystem : EntityDrawSystem
 
     private Sprite2D? ValidateSprite(SpriteComponent comp)
     {
-        // Shader can be reassigned directly (e.g. from the Properties inspector) well after
-        // the sprite was first resolved and cached below - re-resolve Effect before anything
-        // else notices Shader/Effect are out of sync.
-        if (comp.ShaderDirty)
-            SetShader(comp, comp.Shader);
-
         if (comp.Spr?.Key == comp.Key)
             return comp.Spr.Value;
 
@@ -222,21 +203,9 @@ public sealed class SpriteSystem : EntityDrawSystem
         CacheAtlasData(layer.Key, ref sprite);
 
         UpdateLayerFields(layer, trans, comp, ref sprite);
-        SetLayerShader(layer, layer.Shader);
 
         layer.Spr = sprite; // cache
         return sprite;
-    }
-
-    /// <summary>
-    /// Set the layer shader.
-    /// </summary>
-    public Effect? SetLayerShader(SpriteLayer layer, string? shaderName)
-    {
-        layer.Shader = shaderName;
-        layer.Effect = _shader.GetShader(shaderName)?.Clone();
-        layer.ShaderDirty = false;
-        return layer.Effect;
     }
 
     private void UpdateLayerFields(SpriteLayer layer, TransformComponent trans, SpriteComponent comp, ref Sprite2D sprite)
@@ -256,9 +225,6 @@ public sealed class SpriteSystem : EntityDrawSystem
 
     private Sprite2D? ValidateLayerSprite(SpriteLayer layer, SpriteComponent comp)
     {
-        if (layer.ShaderDirty)
-            SetLayerShader(layer, layer.Shader);
-
         if (layer.Spr?.Key == layer.Key)
             return layer.Spr.Value;
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Engine.Client.Graphics.Shaders;
 using Engine.Shared.GameObjects;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -29,30 +30,13 @@ public class SpriteComponent : Component
     /// <summary>
     /// Do not set or get this manually. Use SpriteSystem.GetSprite().
     /// </summary>
-    public Sprite2D? Spr { get; set; }
-
-    private string? _shader;
+    internal Sprite2D? Spr { get; set; }
 
     /// <summary>
-    /// Name of the shader to render this sprite with, resolved to <see cref="Effect"/> by
-    /// SpriteSystem.
+    /// Name of the shader to render this sprite with. Assigning a new value resolves the
+    /// Effect immediately (see <see cref="ShaderPath"/>) - read it back via <c>Shader.Effect</c>.
     /// </summary>
-    public string? Shader
-    {
-        get => _shader;
-        set
-        {
-            _shader = value;
-            ShaderDirty = true;
-        }
-    }
-
-    internal bool ShaderDirty;
-
-    /// <summary>
-    /// Do not set this manually. Use SpriteSystem.SetShader().
-    /// </summary>
-    public Effect? Effect { get; set; }
+    public ShaderPath Shader { get; set; }
 
     public List<SpriteLayer> Layers { get; set; } = new();
 
@@ -96,26 +80,8 @@ public sealed class SpriteLayer
     /// <summary>
     /// Do not set or get this manually. Use SpriteSystem.GetSprite().
     /// </summary>
-    public Sprite2D? Spr { get; set; }
-
-    private string? _shader;
+    internal Sprite2D? Spr { get; set; }
 
     /// <inheritdoc cref="SpriteComponent.Shader"/>
-    public string? Shader
-    {
-        get => _shader;
-        set
-        {
-            _shader = value;
-            ShaderDirty = true;
-        }
-    }
-
-    /// <inheritdoc cref="SpriteComponent.ShaderDirty"/>
-    internal bool ShaderDirty;
-
-    /// <summary>
-    /// Do not set this manually. Use SpriteSystem.SetLayerShader().
-    /// </summary>
-    public Effect? Effect { get; set; }
+    public ShaderPath Shader { get; set; }
 }

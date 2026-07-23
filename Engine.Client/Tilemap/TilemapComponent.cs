@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Engine.Client.Graphics.Shaders;
 using Engine.Shared.GameObjects;
 using Microsoft.Xna.Framework.Graphics;
 using static Engine.Client.Tilemap.TilemapSystem;
@@ -14,18 +15,9 @@ public sealed class TilemapComponent : Component
     public SamplerState? SamplerState { get; set; }
     public bool TileBlending { get; set; } = true;
 
-    /// <summary>
-    /// Name of the shader to apply to all tiles (e.g. "MetallicFloor").
-    /// Resolved to <see cref="Effect"/> lazily by TilemapSystem on the first draw.
-    /// </summary>
-    public string? Shader { get; set; }
+    public ShaderPath Shader { get; set; }
 
-    /// <summary>
-    /// Resolved effect instance. Do not set manually — managed by TilemapSystem.
-    /// </summary>
-    public Effect? Effect { get; set; }
-
-    public Dictionary<(int, int), TilemapChunk> Chunks { get; } = new();    
+    public Dictionary<(int, int), TilemapChunk> Chunks { get; } = new();
 }
 
 public sealed class TilemapChunk
