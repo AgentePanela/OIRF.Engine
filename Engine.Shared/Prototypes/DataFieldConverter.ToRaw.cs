@@ -47,12 +47,12 @@ public static partial class DataFieldConverter
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(ProtoId<>))
             return value.ToString()!;
 
-        // Custom [TypeConverter] structs (ShaderPath, SpriteKey, ...) - anything with a
-        // registered converter beyond the plain-ToString default one.
-        var converter = TypeDescriptor.GetConverter(type);
-        if (converter.GetType() != typeof(TypeConverter) && converter.CanConvertTo(typeof(string)))
-            return converter.ConvertToString(null, CultureInfo.InvariantCulture, value);
-
+        // Collections BEFORE the TypeConverter fallback below - TypeDescriptor.GetConverter
+        // returns a built-in System.ComponentModel.CollectionConverter for most collection
+        // types (not just types with an explicit [TypeConverter] attribute), and that
+        // converter's ConvertToString returns the literal, useless string "(Collection)".
+        // Same ordering Convert(Type, object?) itself uses (collections before its own
+        // TypeDescriptor fallback at the very end).
         if (value is IDictionary dict)
         {
             var result = new Dictionary<object, object>();
@@ -78,6 +78,12 @@ public static partial class DataFieldConverter
 
             return list;
         }
+
+        // Custom [TypeConverter] structs (ShaderPath, SpriteKey, ...) - anything with a
+        // registered converter beyond the plain-ToString default one.
+        var converter = TypeDescriptor.GetConverter(type);
+        if (converter.GetType() != typeof(TypeConverter) && converter.CanConvertTo(typeof(string)))
+            return converter.ConvertToString(null, CultureInfo.InvariantCulture, value);
 
         // Fallback for a nested complex object with no special handling above: recurse into its
         // own public settable properties, tagged with a "type" discriminator so Convert's own

@@ -124,15 +124,17 @@ public sealed partial class EntityManager
         if (!HasEntity(source, out var srcEnt))
             return EntityUid.Empty;
 
-        return RestoreEntity(srcEnt.Name, GetEntityComps(source) ?? []);
+        return RestoreEntity(srcEnt.Name, GetEntityComps(source) ?? [], srcEnt.Id);
     }
 
     /// <summary>
     /// Creates a new entity from a list of components and them copy their values via reflection.
     /// </summary>
-    public EntityUid RestoreEntity(string name, IReadOnlyList<Component> snapshot)
+    public EntityUid RestoreEntity(string name, IReadOnlyList<Component> snapshot, ProtoId<EntityPrototype>? proto = null)
     {
         var newEnt = CreateEmptyEntity(name, true);
+        if (proto is not null)
+            newEnt.SetId(proto.Value);
 
         foreach (var comp in snapshot)
         {
