@@ -1,4 +1,5 @@
 using Engine.Shared.IoC;
+using Engine.Shared.Prototypes;
 using System.Text.Json.Serialization;
 
 namespace Engine.Shared.GameObjects;
@@ -29,7 +30,7 @@ public sealed class Entity
     /// <summary>
     /// The prototype id that this entity has used while being created.
     /// </summary>
-    public ProtoId Id { get; private set; } = new ProtoId();
+    public ProtoId<EntityPrototype> Id { get; private set; } = new ProtoId<EntityPrototype>();
 
     /// <summary>
     /// Marks if this entity will be deleted in the next tick.
@@ -47,7 +48,7 @@ public sealed class Entity
         Uid = uid;
     }
 
-    internal Entity(EntityUid uid, string name, ProtoId proto)
+    internal Entity(EntityUid uid, string name, ProtoId<EntityPrototype> proto)
     {
         Name = name;
         Uid = uid;
@@ -56,6 +57,9 @@ public sealed class Entity
 
     internal void SetScene(IEntityScene scene)
         => Scene = scene;
+
+    internal void SetId(ProtoId<EntityPrototype> proto)
+        => Id = proto;
 
     /// <summary>
     /// Marks this entity to be in Deleting state.

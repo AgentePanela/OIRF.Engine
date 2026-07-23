@@ -52,7 +52,8 @@ public sealed partial class EntityManager
         if (proto is IInheritingPrototype inh && inh.Abstract)
             throw new Exception($"Prototype '{proto.ID}' is abstract and cannot be spawned.");
 
-        var uid = CreateEmptyEntity(nameOverride ?? proto.Name ?? proto.ID);
+        var ent = CreateEmptyEntity(nameOverride ?? proto.Name ?? proto.ID, true);
+        ent.SetId(protoId);
 
         foreach (var entry in proto.Components.Values)
         {
@@ -64,11 +65,11 @@ public sealed partial class EntityManager
                 continue;
 
             ApplyComponentData(comp, entry.Data);
-            AddComponentInstance(uid, comp);
+            AddComponentInstance(ent.Uid, comp);
         }
 
-        EventBus.RaiseEvent(uid, new EntityAddedEvent());
-        return uid;
+        EventBus.RaiseEvent(ent.Uid, new EntityAddedEvent());
+        return ent.Uid;
     }
 
     /// <inheritdoc cref="CreateEntity(ProtoId{EntityPrototype}, string?)"/>
