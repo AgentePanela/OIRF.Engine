@@ -25,7 +25,7 @@ public interface IAudioManager
     public bool HasAudio(string audio);
 }
 
-internal sealed class AudioManager : IAudioManager
+internal sealed partial class AudioManager : IAudioManager
 {
     /// <summary>
     /// Stores the relative path | full path for a audio file, all audio files that will be played 
@@ -53,13 +53,21 @@ internal sealed class AudioManager : IAudioManager
         LoadFiles(audioDirs);
 
         //var musicDir = Path.Combine(_asset.GetResourcesFolder(), "Music");
-        //LoadFiles(musicDir, false /* todo: change how cache works (use byte[] instead)*/); // will keep the audios in stream 
+        //LoadFiles(musicDir, false /* todo: change how cache works (use byte[] instead)*/); // will keep the audios in stream
+
+        #if DEBUG
+        InitHotReload();
+        #endif
 
         GameClient.Instance.Exiting += (_, _) => MonoSoundLibrary.DeInit();
     }
 
     void IAudioManager.Update(float dt)
     {
+        #if DEBUG
+        DrainHotReloadQueue();
+        #endif
+
         for (int i = RunningStreams.Count - 1; i >= 0; i--)
         {
             var sound = RunningStreams[i];
