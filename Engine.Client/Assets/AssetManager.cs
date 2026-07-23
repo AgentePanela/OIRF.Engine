@@ -273,4 +273,9 @@ internal sealed partial class AssetManager : IAssetManager
     {
         return _atlas.pages;
     }
+
+    public List<string> GetSpriteKeys()
+    {
+        return _atlas.sprites.Keys.ToList();
+    }
 }

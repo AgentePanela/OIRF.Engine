@@ -55,6 +55,12 @@ public interface IAssetManager
 
     public List<AtlasPage> GetAllAtlasses();
 
+    /// <summary>
+    /// Every sprite key currently resolvable (loose textures, spritesheet slices,
+    /// animation frames, etc..)
+    /// </summary>
+    public List<string> GetSpriteKeys();
+
     public string NormalizeKey(string root, string fullPath);
 
     [Obsolete]

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Engine.Client.Assets;
 using Engine.Client.Graphics.Shaders;
 using Engine.Shared.GameObjects;
 using Microsoft.Xna.Framework;
@@ -11,7 +12,7 @@ namespace Engine.Client.Graphics;
 public class SpriteComponent : Component
 {
     // devnote: everything that is here that sprite2d already have is for easily prototype component serialization.
-    public string Key { get; set; } = string.Empty;
+    public SpriteKey Key { get; set; } = "";
 
     /// <summary>
     /// The layer where this sprite will be drawed
@@ -71,8 +72,8 @@ public sealed class SpriteLayer
         }
     }
 
-    public bool Visible { get; set; } = true;    
-    public string Key { get; set; } = string.Empty;
+    public bool Visible { get; set; } = true;
+    public SpriteKey Key { get; set; } = "";
     public Color Color { get; set; } = Color.White;
     public Vector2? Origin { get; set; }
     public SamplerState? SamplerState { get; set; }
