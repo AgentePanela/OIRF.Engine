@@ -11,6 +11,7 @@ using Engine.Shared.Configuration.CVars;
 using Engine.Shared.GameObjects;
 using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.IoC;
+using Engine.Shared.Locale;
 using Engine.Shared.Prototypes;
 using Engine.Shared.Storage;
 
@@ -62,6 +63,7 @@ public class GameServer : IDisposable
     public EntityManager EntityManager { get; private set; } = default!;
     public IConfigurationManager ConfigManager { get; private set; } = default!;
     public IPrototypeManager Prototypes { get; private set; } = default!;
+    public ILocalizationManager LocalizationManager { get; private set; } = default!;
 
     private readonly Stopwatch _tickWatch = new();
     private bool _running;
@@ -95,6 +97,7 @@ public class GameServer : IDisposable
         EntityManager = IoCManager.Resolve<EntityManager>();
         ConfigManager = IoCManager.Resolve<IConfigurationManager>();
         Prototypes = IoCManager.Resolve<IPrototypeManager>();
+        LocalizationManager = IoCManager.Resolve<ILocalizationManager>();
 
         IoCManager.AutoRegister(Assembly.GetExecutingAssembly());
 
@@ -188,6 +191,8 @@ public class GameServer : IDisposable
     {
         // Update all entity systems
         EntityManager.Update(deltaTime);
+        Prototypes.Update();
+        LocalizationManager.Update();
     }
 
     /// <summary>

@@ -65,10 +65,15 @@ public interface ILocalizationManager
     public void LoadCulture();
     public void ReloadCulture();
     public event Action? OnReloadCulture;
+
+    /// <summary>
+    /// Pumps hot-reload of locale files changed on disk. No-op outside DEBUG builds.
+    /// </summary>
+    public void Update();
 }
 
 [RegisterIoC]
-internal sealed class LocalizationManager : ILocalizationManager
+internal sealed partial class LocalizationManager : ILocalizationManager
 {
     public CultureInfo Culture { get; private set; } = CultureInfo.InvariantCulture;
     public CultureInfo? FallbackCulture { get; private set; }
@@ -121,6 +126,8 @@ internal sealed class LocalizationManager : ILocalizationManager
 
         foreach (var (culture, files) in cultureFiles)
             LoadBundle(culture, files);
+
+        InitHotReload();
     }
 
     public void ReloadCulture()

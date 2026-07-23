@@ -24,6 +24,7 @@ using System.Linq;
 using Engine.Shared.Prototypes;
 using Engine.Shared.GameObjects;
 using Engine.Client.Graphics.Lighting;
+using Engine.Shared.Locale;
 
 namespace Engine.Client;
 
@@ -98,6 +99,7 @@ public class GameClient : Game
     public static Camera2D Camera { get; private set; }
     public static UIManager InterfaceManager { get; private set; }
     public static WindowManager WindowManager { get; private set; }
+    public static ILocalizationManager LocalizationManager { get; private set; }
     public static GameState GameState = GameState.Booting;
 
     public static ClientOptions Options = new ClientOptions();
@@ -173,6 +175,7 @@ public class GameClient : Game
         InterfaceManager = IoCManager.Resolve<UIManager>();
         WindowManager = IoCManager.Resolve<WindowManager>();
         ConfigManager = IoCManager.Resolve<IConfigurationManager>();
+        LocalizationManager = IoCManager.Resolve<ILocalizationManager>();
 
         ConfigManager.ForceDefaultValue(GameCVars.GameVersion, Options.Version);
         ConfigManager.ForceDefaultValue(GameCVars.ResolutionWidth, Options.Width);
@@ -310,6 +313,7 @@ public class GameClient : Game
         base.Update(gameTime);
         Assets.Update(gameTime);
         Prototypes.Update();
+        LocalizationManager.Update();
         float uiScreenDeltaTime = _paused ? 0f : GameTime.DeltaTime;
 
         InterfaceManager.Update(uiScreenDeltaTime);
