@@ -40,6 +40,25 @@ internal sealed class PrototypeLoader
         return result;
     }
 
+    /// <summary>
+    /// Load and parse a single prototype file, e.g. for hot reload of a changed file.
+    /// </summary>
+    public List<RawPrototype> LoadFile(string filePath, List<string> prototypesToIgnore)
+    {
+        var result = new List<RawPrototype>();
+
+        try
+        {
+            LoadFile(filePath, result, prototypesToIgnore);
+        }
+        catch (Exception ex)
+        {
+            throw new PrototypeLoadException($"Error loading prototype file '{filePath}': {ex.Message}", ex);
+        }
+
+        return result;
+    }
+
     private static void LoadFile(string filePath, List<RawPrototype> output, List<string> prototypesToIgnore)
     {
         using var reader = new StreamReader(filePath);

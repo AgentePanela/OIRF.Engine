@@ -309,6 +309,7 @@ public class GameClient : Game
         Audio.Update(GameTime.DeltaTime);
         base.Update(gameTime);
         Assets.Update(gameTime);
+        Prototypes.Update();
         float uiScreenDeltaTime = _paused ? 0f : GameTime.DeltaTime;
 
         InterfaceManager.Update(uiScreenDeltaTime);

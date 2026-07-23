@@ -16,6 +16,11 @@ public interface IPrototypeManager
     internal void Load();
 
     /// <summary>
+    /// Pumps hot-reload of prototype files changed on disk.
+    /// </summary>
+    void Update();
+
+    /// <summary>
     /// Index a prototype by its typed ID. Throws if not found.
     /// </summary>
     T Index<T>(ProtoId<T> id) where T : class, IPrototype;
@@ -73,7 +78,7 @@ public interface IPrototypeManager
     void IgnorePrototypes(string[] prototypesToIgnore);
 }
 
-public sealed class PrototypeManager : IPrototypeManager
+public sealed partial class PrototypeManager : IPrototypeManager
 {
     [Dependency] private readonly SharedContentManager _contentMan = default!;
     public ResPath ResPath {get; private set; } = new ("Prototypes");
@@ -107,8 +112,10 @@ public sealed class PrototypeManager : IPrototypeManager
         ScanPrototypeTypes();
         foreach (var dir in ResPath.GetFolders())
             LoadRawPrototypes(dir);
-        
+
         BuildAll();
+
+        InitHotReload();
     }
 
     public void IgnorePrototypes(string[] prototypesToIgnore)

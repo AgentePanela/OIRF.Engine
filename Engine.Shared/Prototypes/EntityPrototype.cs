@@ -29,7 +29,13 @@ public sealed class EntityPrototype : IPrototype, IInheritingPrototype
 
     [DataField("components")]
     [ComponentsDataField]
-    public List<object> RawComponents { get; private set; } = new();
+    public List<object> RawComponents
+    {
+        get => _rawComponents;
+        // Invalidate the parsed cache below whenever this gets reassigned (initial load or hot reload).
+        private set { _rawComponents = value; _components = null; }
+    }
+    private List<object> _rawComponents = new();
 
     /// <summary>
     /// Parsed component entries, keyed by component type name for fast lookup.

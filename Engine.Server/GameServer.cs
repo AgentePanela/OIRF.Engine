@@ -164,6 +164,7 @@ public class GameServer : IDisposable
                 var deltaTime = (now - lastTickMs) / 1000f;
                 lastTickMs = now;
 
+                Prototypes.Update();
                 Update(deltaTime);
 
                 // Sleep to maintain tick rate

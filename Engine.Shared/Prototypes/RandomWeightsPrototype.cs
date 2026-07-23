@@ -17,7 +17,13 @@ public sealed class RandomWeightsPrototype : IPrototype
     public string ID { get; private set; } = default!;
 
     [DataField("weights", required: true)]
-    public Dictionary<string, float> Weights { get; private set; } = new();
+    public Dictionary<string, float> Weights
+    {
+        get => _weights;
+        // Invalidate the cached total below whenever this gets reassigned (initial load or hot reload).
+        private set { _weights = value; _totalWeight = -1f; }
+    }
+    private Dictionary<string, float> _weights = new();
 
     private float _totalWeight = -1f;
 
