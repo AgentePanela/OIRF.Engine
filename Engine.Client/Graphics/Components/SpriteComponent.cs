@@ -31,10 +31,23 @@ public class SpriteComponent : Component
     /// </summary>
     public Sprite2D? Spr { get; set; }
 
+    private string? _shader;
+
     /// <summary>
-    /// Do not set this manually. Use SpriteSystem.SetShader().
+    /// Name of the shader to render this sprite with, resolved to <see cref="Effect"/> by
+    /// SpriteSystem.
     /// </summary>
-    public string? Shader { get; set; }
+    public string? Shader
+    {
+        get => _shader;
+        set
+        {
+            _shader = value;
+            ShaderDirty = true;
+        }
+    }
+
+    internal bool ShaderDirty;
 
     /// <summary>
     /// Do not set this manually. Use SpriteSystem.SetShader().
@@ -85,13 +98,24 @@ public sealed class SpriteLayer
     /// </summary>
     public Sprite2D? Spr { get; set; }
 
-    /// <summary>
-    /// Do not set this manually. Use SpriteSystem.SetShader().
-    /// </summary>
-    public string? Shader { get; set; }
+    private string? _shader;
+
+    /// <inheritdoc cref="SpriteComponent.Shader"/>
+    public string? Shader
+    {
+        get => _shader;
+        set
+        {
+            _shader = value;
+            ShaderDirty = true;
+        }
+    }
+
+    /// <inheritdoc cref="SpriteComponent.ShaderDirty"/>
+    internal bool ShaderDirty;
 
     /// <summary>
-    /// Do not set this manually. Use SpriteSystem.SetShader().
+    /// Do not set this manually. Use SpriteSystem.SetLayerShader().
     /// </summary>
     public Effect? Effect { get; set; }
 }

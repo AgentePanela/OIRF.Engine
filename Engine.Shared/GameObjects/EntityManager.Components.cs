@@ -24,18 +24,19 @@ public sealed partial class EntityManager
     /// <exception cref="Exception">Entity already has that component.</exception>
     public T AddComp<T>(EntityUid uid) where T : Component, new()
     {
-        var pool = GetPool<T>();
-
-        if (pool.ContainsKey(uid))
-            throw new Exception($"Entity {uid} already has {typeof(T).Name}");
-
         var comp = _compFac.CreateInstance<T>() ?? throw new Exception("Unknown component.");
-        EventBus.RaiseEvent(uid, new CompInitEvent() { Component = comp });
-        comp.Owner = uid;
-        pool[uid] = comp;
-        //comp.State = Component.CompState.Running;
-        //EventBus.RaiseEvent(uid, new CompAddedEvent() { Component = comp });
+        AddComponentInstance(uid, comp);
+        return comp;
+    }
 
+    /// <inheritdoc cref="AddComp{T}(EntityUid)"/>
+    public Component? AddComponent(EntityUid uid, Type type)
+    {
+        var comp = _compFac.CreateInstance(type);
+        if (comp is null)
+            return null;
+
+        AddComponentInstance(uid, comp);
         return comp;
     }
 
@@ -51,7 +52,7 @@ public sealed partial class EntityManager
 
         comp.Owner = uid;
         pool[uid] = comp;
-        
+
         //comp.State = Component.CompState.Running;
         //EventBus.RaiseEvent(uid, new CompAddedEvent() { Component = comp });
     }
@@ -130,11 +131,16 @@ public sealed partial class EntityManager
     /// </summary>
     public void RemComp<T>(EntityUid uid) where T : Component
     {
-        if (!_scene.Components.TryGetValue(typeof(T), out var pool))
+        RemComp(uid, typeof(T));
+    }
+
+    /// <inheritdoc cref="RemComp{T}(EntityUid)"/>
+    public void RemComp(EntityUid uid, Type type)
+    {
+        var pool = TryGetPool(type);
+        if (pool is null || !pool.TryGetValue(uid, out var comp))
             return;
 
-        if (!pool.TryGetValue(uid, out var comp))
-            return;
         comp.RemoveComponent();
     }
 

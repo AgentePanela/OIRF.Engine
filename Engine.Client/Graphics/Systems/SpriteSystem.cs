@@ -165,6 +165,7 @@ public sealed class SpriteSystem : EntityDrawSystem
     {
         comp.Shader = shaderName;
         comp.Effect = _shader.GetShader(shaderName)?.Clone();
+        comp.ShaderDirty = false;
         return comp.Effect;
     }
 
@@ -184,6 +185,12 @@ public sealed class SpriteSystem : EntityDrawSystem
 
     private Sprite2D? ValidateSprite(SpriteComponent comp)
     {
+        // Shader can be reassigned directly (e.g. from the Properties inspector) well after
+        // the sprite was first resolved and cached below - re-resolve Effect before anything
+        // else notices Shader/Effect are out of sync.
+        if (comp.ShaderDirty)
+            SetShader(comp, comp.Shader);
+
         if (comp.Spr?.Key == comp.Key)
             return comp.Spr.Value;
 
@@ -228,6 +235,7 @@ public sealed class SpriteSystem : EntityDrawSystem
     {
         layer.Shader = shaderName;
         layer.Effect = _shader.GetShader(shaderName)?.Clone();
+        layer.ShaderDirty = false;
         return layer.Effect;
     }
 
@@ -248,6 +256,9 @@ public sealed class SpriteSystem : EntityDrawSystem
 
     private Sprite2D? ValidateLayerSprite(SpriteLayer layer, SpriteComponent comp)
     {
+        if (layer.ShaderDirty)
+            SetLayerShader(layer, layer.Shader);
+
         if (layer.Spr?.Key == layer.Key)
             return layer.Spr.Value;
 
