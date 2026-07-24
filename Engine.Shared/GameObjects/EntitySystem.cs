@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using Engine.Shared.Prototypes;
+using Microsoft.Xna.Framework;
 using static Engine.Shared.GameObjects.EventBus;
 
 namespace Engine.Shared.GameObjects;
@@ -136,6 +138,18 @@ public abstract class EntitySystem
     /// <inheritdoc cref="EntityManager.CreateEmptyEntity(string?)"/>
     protected EntityUid CreateEmptyEntity(string? name = default)
         => _entManager.CreateEmptyEntity(name);
+
+    /// <inheritdoc cref="EntityManager.CreateEntity(ProtoId{Prototypes.EntityPrototype}, string?)"/>
+    protected EntityUid CreateEntity(ProtoId<EntityPrototype> protoId, string? nameOverride = null)
+        => _entManager.CreateEntity(protoId, nameOverride);
+
+    /// <inheritdoc cref="EntityManager.CreateEntity(ProtoId{EntityPrototype}, Microsoft.Xna.Framework.Vector2, string?)"/>
+    protected EntityUid CreateEntity(ProtoId<EntityPrototype> protoId, Vector2 pos, string? nameOverride = null)
+        => _entManager.CreateEntity(protoId, pos, nameOverride);
+
+    /// <inheritdoc cref="EntityManager.CloneEntity(EntityUid)"/>
+    protected EntityUid CloneEntity(EntityUid source)
+        => _entManager.CloneEntity(source);
     
     /// <inheritdoc cref="EntityManager.GetEntity(EntityUid)"/>
     protected Entity? GetEntity(EntityUid uid)
