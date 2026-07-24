@@ -21,6 +21,15 @@ public readonly struct EntityUid : IEquatable<EntityUid>, IComparable<EntityUid>
         Id = id;
     }
 
+    /// <summary>
+    /// Verify if the entityUid is null or have a invalid uid.
+    /// </summary>
+    // todo: verify in entity manager for the valid uid.
+    public static bool IsInvalid(EntityUid? uid)
+    {
+        return uid == null || uid.Value.Id == -1;
+    }
+
     public int CompareTo(EntityUid other)
     {
         return Id.CompareTo(other.Id);
