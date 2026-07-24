@@ -46,12 +46,12 @@ public sealed class OccluderDebugDrawSystem : EntityDrawSystem
                     break;
 
                 case OccluderShape.Circle:
-                    _renderer.DrawCircle(transform.Position, occluder.Radius, new Color(Color.Lime, 60), unshaded: true);
+                    _renderer.DrawCircle(transform.Position + occluder.Offset, occluder.Radius, new Color(Color.Lime, 60), unshaded: true);
                     break;
 
                 case OccluderShape.Sprite:
                     // no fixed mask to outline - it's a bounding-box guess off the sprite region
-                    _renderer.DrawString(new Label2D(TextStyle.Debug, "sprite mask"), transform.Position);
+                    _renderer.DrawString(new Label2D(TextStyle.Debug, "sprite mask"), transform.Position + occluder.Offset);
                     break;
             }
         }

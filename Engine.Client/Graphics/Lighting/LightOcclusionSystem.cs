@@ -29,59 +29,61 @@ public sealed class LightOcclusionSystem : EntitySystem
         TransformComponent transform,
         EntityManager? entMan = null)
     {
+        var center = transform.Position + occluder.Offset;
+
         switch (occluder.Shape)
         {
             case OccluderShape.Rectangle:
                 return new Rectangle(
-                    (int)(transform.Position.X - occluder.Size.X / 2f),
-                    (int)(transform.Position.Y - occluder.Size.Y / 2f),
+                    (int)(center.X - occluder.Size.X / 2f),
+                    (int)(center.Y - occluder.Size.Y / 2f),
                     (int)occluder.Size.X,
                     (int)occluder.Size.Y);
 
             case OccluderShape.Circle:
                 return new Rectangle(
-                    (int)(transform.Position.X - occluder.Radius),
-                    (int)(transform.Position.Y - occluder.Radius),
+                    (int)(center.X - occluder.Radius),
+                    (int)(center.Y - occluder.Radius),
                     (int)(occluder.Radius * 2f),
                     (int)(occluder.Radius * 2f));
 
             case OccluderShape.Sprite:
-                return SpriteBounds(uid, occluder, transform, entMan);
+                return SpriteBounds(uid, occluder, center, entMan);
 
             default:
-                return new Rectangle((int)transform.Position.X, (int)transform.Position.Y, 0, 0);
+                return new Rectangle((int)center.X, (int)center.Y, 0, 0);
         }
     }
 
     private Rectangle SpriteBounds(
         EntityUid uid,
         OccluderComponent occluder,
-        TransformComponent transform,
+        Vector2 center,
         EntityManager? entMan)
     {
         // the atlas region is 1:1 with world size for regular sprites
         const int Fallback = 32;
-        if (entMan is null) return SizedBox(transform, Fallback, Fallback);
+        if (entMan is null) return SizedBox(center, Fallback, Fallback);
 
         if (entMan.TryComp<SpriteComponent>(uid, out var spriteComp))
         {
             if (spriteComp.Spr is { CachedRegion: var region } && region.Width > 0 && region.Height > 0)
-                return SizedBox(transform, region.Width, region.Height);
+                return SizedBox(center, region.Width, region.Height);
 
             if (!string.IsNullOrEmpty(spriteComp.Key) &&
                 _assetMan.GetTexture(spriteComp.Key, out var atlasSpr, out _))
             {
-                return SizedBox(transform, atlasSpr.Region.Width, atlasSpr.Region.Height);
+                return SizedBox(center, atlasSpr.Region.Width, atlasSpr.Region.Height);
             }
         }
 
-        return SizedBox(transform, Fallback, Fallback);
+        return SizedBox(center, Fallback, Fallback);
     }
 
-    private static Rectangle SizedBox(TransformComponent transform, int w, int h) =>
+    private static Rectangle SizedBox(Vector2 center, int w, int h) =>
         new(
-            (int)(transform.Position.X - w / 2f),
-            (int)(transform.Position.Y - h / 2f),
+            (int)(center.X - w / 2f),
+            (int)(center.Y - h / 2f),
             w,
             h);
 }

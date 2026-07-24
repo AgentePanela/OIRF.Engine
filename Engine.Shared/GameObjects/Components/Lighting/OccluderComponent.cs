@@ -16,6 +16,13 @@ public sealed class OccluderComponent : Component
     public OccluderShape Shape { get; set; } = OccluderShape.Sprite;
 
     /// <summary>
+    /// Local offset relative to the entity transform. Lets the mask sit off
+    /// center, e.g. a thin strip along the top of a tall sprite instead of
+    /// the sprite's full footprint.
+    /// </summary>
+    public Microsoft.Xna.Framework.Vector2 Offset { get; set; } = Microsoft.Xna.Framework.Vector2.Zero;
+
+    /// <summary>
     /// Radius (in world units) of the occluder. Used when
     /// <see cref="Shape"/> is <see cref="OccluderShape.Circle"/>.
     /// </summary>
