@@ -317,11 +317,15 @@ public sealed class TilemapSystem : EntityDrawSystem
 
     /// <summary>
     /// Finds all solid tile AABBs (in world pixels) that overlap the given pixel-space rectangle.
+    /// Optionally also returns the tile coordinate for each result (parallel to <paramref name="results"/>),
+    /// so callers can do exact neighbor lookups via <see cref="IsTileSolid"/> without reverse-deriving
+    /// the tile index from the float rectangle.
     /// </summary>
     public void GetSolidTilesInArea(TilemapComponent comp, TransformComponent tilemapTransform,
-        Rectangle area, List<Rectangle> results)
+        Rectangle area, List<Rectangle> results, List<Point>? tileCoords = null)
     {
         results.Clear();
+        tileCoords?.Clear();
 
         int tileSize = comp.TileSize;
         float originX = tilemapTransform.Position.X;
@@ -345,6 +349,7 @@ public sealed class TilemapSystem : EntityDrawSystem
                     (int)(originY + ty * tileSize),
                     tileSize,
                     tileSize));
+                tileCoords?.Add(new Point(tx, ty));
             }
         }
     }

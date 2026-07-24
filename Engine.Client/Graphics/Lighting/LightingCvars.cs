@@ -17,4 +17,11 @@ public static class LightingCvars
     /// </summary>
     public static readonly CVarDef<int> LightPixelSize =
         CVarDef.Create("lighting.pixel-size", 8);
+
+    /// <summary>
+    /// Draws each OccluderComponent's shadow-casting mask (or a "sprite mask"
+    /// label for sprite-derived occluders) over the scene. Debug only.
+    /// </summary>
+    public static readonly CVarDef<bool> ShowOccluderMask =
+        CVarDef.Create("lighting.show-occluder-mask", false);
 }

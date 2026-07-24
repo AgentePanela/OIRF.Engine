@@ -31,12 +31,24 @@ internal static class ShadowGeometry
     }
 
     /// <summary>
-    /// Fills the vertex array from the occluder list (16 verts per occluder).
-    /// Returns the number of vertices written; stops early if the array
-    /// runs out of room.
+    /// An occluder AABB plus which of its 4 edges are interior seams shared with a
+    /// touching neighbor. Blocked edges are skipped so adjacent occluders (e.g. two
+    /// wall segments placed edge to edge) don't cast a shadow onto each other's seam.
+    /// </summary>
+    public struct ShadowOccluder
+    {
+        public Rectangle Bounds;
+        public TransformComponent Transform;
+        public bool BlockedTop, BlockedRight, BlockedBottom, BlockedLeft;
+    }
+
+    /// <summary>
+    /// Fills the vertex array from the occluder list (up to 16 verts per occluder,
+    /// fewer for occluders with blocked edges). Returns the number of vertices
+    /// written; stops early if the array runs out of room.
     /// </summary>
     public static int Build(
-        IReadOnlyList<(Rectangle Bounds, TransformComponent Transform)> occluders,
+        IReadOnlyList<ShadowOccluder> occluders,
         OccluderVertex[] destVertices)
     {
         int vIdx = 0;
@@ -47,7 +59,8 @@ internal static class ShadowGeometry
             if (vIdx + 16 > vCap)
                 break;
 
-            var bounds = occluders[o].Bounds;
+            var occluder = occluders[o];
+            var bounds = occluder.Bounds;
 
             float x0 = bounds.Left;
             float y0 = bounds.Top;
@@ -58,13 +71,16 @@ internal static class ShadowGeometry
             for (int e = 0; e < 4; e++)
             {
                 float ax, ay, bx, by;
+                bool blocked;
                 switch (e)
                 {
-                    case 0: ax = x0; ay = y0; bx = x1; by = y0; break; // top
-                    case 1: ax = x1; ay = y0; bx = x1; by = y1; break; // right
-                    case 2: ax = x1; ay = y1; bx = x0; by = y1; break; // bottom
-                    default: ax = x0; ay = y1; bx = x0; by = y0; break; // left
+                    case 0: ax = x0; ay = y0; bx = x1; by = y0; blocked = occluder.BlockedTop; break; // top
+                    case 1: ax = x1; ay = y0; bx = x1; by = y1; blocked = occluder.BlockedRight; break; // right
+                    case 2: ax = x1; ay = y1; bx = x0; by = y1; blocked = occluder.BlockedBottom; break; // bottom
+                    default: ax = x0; ay = y1; bx = x0; by = y0; blocked = occluder.BlockedLeft; break; // left
                 }
+
+                if (blocked) continue;
 
                 var aPos = new Vector4(ax, ay, bx, by);
                 destVertices[vIdx++] = new OccluderVertex { aPos = aPos, subVertex = new Vector2(0, 0) };

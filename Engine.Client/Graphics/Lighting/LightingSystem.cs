@@ -44,10 +44,19 @@ public sealed class LightingSystem : EntityDrawSystem
     private int _shadowTriCount;
 
     private readonly List<Rectangle> _scratchTileRects = new();
+    private readonly List<Point> _scratchTileCoords = new();
+    private readonly List<int> _scratchRectOccluders = new();
+
+    // edge-adjacency buckets for entity-occluder culling, keyed by the shared
+    // touching coordinate. Rebuilt every frame since _occluders is too
+    private readonly Dictionary<int, List<(int Lo, int Hi, int Idx)>> _edgeTop = new();
+    private readonly Dictionary<int, List<(int Lo, int Hi, int Idx)>> _edgeBottom = new();
+    private readonly Dictionary<int, List<(int Lo, int Hi, int Idx)>> _edgeLeft = new();
+    private readonly Dictionary<int, List<(int Lo, int Hi, int Idx)>> _edgeRight = new();
 
     // reused every frame to avoid allocations
     private readonly List<LightEntry> _lights = new();
-    private readonly List<(Rectangle Bounds, TransformComponent Transform)> _occluders = new();
+    private readonly List<ShadowGeometry.ShadowOccluder> _occluders = new();
     private DiskVertex[] _wallVerts = new DiskVertex[256 * 6];
 
     private float _maxLightRadius;
@@ -121,7 +130,7 @@ public sealed class LightingSystem : EntityDrawSystem
         _lpCurveFactor, _lpIndex, _lpContactBias,
         _lpDirection, _lpConeAngle, _lpConeSoftness;
     private EffectParameter? _blSourceMap, _blSourceTexel, _blIsHorizontal;
-    private EffectParameter? _wmBlurred, _wmViewProj;
+    private EffectParameter? _wmBlurred, _wmViewProj, _wmBleedStrength;
 
     private readonly Stopwatch _passTimer = new();
     private readonly Stopwatch _frameTimer = new();
@@ -190,8 +199,9 @@ public sealed class LightingSystem : EntityDrawSystem
         if (_wallMergeEffect is not null)
         {
             var p = _wallMergeEffect.Parameters;
-            _wmBlurred  = p["BlurredLightMap"];
-            _wmViewProj = p["viewProj"];
+            _wmBlurred      = p["BlurredLightMap"];
+            _wmViewProj     = p["viewProj"];
+            _wmBleedStrength = p["bleedStrength"];
         }
     }
 
@@ -464,6 +474,7 @@ public sealed class LightingSystem : EntityDrawSystem
     private void CollectOccluders()
     {
         _occluders.Clear();
+        _scratchRectOccluders.Clear();
 
         // an occluder within a light radius of the view can still push a
         // shadow into the view, so pad the culling bounds by the biggest one
@@ -476,23 +487,92 @@ public sealed class LightingSystem : EntityDrawSystem
             var b = _occlusionSys.GetOccluderBounds(uid, occluder, transform, _entManager);
             if (b.Width <= 0 || b.Height <= 0) continue;
             if (!bounds.Intersects(b)) continue;
-            _occluders.Add((b, transform));
+
+            _occluders.Add(new ShadowGeometry.ShadowOccluder { Bounds = b, Transform = transform });
+
+            // only true rectangles participate in edge culling - a circle's
+            // silhouette curves inward from its AABB corners, so culling it
+            // like a rectangle could hide a real gap in the shadow
+            if (occluder.Shape == OccluderShape.Rectangle)
+                _scratchRectOccluders.Add(_occluders.Count - 1);
         }
+        CullTouchingEntityEdges(_scratchRectOccluders);
 
         var tilemapSys = _entManager.GetSystem<TilemapSystem>();
         if (tilemapSys is not null)
         {
             foreach (var (_, tilemap, tmTransform) in GetEntitiesWithComp<TilemapComponent, TransformComponent>())
             {
-                tilemapSys.GetSolidTilesInArea(tilemap, tmTransform, bounds, _scratchTileRects);
-                foreach (var rect in _scratchTileRects)
+                tilemapSys.GetSolidTilesInArea(tilemap, tmTransform, bounds, _scratchTileRects, _scratchTileCoords);
+                for (int i = 0; i < _scratchTileRects.Count; i++)
                 {
+                    var rect = _scratchTileRects[i];
                     if (rect.Width <= 0 || rect.Height <= 0) continue;
-                    _occluders.Add((rect, tmTransform));
+
+                    // tiles are grid-aligned, so neighbor solidity is an exact O(1)
+                    // lookup instead of the geometric adjacency pass below
+                    var tc = _scratchTileCoords[i];
+                    _occluders.Add(new ShadowGeometry.ShadowOccluder
+                    {
+                        Bounds = rect,
+                        Transform = tmTransform,
+                        BlockedTop    = tilemapSys.IsTileSolid(tilemap, tc.X, tc.Y - 1),
+                        BlockedBottom = tilemapSys.IsTileSolid(tilemap, tc.X, tc.Y + 1),
+                        BlockedLeft   = tilemapSys.IsTileSolid(tilemap, tc.X - 1, tc.Y),
+                        BlockedRight  = tilemapSys.IsTileSolid(tilemap, tc.X + 1, tc.Y),
+                    });
                 }
             }
             _scratchTileRects.Clear();
+            _scratchTileCoords.Clear();
         }
+    }
+
+    // an entity occluder's edge is an interior seam - and gets culled - when
+    // another occluder's opposite-facing edge sits exactly on it and fully
+    // spans it (e.g. two wall segments placed edge to edge)
+    private void CullTouchingEntityEdges(List<int> indices)
+    {
+        if (indices.Count < 2) return;
+
+        _edgeTop.Clear(); _edgeBottom.Clear(); _edgeLeft.Clear(); _edgeRight.Clear();
+
+        foreach (var i in indices)
+        {
+            var b = _occluders[i].Bounds;
+            Bucket(_edgeTop, b.Top, b.Left, b.Right, i);
+            Bucket(_edgeBottom, b.Bottom, b.Left, b.Right, i);
+            Bucket(_edgeLeft, b.Left, b.Top, b.Bottom, i);
+            Bucket(_edgeRight, b.Right, b.Top, b.Bottom, i);
+        }
+
+        foreach (var i in indices)
+        {
+            var occ = _occluders[i];
+            var b = occ.Bounds;
+            occ.BlockedTop    = Covered(_edgeBottom, b.Top,    b.Left, b.Right, i);
+            occ.BlockedBottom = Covered(_edgeTop,    b.Bottom, b.Left, b.Right, i);
+            occ.BlockedLeft   = Covered(_edgeRight,  b.Left,   b.Top,  b.Bottom, i);
+            occ.BlockedRight  = Covered(_edgeLeft,   b.Right,  b.Top,  b.Bottom, i);
+            _occluders[i] = occ;
+        }
+    }
+
+    private static void Bucket(Dictionary<int, List<(int Lo, int Hi, int Idx)>> map, int key, int lo, int hi, int idx)
+    {
+        if (!map.TryGetValue(key, out var list))
+            map[key] = list = new List<(int, int, int)>();
+        list.Add((lo, hi, idx));
+    }
+
+    private static bool Covered(Dictionary<int, List<(int Lo, int Hi, int Idx)>> opposite, int key, int lo, int hi, int selfIdx)
+    {
+        if (!opposite.TryGetValue(key, out var list)) return false;
+        foreach (var (nlo, nhi, idx) in list)
+        {
+            if (idx != selfIdx && nlo <= lo && nhi >= hi) return true;
+        }
+        return false;
     }
 
     private void RenderShadowMap()
@@ -739,8 +819,9 @@ public sealed class LightingSystem : EntityDrawSystem
             Array.Resize(ref _wallVerts, needed);
 
         int n = 0;
-        foreach (var (b, _) in _occluders)
+        foreach (var occ in _occluders)
         {
+            var b = occ.Bounds;
             var tl = new Vector2(b.Left, b.Top);
             var tr = new Vector2(b.Right, b.Top);
             var br = new Vector2(b.Right, b.Bottom);
@@ -762,6 +843,7 @@ public sealed class LightingSystem : EntityDrawSystem
 
         _wmBlurred?.SetValue(_wallBleed.B);
         _wmViewProj?.SetValue(viewProj);
+        _wmBleedStrength?.SetValue(_lighting.WallBleedStrength);
 
         GameClient.GraphicsDevice.SetRenderTarget(_lightmap.Target);
         GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, _lightmap.Target.Width, _lightmap.Target.Height);

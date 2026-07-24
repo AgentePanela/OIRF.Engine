@@ -14,6 +14,7 @@
 
 Texture2D BlurredLightMap;
 float4x4  viewProj;
+float     bleedStrength;
 
 sampler2D BlurredSampler = sampler_state
 {
@@ -48,7 +49,7 @@ float4 MainPS(VSOut input) : COLOR0
     // clip space -> lightmap uv (ndc y +1 is the top of the target)
     float2 ndc = input.ScreenPos.xy / input.ScreenPos.w;
     float2 uv = float2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
-    return float4(tex2D(BlurredSampler, uv).rgb, 1.0);
+    return float4(tex2D(BlurredSampler, uv).rgb * bleedStrength, 1.0);
 }
 
 technique WallMerge

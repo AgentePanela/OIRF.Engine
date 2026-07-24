@@ -29,10 +29,13 @@ public sealed class LightingDebugTab : TabItem, IDisposable
     private CheckButton _debugCheck = default!;
     private CheckButton _hardShadowsCheck = default!;
     private CheckButton _pixelatedCheck = default!;
+    private CheckButton _occluderMaskCheck = default!;
     private HorizontalSlider _scaleSlider = default!;
     private MyraLabel _scaleLabel = default!;
     private HorizontalSlider _pixelSizeSlider = default!;
     private MyraLabel _pixelSizeLabel = default!;
+    private HorizontalSlider _bleedStrengthSlider = default!;
+    private MyraLabel _bleedStrengthLabel = default!;
     private MyraLabel _statsLabel = default!;
     private MyraListBox _lightList = default!;
 
@@ -87,10 +90,18 @@ public sealed class LightingDebugTab : TabItem, IDisposable
         _pixelatedCheck.IsCheckedChanged += (_, _) =>
             _cfg.Set(LightingCvars.PixelatedLighting, _pixelatedCheck.IsChecked);
 
+        _occluderMaskCheck = new CheckButton
+        {
+            Content = new MyraLabel { Text = "Show occluder mask" }
+        };
+        _occluderMaskCheck.IsCheckedChanged += (_, _) =>
+            _cfg.Set(LightingCvars.ShowOccluderMask, _occluderMaskCheck.IsChecked);
+
         layout.Widgets.Add(_enabledCheck);
         layout.Widgets.Add(_debugCheck);
         layout.Widgets.Add(_hardShadowsCheck);
         layout.Widgets.Add(_pixelatedCheck);
+        layout.Widgets.Add(_occluderMaskCheck);
 
         // ---- Lightmap scale (smooth mode) ----
         _scaleLabel = new MyraLabel { Text = "Lightmap Scale: 1.0" };
@@ -132,6 +143,26 @@ public sealed class LightingDebugTab : TabItem, IDisposable
         pixelSizeRow.Widgets.Add(_pixelSizeSlider);
         layout.Widgets.Add(pixelSizeRow);
 
+        // ---- Wall bleed strength ----
+        _bleedStrengthLabel = new MyraLabel { Text = "Wall Bleed Strength: 1.0" };
+        _bleedStrengthSlider = new HorizontalSlider
+        {
+            Minimum = 0,
+            Maximum = 40,
+            Value = 10,
+            Width = 200,
+        };
+        _bleedStrengthSlider.ValueChanged += (_, _) =>
+        {
+            var v = _bleedStrengthSlider.Value / 10.0f;
+            _bleedStrengthLabel.Text = $"Wall Bleed Strength: {v:0.0}";
+            _lighting.WallBleedStrength = v;
+        };
+        var bleedStrengthRow = new HorizontalStackPanel { Spacing = 8 };
+        bleedStrengthRow.Widgets.Add(_bleedStrengthLabel);
+        bleedStrengthRow.Widgets.Add(_bleedStrengthSlider);
+        layout.Widgets.Add(bleedStrengthRow);
+
         // ---- Stats ----
         _statsLabel = new MyraLabel { Text = "..." };
         layout.Widgets.Add(new MyraLabel { Text = "Stats" });
@@ -151,6 +182,7 @@ public sealed class LightingDebugTab : TabItem, IDisposable
         _debugCheck.IsChecked = _lighting.DebugDraw;
         _hardShadowsCheck.IsChecked = _lighting.HardShadows;
         _pixelatedCheck.IsChecked = _cfg.Get(LightingCvars.PixelatedLighting);
+        _occluderMaskCheck.IsChecked = _cfg.Get(LightingCvars.ShowOccluderMask);
 
         var scale = _cfg.Get(LightingCvars.LightmapScale);
         _scaleSlider.Value = (int)MathF.Round(scale * 10f);
@@ -159,6 +191,9 @@ public sealed class LightingDebugTab : TabItem, IDisposable
         int ps = _cfg.Get(LightingCvars.LightPixelSize);
         _pixelSizeSlider.Value = ps;
         _pixelSizeLabel.Text = $"Light Pixel Size: {ps}px";
+
+        _bleedStrengthSlider.Value = MathF.Round(_lighting.WallBleedStrength * 10f);
+        _bleedStrengthLabel.Text = $"Wall Bleed Strength: {_lighting.WallBleedStrength:0.0}";
     }
 
     public void Update(float dt)
@@ -177,6 +212,9 @@ public sealed class LightingDebugTab : TabItem, IDisposable
         var pixelated = _cfg.Get(LightingCvars.PixelatedLighting);
         if (_pixelatedCheck.IsChecked != pixelated)
             _pixelatedCheck.IsChecked = pixelated;
+        var showOccluderMask = _cfg.Get(LightingCvars.ShowOccluderMask);
+        if (_occluderMaskCheck.IsChecked != showOccluderMask)
+            _occluderMaskCheck.IsChecked = showOccluderMask;
 
         RefreshLightList();
     }

@@ -60,6 +60,17 @@ public sealed class LightingManager
     public bool WallBleedEnabled { get; set; } = true;
 
     /// <summary>
+    /// Multiplier on the wall bleed glow. 1.0 = as sampled from the blurred
+    /// lightmap, less than 1 dims it (darker walls), more than 1 boosts it.
+    /// </summary>
+    public float WallBleedStrength
+    {
+        get => _wallBleedStrength;
+        set => _wallBleedStrength = Math.Clamp(value, 0f, 4f);
+    }
+    private float _wallBleedStrength = 1.0f;
+
+    /// <summary>
     /// Gaussian blur over the finished lightmap, smooths shadow banding.
     /// </summary>
     public bool LightBlurEnabled { get; set; } = true;
