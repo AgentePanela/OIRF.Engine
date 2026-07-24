@@ -25,8 +25,8 @@ public class Camera2D
     public float ViewportTop => WorldCenter.Y - ViewportMidY;
     public float ViewportBottom => WorldCenter.Y + ViewportMidY;
 
-    public float ViewportWidth => GameClient.Options.Width / Zoom;
-    public float ViewportHeight => GameClient.Options.Height / Zoom;
+    public float ViewportWidth => _viewport.VirtualWidth / Zoom;
+    public float ViewportHeight => _viewport.VirtualHeight / Zoom;
 
     public Rectangle ViewportBounds => new Rectangle(
         (int)ViewportLeft,
