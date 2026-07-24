@@ -48,11 +48,9 @@ public sealed partial class EntityManager
         if (WipeEntities)
         {
             var ents = GetEntities();
+            Log.Debug($"Wiping all {ents.Count} entities...");
             foreach (var ent in ents)
-            {
-                Log.Debug($"Wiping all {ents.Count} entities...");
                 DeleteEntity(ent);
-            }
         }
 
         if (EntitiesToRemove.Count > 0)
