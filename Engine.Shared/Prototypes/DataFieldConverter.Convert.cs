@@ -157,8 +157,14 @@ public static partial class DataFieldConverter
         //   1. Exact class name  (case-sensitive)
         //   2. Class name        (case-insensitive)
         //   Works across ALL loaded assemblies - no attributes needed.
-        if (rawValue is Dictionary<string, object> objDict && !targetType.IsPrimitive)
+        // Accepts any IDictionary, not just literally Dictionary<string, object>: PrototypeLoader's
+        // own hand-rolled YAML walk always produces Dictionary<string, object>, but a raw value
+        // deserialized via YamlDotNet's own Deserializer (e.g. Eptus.Maps.MapManager's map
+        // loading) comes back as Dictionary<object, object> instead for any untyped nested
+        // mapping - YamlDotNet has no static type info to preserve that distinction.
+        if (rawValue is IDictionary rawObjDict && !targetType.IsPrimitive)
         {
+            var objDict = rawObjDict as Dictionary<string, object> ?? NormalizeToStringKeyedDict(rawObjDict);
             var concreteType = targetType;
  
             if (objDict.TryGetValue("type", out var typeTag) && typeTag is string typeName)
@@ -553,6 +559,23 @@ public static partial class DataFieldConverter
  
     private static byte HexToByte(char hi, char lo) =>
         System.Convert.ToByte($"{hi}{lo}", 16);
+
+    /// <summary>
+    /// Rebuilds any IDictionary (e.g. YamlDotNet's own Dictionary&lt;object, object&gt; for an
+    /// untyped nested mapping) into a string-keyed one, same shape/case-sensitivity
+    /// PrototypeLoader's hand-rolled YAML walk already produces.
+    /// </summary>
+    private static Dictionary<string, object> NormalizeToStringKeyedDict(IDictionary source)
+    {
+        var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        foreach (DictionaryEntry entry in source)
+        {
+            if (entry.Value is not null)
+                result[entry.Key.ToString()!] = entry.Value;
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// Finds a concrete CLR type by name that is assignable to <paramref name="baseType"/>.
