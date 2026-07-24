@@ -32,6 +32,8 @@ internal sealed partial class AssetManager : IAssetManager
     public bool TryGetAnimation(string key, [NotNullWhen(true)] out AnimationDef? def)
         => _animations.TryGetValue(key, out def);
 
+    public List<string> GetAnimationKeys() => _animations.Keys.ToList();
+
     /// <summary>
     /// Scans every info.yml under Resources/Textures and populates _animations,
     /// _sheetSources and _explicitFrames. Must run before the png scan in LoadRawTextures.

@@ -61,6 +61,12 @@ public interface IAssetManager
     /// </summary>
     public List<string> GetSpriteKeys();
 
+    /// <summary>
+    /// Every animation key currently loaded from an info.yml (e.g. "Player/walk-anim") - a
+    /// different key namespace from <see cref="GetSpriteKeys"/>, see AnimationComponent.Key.
+    /// </summary>
+    public List<string> GetAnimationKeys();
+
     public string NormalizeKey(string root, string fullPath);
 
     [Obsolete]

@@ -1,3 +1,4 @@
+using Engine.Shared.Assets;
 using Engine.Shared.GameObjects;
 
 namespace Engine.Client.Graphics;
@@ -10,6 +11,7 @@ public class AnimationComponent : Component
     /// in that folder's info.yml. Independent from SpriteComponent.Key, which gets
     /// overwritten with the current frame's key while this animation is playing.
     /// </summary>
+    [AnimationKey]
     public string Key { get; set; } = string.Empty;
 
     public bool Playing { get; set; } = true;

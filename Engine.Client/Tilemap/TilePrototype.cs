@@ -1,3 +1,4 @@
+using Engine.Shared.Assets;
 using Engine.Shared.Prototypes;
 
 namespace Engine.Client.Tilemap;
@@ -12,6 +13,7 @@ public sealed class TilePrototype : IPrototype
     public string ID { get; private set; }
 
     [DataField("sprite")]
+    [TextureKey]
     public string Sprite { get; private set; }
 
     /// <summary>
