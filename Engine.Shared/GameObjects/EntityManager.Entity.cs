@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Reflection;
 using Engine.Shared.Prototypes;
 using Microsoft.Xna.Framework;
@@ -106,6 +107,14 @@ public sealed partial class EntityManager
     }
 
     /// <summary>
+    /// Get the loaded entity list.
+    /// </summary>
+    public List<EntityUid> GetEntities()
+    {
+        return _scene.Entities.Keys.ToList();
+    }
+
+    /// <summary>
     /// Marks the entity to be deleted in the next frame.
     /// </summary>
     public void DeleteEntity(EntityUid uid)
@@ -148,5 +157,13 @@ public sealed partial class EntityManager
 
         EventBus.RaiseEvent(newEnt.Uid, new EntityAddedEvent());
         return newEnt.Uid;
+    }
+
+    /// <summary>
+    /// This will wipe all entities in the end of the frame.
+    /// </summary>
+    public void WipeAllEntities()
+    {
+        WipeEntities = true; // wil wipe everyhing in the end of the frame.
     }
 }

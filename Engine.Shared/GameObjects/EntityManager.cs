@@ -21,6 +21,7 @@ public sealed partial class EntityManager
     internal readonly HashSet<Component> CompsPendingRemove = new();
     private readonly List<Component> _tempComps = new();
     private readonly List<EntityUid> _tempUids = new();
+    private bool WipeEntities = false;
 
     public void Init()
     {
@@ -43,6 +44,16 @@ public sealed partial class EntityManager
         UpdateSystems(dt);
         if (_scene is null)
             return;
+
+        if (WipeEntities)
+        {
+            var ents = GetEntities();
+            foreach (var ent in ents)
+            {
+                Log.Debug($"Wiping all {ents.Count} entities...");
+                DeleteEntity(ent);
+            }
+        }
 
         if (EntitiesToRemove.Count > 0)
         {
@@ -103,6 +114,13 @@ public sealed partial class EntityManager
                 _scene.Entities.Remove(uid);
             }
             snapshot.Clear();
+        }
+
+        if (WipeEntities)
+        {
+            _scene.EntUidIndex = 0;
+            WipeEntities = false;
+            Log.Debug("All entities has been deleted.");
         }
     }
 
