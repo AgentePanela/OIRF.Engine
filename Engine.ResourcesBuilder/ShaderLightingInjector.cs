@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace Engine.ResourcesBuilder;
@@ -28,9 +29,13 @@ namespace Engine.ResourcesBuilder;
 ///    texture to register 0 - inserting LightMap earlier would shift the
 ///    shader's own SpriteTexture off register 0 and silently read garbage.
 ///
-/// Known limitation: assumes a single relevant `technique` block per file and
-/// that "technique"/"PixelShader = compile" don't appear earlier in comments
-/// - true for every shader in this project today (Grayscale.fx,
+/// Comments are stripped from the source before any of this runs (see
+/// <see cref="StripComments"/>), both so "technique"/"PixelShader = compile"
+/// occurrences inside comments can't confuse detection, and so the shader
+/// text cached on disk doesn't carry the original author's comments.
+///
+/// Known limitation: assumes a single relevant `technique` block per file -
+/// true for every shader in this project today (Grayscale.fx,
 /// MetallicFloor.fx), revisit if a future shader breaks that assumption.
 /// </summary>
 public static class ShaderLightingInjector
@@ -40,6 +45,17 @@ public static class ShaderLightingInjector
     private static readonly Regex SpriteVertexOutput = new(@"\bstruct\s+VertexShaderOutput\b", RegexOptions.Compiled);
     private static readonly Regex EntryPointRef = new(@"PixelShader\s*=\s*compile\s+\S+\s+(\w+)\s*\(\s*\)\s*;", RegexOptions.Compiled);
     private static readonly Regex FirstTechnique = new(@"\btechnique\b", RegexOptions.Compiled);
+
+    // Matches a string literal OR a comment; string literals are kept as-is in the
+    // replacement callback so a "//" or "/*" inside a quoted string isn't treated as
+    // a comment start. Comments are replaced with a space (not "") so removing e.g.
+    // "int/* x */Name" can't accidentally glue two tokens into one identifier.
+    private static readonly Regex CommentOrString = new(
+        @"""(?:\\.|[^""\\])*""|/\*.*?\*/|//[^\r\n]*",
+        RegexOptions.Compiled | RegexOptions.Singleline);
+
+    private static string StripComments(string source)
+        => CommentOrString.Replace(source, m => m.Value[0] == '"' ? m.Value : " ");
 
     // Some shaders already declare one of these for their own purposes (e.g.
     // MetallicFloor.fx already has its own ViewportSize for a screen-space
@@ -75,11 +91,19 @@ public static class ShaderLightingInjector
 
     /// <summary>
     /// Reads every `.fx` file directly under `sourceRoot/Shaders`, applies
-    /// <see cref="Transform"/>, and writes the result under a generated
-    /// sibling folder (also named `Shaders`) so the content builder can be
-    /// pointed at that instead of the real source. Returns the generated
-    /// root (or <paramref name="sourceRoot"/> unchanged if there's no
-    /// Shaders folder to process).
+    /// <see cref="Transform"/>, and writes the result to a short-lived temp
+    /// folder the content builder can be pointed at instead of the real
+    /// source. Returns that temp folder (or <paramref name="sourceRoot"/>
+    /// unchanged if there's no Shaders folder to process - callers must not
+    /// delete the returned path in that case).
+    ///
+    /// The transformed source is also encrypted at rest under
+    /// <paramref name="baseDir"/> (not real security - the key ships in this
+    /// assembly - just keeps plain shader text from sitting on disk between
+    /// builds) alongside a content-hash manifest, so a shader whose original
+    /// `.fx` hasn't changed since last time is skipped entirely: it's neither
+    /// re-transformed nor written to the temp folder, so the content builder
+    /// never sees it and leaves its already-compiled `.xnb` alone.
     /// </summary>
     public static string GenerateRoot(string sourceRoot, string baseDir)
     {
@@ -88,17 +112,67 @@ public static class ShaderLightingInjector
             return sourceRoot;
 
         var absoluteBaseDir = Path.IsPathRooted(baseDir) ? baseDir : Path.Combine(AppContext.BaseDirectory, baseDir);
-        var generatedRoot = Path.Combine(absoluteBaseDir, SafeFolderName(sourceRoot));
-        Directory.CreateDirectory(generatedRoot);
+        var cacheRoot = Path.Combine(absoluteBaseDir, SafeFolderName(sourceRoot));
+        Directory.CreateDirectory(cacheRoot);
+
+        var manifestPath = Path.Combine(cacheRoot, "manifest.json");
+        Dictionary<string, string> manifest = File.Exists(manifestPath)
+            ? JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(manifestPath)) ?? []
+            : [];
+
+        var buildDir = Path.Combine(Path.GetTempPath(), "EptusShaderBuild", SafeFolderName(sourceRoot));
+        if (Directory.Exists(buildDir))
+            Directory.Delete(buildDir, recursive: true);
+        Directory.CreateDirectory(buildDir);
+
+        var manifestChanged = false;
+
+        // A shader that was removed or renamed in Shaders/ leaves its old .enc, its old
+        // compiled .xnb and its manifest entry behind forever otherwise - nothing else
+        // ever revisits a name once it drops out of the current file list.
+        var currentNames = Directory.GetFiles(shadersDir, "*.fx", SearchOption.TopDirectoryOnly)
+            .Select(Path.GetFileName)
+            .ToHashSet();
+
+        foreach (var stale in manifest.Keys.Where(n => !currentNames.Contains(n)).ToList())
+        {
+            manifest.Remove(stale);
+            manifestChanged = true;
+
+            var staleEnc = Path.Combine(cacheRoot, stale + ".enc");
+            if (File.Exists(staleEnc))
+                File.Delete(staleEnc);
+
+            var staleXnb = Path.Combine(absoluteBaseDir, Path.ChangeExtension(stale, ".xnb"));
+            if (File.Exists(staleXnb))
+                File.Delete(staleXnb);
+        }
 
         foreach (var file in Directory.GetFiles(shadersDir, "*.fx", SearchOption.TopDirectoryOnly))
         {
-            var source = File.ReadAllText(file);
-            var transformed = Transform(source);
-            File.WriteAllText(Path.Combine(generatedRoot, Path.GetFileName(file)), transformed);
+            var name = Path.GetFileName(file);
+            var raw = File.ReadAllBytes(file);
+            var hash = Convert.ToHexString(SHA256.HashData(raw));
+            var encPath = Path.Combine(cacheRoot, name + ".enc");
+
+            // Unchanged since last time and we still have its encrypted cache entry -
+            // skip re-transforming and don't write it to buildDir, so the content
+            // builder's wildcard scan never sees it and its .xnb is left as-is.
+            if (manifest.TryGetValue(name, out var cachedHash) && cachedHash == hash && File.Exists(encPath))
+                continue;
+
+            var transformed = Transform(Encoding.UTF8.GetString(raw));
+            File.WriteAllText(Path.Combine(buildDir, name), transformed);
+            File.WriteAllBytes(encPath, ShaderCrypto.Encrypt(Encoding.UTF8.GetBytes(transformed)));
+
+            manifest[name] = hash;
+            manifestChanged = true;
         }
 
-        return generatedRoot;
+        if (manifestChanged)
+            File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest));
+
+        return buildDir;
     }
 
     /// <summary>
@@ -108,6 +182,8 @@ public static class ShaderLightingInjector
     /// </summary>
     public static string Transform(string source)
     {
+        source = StripComments(source);
+
         if (UnshadedOptOut.IsMatch(source))
             return source;
 

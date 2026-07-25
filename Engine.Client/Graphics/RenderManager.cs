@@ -286,6 +286,7 @@ public sealed partial class RenderManager
                             shaderToUse.Parameters["LightMap"]?.SetValue(_lighting.CurrentLightMap);
                             shaderToUse.Parameters["ViewportSize"]?.SetValue(new Vector2(SceneTarget?.Width ?? 0, SceneTarget?.Height ?? 0));
                             shaderToUse.Parameters["PixelatedLighting"]?.SetValue(_lighting.PixelatedLighting);
+                            shaderToUse.Parameters["Time"]?.SetValue((float)GameClient.GameTime.TotalTime);
                         }
 
                         // Sprites always self-light or self-bypass now, so the

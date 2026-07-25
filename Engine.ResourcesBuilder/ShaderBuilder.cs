@@ -45,7 +45,20 @@ public static class ShaderBuilder
                 LogLevel = LogLevel.Warning,
                 #endif
             };
-            builder.Run(parameters);
+
+            try
+            {
+                builder.Run(parameters);
+            }
+            finally
+            {
+                // generatedRoot is a short-lived temp folder unless there was no
+                // Shaders/ to process at all, in which case GenerateRoot handed
+                // back `root` itself - never delete that.
+                // TODO: re-enable, disabled temporarily for debugging.
+                // if (generatedRoot != root && Directory.Exists(generatedRoot))
+                //     Directory.Delete(generatedRoot, recursive: true);
+            }
         }
     }
 }
