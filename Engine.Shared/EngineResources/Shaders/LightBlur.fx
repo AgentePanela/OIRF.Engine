@@ -12,6 +12,7 @@
 Texture2D SourceMap;
 float2  SourceTexel;   // 1 / sourceSize
 float   isHorizontal;  // 1.0 → blur X, 0.0 → blur Y
+float   blurScale;     // tap spacing multiplier, widens the kernel
 
 sampler2D SourceSampler = sampler_state
 {
@@ -44,9 +45,9 @@ VSOut MainVS(VSIn input)
 
 float4 MainPS(VSOut input) : COLOR0
 {
-    float2 step = isHorizontal > 0.5
+    float2 step = (isHorizontal > 0.5
         ? float2(SourceTexel.x, 0.0)
-        : float2(0.0, SourceTexel.y);
+        : float2(0.0, SourceTexel.y)) * blurScale;
 
     float4 c0 = tex2D(SourceSampler, input.TexCoord - step * 4.0);
     float4 c1 = tex2D(SourceSampler, input.TexCoord - step * 3.0);

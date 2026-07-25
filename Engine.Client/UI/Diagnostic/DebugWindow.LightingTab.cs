@@ -28,6 +28,8 @@ public sealed class LightingDebugTab : TabItem, IDisposable
     private CheckButton _enabledCheck = default!;
     private CheckButton _debugCheck = default!;
     private CheckButton _hardShadowsCheck = default!;
+    private CheckButton _wallBleedCheck = default!;
+    private CheckButton _lightBlurCheck = default!;
     private CheckButton _pixelatedCheck = default!;
     private CheckButton _occluderMaskCheck = default!;
     private HorizontalSlider _scaleSlider = default!;
@@ -83,6 +85,21 @@ public sealed class LightingDebugTab : TabItem, IDisposable
         _hardShadowsCheck.IsCheckedChanged += (_, _) =>
             _lighting.HardShadows = _hardShadowsCheck.IsChecked;
 
+        // the two post passes, split out so their cost can be A/B'd in place
+        _wallBleedCheck = new CheckButton
+        {
+            Content = new MyraLabel { Text = "Wall bleed (blur + merge over occluders)" }
+        };
+        _wallBleedCheck.IsCheckedChanged += (_, _) =>
+            _lighting.WallBleedEnabled = _wallBleedCheck.IsChecked;
+
+        _lightBlurCheck = new CheckButton
+        {
+            Content = new MyraLabel { Text = "Light blur (full lightmap gaussian)" }
+        };
+        _lightBlurCheck.IsCheckedChanged += (_, _) =>
+            _lighting.LightBlurEnabled = _lightBlurCheck.IsChecked;
+
         _pixelatedCheck = new CheckButton
         {
             Content = new MyraLabel { Text = "Pixelated lighting (point-sampled lightmap)" }
@@ -100,6 +117,8 @@ public sealed class LightingDebugTab : TabItem, IDisposable
         layout.Widgets.Add(_enabledCheck);
         layout.Widgets.Add(_debugCheck);
         layout.Widgets.Add(_hardShadowsCheck);
+        layout.Widgets.Add(_wallBleedCheck);
+        layout.Widgets.Add(_lightBlurCheck);
         layout.Widgets.Add(_pixelatedCheck);
         layout.Widgets.Add(_occluderMaskCheck);
 
@@ -181,6 +200,8 @@ public sealed class LightingDebugTab : TabItem, IDisposable
         _enabledCheck.IsChecked = _lighting.Enabled;
         _debugCheck.IsChecked = _lighting.DebugDraw;
         _hardShadowsCheck.IsChecked = _lighting.HardShadows;
+        _wallBleedCheck.IsChecked = _lighting.WallBleedEnabled;
+        _lightBlurCheck.IsChecked = _lighting.LightBlurEnabled;
         _pixelatedCheck.IsChecked = _cfg.Get(LightingCvars.PixelatedLighting);
         _occluderMaskCheck.IsChecked = _cfg.Get(LightingCvars.ShowOccluderMask);
 
@@ -209,6 +230,10 @@ public sealed class LightingDebugTab : TabItem, IDisposable
             _debugCheck.IsChecked = _lighting.DebugDraw;
         if (_hardShadowsCheck.IsChecked != _lighting.HardShadows)
             _hardShadowsCheck.IsChecked = _lighting.HardShadows;
+        if (_wallBleedCheck.IsChecked != _lighting.WallBleedEnabled)
+            _wallBleedCheck.IsChecked = _lighting.WallBleedEnabled;
+        if (_lightBlurCheck.IsChecked != _lighting.LightBlurEnabled)
+            _lightBlurCheck.IsChecked = _lighting.LightBlurEnabled;
         var pixelated = _cfg.Get(LightingCvars.PixelatedLighting);
         if (_pixelatedCheck.IsChecked != pixelated)
             _pixelatedCheck.IsChecked = pixelated;
@@ -224,7 +249,11 @@ public sealed class LightingDebugTab : TabItem, IDisposable
         _statsLabel.Text =
             $"Lights: {_lighting.LastVisibleLights}/{_lighting.LastShadowLights} shadow | " +
             $"Occluders: {_lighting.LastOccluders} | " +
-            $"Total: {_lighting.LastLightingTotalMs:0.0}ms\n" +
+            $"Shadow map: {_lighting.LastShadowMapWidth}x{_lighting.LastShadowMapHeight}\n" +
+            // these are cpu submit times, not gpu time - GL draws are async, so
+            // a low number here doesn't mean the pass is cheap. Toggle the
+            // passes off and watch the frame time to get the real cost.
+            $"cpu submit - total: {_lighting.LastLightingTotalMs:0.0}ms | " +
             $"Shadow: {_lighting.LastShadowPassMs:0.0}ms | " +
             $"Light: {_lighting.LastLightPassMs:0.0}ms | " +
             $"WallBleed: {_lighting.LastWallBleedMs:0.0}ms | " +

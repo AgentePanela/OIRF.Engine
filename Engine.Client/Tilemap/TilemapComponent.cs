@@ -37,6 +37,14 @@ public sealed class TilemapChunk
     public bool Dirty { get; internal set; } = true;
     internal RenderableChunk? CachedRenderable;
 
+    /// <summary>
+    /// Solid tiles in this chunk, so collision queries can skip it whole.
+    /// Null means "not counted yet"; invalidated by
+    /// <see cref="TilemapSystem.SetTile"/>, so writes straight into
+    /// <see cref="Tiles"/> won't be picked up.
+    /// </summary>
+    internal int? SolidTileCount;
+
     public TilemapChunk(int cx, int cy, int size)
     {
         ChunkX = cx;

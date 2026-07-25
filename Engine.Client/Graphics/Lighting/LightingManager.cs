@@ -28,19 +28,34 @@ public sealed class LightingManager
     /// <summary>
     /// Max lights processed per frame, sorted by distance to the camera.
     /// </summary>
-    public int MaxLights { get; set; } = 64;
+    public int MaxLights
+    {
+        get => _maxLights;
+        set => _maxLights = Math.Clamp(value, 1, 256);
+    }
+    private int _maxLights = 64;
 
     /// <summary>
-    /// Shadow-casting light budget. Also the height of the shadow map (one
+    /// Shadow-casting light budget. Caps the height of the shadow map (one
     /// row per light). Lights over the cap still render, just without shadows.
     /// </summary>
-    public int MaxShadowcastingLights { get; set; } = 16;
+    public int MaxShadowcastingLights
+    {
+        get => _maxShadowcastingLights;
+        set => _maxShadowcastingLights = Math.Clamp(value, 1, 64);
+    }
+    private int _maxShadowcastingLights = 16;
 
     /// <summary>
     /// Shadow map width in texels. Each row is a full 360° unwrap around one
     /// light, so too few texels makes shadows look like ray slices.
     /// </summary>
-    public int ShadowMapSize { get; set; } = 1024;
+    public int ShadowMapSize
+    {
+        get => _shadowMapSize;
+        set => _shadowMapSize = Math.Clamp(value, 128, 4096);
+    }
+    private int _shadowMapSize = 1024;
 
     /// <summary>
     /// Extra shadow bias in world pixels, so filtered light doesn't leave a
@@ -69,6 +84,18 @@ public sealed class LightingManager
         set => _wallBleedStrength = Math.Clamp(value, 0f, 4f);
     }
     private float _wallBleedStrength = 1.0f;
+
+    /// <summary>
+    /// Separable blur iterations for the wall bleed. Each one is a horizontal
+    /// plus a vertical pass; the kernel widens as iterations drop, so 1 looks
+    /// close to the old 2 for half the fill.
+    /// </summary>
+    public int WallBleedIterations
+    {
+        get => _wallBleedIterations;
+        set => _wallBleedIterations = Math.Clamp(value, 1, 4);
+    }
+    private int _wallBleedIterations = 1;
 
     /// <summary>
     /// Gaussian blur over the finished lightmap, smooths shadow banding.

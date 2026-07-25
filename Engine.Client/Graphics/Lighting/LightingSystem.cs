@@ -3,7 +3,6 @@ using System.Diagnostics;
 using System;
 using Engine.Client.Assets;
 using Engine.Client.Graphics.Shaders;
-using Engine.Client.Tilemap;
 using Engine.Shared.Configuration;
 using Engine.Shared.GameObjects;
 using Engine.Shared.GameObjects.Components.Lighting;
@@ -34,17 +33,33 @@ public sealed class LightingSystem : EntityDrawSystem
     private readonly WallBleedRT _wallBleed = new();
     private readonly ScratchRT _blurScratch = new();
 
-    // occluder edge geometry, built once per frame and drawn for every
-    // shadow light. Capped at 4096 occluders by the 16 bit index range
+    // occluder edge geometry. Each shadow light gets its own range holding
+    // only the occluders inside its radius, all packed into one buffer and
+    // drawn with a per-light baseVertex. Capped at 4096 occluders per light
+    // by the 16 bit index range
     private const int MaxOccluderCap = 4096;
+
+    // ~6 MB of vertices. Beyond this the remaining lights render unshadowed
+    private const int MaxShadowVertices = 1 << 18;
+
     private int _occluderCapacity = 256;
     private ShadowGeometry.OccluderVertex[] _shadowVerts = new ShadowGeometry.OccluderVertex[256 * 16];
     private DynamicVertexBuffer? _shadowVB;
+    private int _shadowVBCapacity;
     private IndexBuffer? _shadowIB;
-    private int _shadowTriCount;
 
-    private readonly List<Rectangle> _scratchTileRects = new();
-    private readonly List<Point> _scratchTileCoords = new();
+    // one entry per shadow-casting light, in the order RenderShadowMap and
+    // DrawRadialLights walk _lights, so the shadow map row index lines up
+    private struct ShadowRange
+    {
+        public Vector2 LightPos;
+        public float LightRadius;
+        public int VertexOffset;
+        public int TriCount;
+        public bool NeedsWrapPass;
+    }
+    private readonly List<ShadowRange> _shadowRanges = new();
+
     private readonly List<int> _scratchRectOccluders = new();
 
     // edge-adjacency buckets for entity-occluder culling, keyed by the shared
@@ -53,6 +68,10 @@ public sealed class LightingSystem : EntityDrawSystem
     private readonly Dictionary<int, List<(int Lo, int Hi, int Idx)>> _edgeBottom = new();
     private readonly Dictionary<int, List<(int Lo, int Hi, int Idx)>> _edgeLeft = new();
     private readonly Dictionary<int, List<(int Lo, int Hi, int Idx)>> _edgeRight = new();
+
+    // the bucket lists are handed back here instead of being dropped for the
+    // GC - there's one per distinct edge coordinate, every frame
+    private readonly Stack<List<(int Lo, int Hi, int Idx)>> _edgeListPool = new();
 
     // reused every frame to avoid allocations
     private readonly List<LightEntry> _lights = new();
@@ -129,7 +148,7 @@ public sealed class LightingSystem : EntityDrawSystem
         _lpCenter, _lpColor, _lpRange, _lpPower, _lpSoftness, _lpFalloff,
         _lpCurveFactor, _lpIndex, _lpContactBias,
         _lpDirection, _lpConeAngle, _lpConeSoftness;
-    private EffectParameter? _blSourceMap, _blSourceTexel, _blIsHorizontal;
+    private EffectParameter? _blSourceMap, _blSourceTexel, _blIsHorizontal, _blBlurScale;
     private EffectParameter? _wmBlurred, _wmViewProj, _wmBleedStrength;
 
     private readonly Stopwatch _passTimer = new();
@@ -194,6 +213,7 @@ public sealed class LightingSystem : EntityDrawSystem
             _blSourceMap    = p["SourceMap"];
             _blSourceTexel  = p["SourceTexel"];
             _blIsHorizontal = p["isHorizontal"];
+            _blBlurScale    = p["blurScale"];
         }
 
         if (_wallMergeEffect is not null)
@@ -266,8 +286,9 @@ public sealed class LightingSystem : EntityDrawSystem
         _shadowMap.Dispose();
         _wallBleed.Dispose();
         _blurScratch.Dispose();
-        _shadowVB?.Dispose(); _shadowVB = null;
+        _shadowVB?.Dispose(); _shadowVB = null; _shadowVBCapacity = 0;
         _shadowIB?.Dispose(); _shadowIB = null;
+        _shadowRanges.Clear();
     }
 
     private void BuildLightmap()
@@ -306,8 +327,14 @@ public sealed class LightingSystem : EntityDrawSystem
         if (_lightmap.Target is null)
             return;
 
+        CollectLights();
+        CollectOccluders();
+
+        // one shadow map row per shadow-casting light, rounded up to a power
+        // of two and never shrunk, so lights entering and leaving the view
+        // don't reallocate the target every frame
         int shadowW = _lighting.ShadowMapSize;
-        int shadowH = _lighting.MaxShadowcastingLights;
+        int shadowH = Math.Max(_shadowMap.Height, RoundUpPow2(Math.Max(1, CountShadowLights())));
         _shadowMap.EnsureSize(shadowW, shadowH);
         if (_shadowDepthEffect is not null && _shadowMap.Target is null)
             return;
@@ -337,10 +364,6 @@ public sealed class LightingSystem : EntityDrawSystem
             _blurScratch.Dispose();
         }
 
-        CollectLights();
-        CollectOccluders();
-        int shadowLightCount = CountShadowLights();
-
         // shared by every pass that rasterizes world-space quads
         var viewProj = _camera.GetViewMatrix() * Matrix.CreateOrthographicOffCenter(
             0, _viewport.VirtualWidth, _viewport.VirtualHeight, 0, -1, 1);
@@ -351,6 +374,11 @@ public sealed class LightingSystem : EntityDrawSystem
             RenderShadowMap();
             _passTimer.Stop();
             shadowPassMs = _passTimer.Elapsed.TotalMilliseconds;
+        }
+        else
+        {
+            // no shadow pass this frame, so no light may index into the map
+            _shadowRanges.Clear();
         }
 
         _passTimer.Restart();
@@ -380,7 +408,7 @@ public sealed class LightingSystem : EntityDrawSystem
 
         _frameTimer.Stop();
         _lighting.RecordFrameStats(
-            _lights.Count, shadowLightCount, _occluders.Count,
+            _lights.Count, _shadowRanges.Count, _occluders.Count,
             shadowW, shadowH,
             _frameTimer.Elapsed.TotalMilliseconds,
             shadowPassMs, lightPassMs, wallBleedMs, lightBlurMs);
@@ -415,7 +443,10 @@ public sealed class LightingSystem : EntityDrawSystem
         foreach (var (uid, point, transform) in GetEntitiesWithComp<PointLightComponent, TransformComponent>())
         {
             var worldPos = transform.Position + point.Offset;
-            if (!_camera.IsOnScreen(worldPos, new Vector2(point.Radius * 2f)))
+            // IsOnScreen takes a top-left corner, so the disk box has to be
+            // offset back by the radius - passing the center culls lights that
+            // are off the right/bottom edge but still reaching into the view
+            if (!_camera.IsOnScreen(worldPos - new Vector2(point.Radius), new Vector2(point.Radius * 2f)))
                 continue;
 
             _maxLightRadius = MathF.Max(_maxLightRadius, point.Radius);
@@ -432,7 +463,7 @@ public sealed class LightingSystem : EntityDrawSystem
         foreach (var (uid, spot, transform) in GetEntitiesWithComp<SpotLightComponent, TransformComponent>())
         {
             var worldPos = transform.Position + spot.Offset;
-            if (!_camera.IsOnScreen(worldPos, new Vector2(spot.Radius * 2f)))
+            if (!_camera.IsOnScreen(worldPos - new Vector2(spot.Radius), new Vector2(spot.Radius * 2f)))
                 continue;
 
             float direction = (spot.RotatesWithTransform ? transform.Angle : 0f) + spot.Direction;
@@ -471,6 +502,14 @@ public sealed class LightingSystem : EntityDrawSystem
         return count;
     }
 
+    private static int RoundUpPow2(int value)
+    {
+        int result = 1;
+        while (result < value)
+            result *= 2;
+        return result;
+    }
+
     private void CollectOccluders()
     {
         _occluders.Clear();
@@ -484,6 +523,11 @@ public sealed class LightingSystem : EntityDrawSystem
 
         foreach (var (uid, occluder, transform) in GetEntitiesWithComp<OccluderComponent, TransformComponent>())
         {
+            // this walks every occluder in the scene, so reject the far ones
+            // off the component alone - resolving a sprite occluder's bounds
+            // costs a component lookup and sometimes an atlas hit
+            if (!_occlusionSys.MayOverlap(occluder, transform, bounds)) continue;
+
             var b = _occlusionSys.GetOccluderBounds(uid, occluder, transform, _entManager);
             if (b.Width <= 0 || b.Height <= 0) continue;
             if (!bounds.Intersects(b)) continue;
@@ -497,35 +541,6 @@ public sealed class LightingSystem : EntityDrawSystem
                 _scratchRectOccluders.Add(_occluders.Count - 1);
         }
         CullTouchingEntityEdges(_scratchRectOccluders);
-
-        var tilemapSys = _entManager.GetSystem<TilemapSystem>();
-        if (tilemapSys is not null)
-        {
-            foreach (var (_, tilemap, tmTransform) in GetEntitiesWithComp<TilemapComponent, TransformComponent>())
-            {
-                tilemapSys.GetSolidTilesInArea(tilemap, tmTransform, bounds, _scratchTileRects, _scratchTileCoords);
-                for (int i = 0; i < _scratchTileRects.Count; i++)
-                {
-                    var rect = _scratchTileRects[i];
-                    if (rect.Width <= 0 || rect.Height <= 0) continue;
-
-                    // tiles are grid-aligned, so neighbor solidity is an exact O(1)
-                    // lookup instead of the geometric adjacency pass below
-                    var tc = _scratchTileCoords[i];
-                    _occluders.Add(new ShadowGeometry.ShadowOccluder
-                    {
-                        Bounds = rect,
-                        Transform = tmTransform,
-                        BlockedTop    = tilemapSys.IsTileSolid(tilemap, tc.X, tc.Y - 1),
-                        BlockedBottom = tilemapSys.IsTileSolid(tilemap, tc.X, tc.Y + 1),
-                        BlockedLeft   = tilemapSys.IsTileSolid(tilemap, tc.X - 1, tc.Y),
-                        BlockedRight  = tilemapSys.IsTileSolid(tilemap, tc.X + 1, tc.Y),
-                    });
-                }
-            }
-            _scratchTileRects.Clear();
-            _scratchTileCoords.Clear();
-        }
     }
 
     // an entity occluder's edge is an interior seam - and gets culled - when
@@ -535,7 +550,10 @@ public sealed class LightingSystem : EntityDrawSystem
     {
         if (indices.Count < 2) return;
 
-        _edgeTop.Clear(); _edgeBottom.Clear(); _edgeLeft.Clear(); _edgeRight.Clear();
+        RecycleEdgeBuckets(_edgeTop);
+        RecycleEdgeBuckets(_edgeBottom);
+        RecycleEdgeBuckets(_edgeLeft);
+        RecycleEdgeBuckets(_edgeRight);
 
         foreach (var i in indices)
         {
@@ -558,10 +576,20 @@ public sealed class LightingSystem : EntityDrawSystem
         }
     }
 
-    private static void Bucket(Dictionary<int, List<(int Lo, int Hi, int Idx)>> map, int key, int lo, int hi, int idx)
+    private void RecycleEdgeBuckets(Dictionary<int, List<(int Lo, int Hi, int Idx)>> map)
+    {
+        foreach (var list in map.Values)
+        {
+            list.Clear();
+            _edgeListPool.Push(list);
+        }
+        map.Clear();
+    }
+
+    private void Bucket(Dictionary<int, List<(int Lo, int Hi, int Idx)>> map, int key, int lo, int hi, int idx)
     {
         if (!map.TryGetValue(key, out var list))
-            map[key] = list = new List<(int, int, int)>();
+            map[key] = list = _edgeListPool.Count > 0 ? _edgeListPool.Pop() : new List<(int, int, int)>();
         list.Add((lo, hi, idx));
     }
 
@@ -577,7 +605,11 @@ public sealed class LightingSystem : EntityDrawSystem
 
     private void RenderShadowMap()
     {
-        if (!_shadowMap.Usable) return;
+        if (!_shadowMap.Usable)
+        {
+            _shadowRanges.Clear();
+            return;
+        }
 
         var shadowMap = _shadowMap.Target!;
         var depthEffect = _shadowDepthEffect!;
@@ -589,7 +621,7 @@ public sealed class LightingSystem : EntityDrawSystem
         GameClient.GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.DepthBuffer,
             new Color(255, 255, 0, 255), 1f, 0);
 
-        if (_shadowTriCount == 0 || _shadowVB is null || _shadowIB is null)
+        if (_shadowRanges.Count == 0 || _shadowVB is null || _shadowIB is null)
             return;
 
         var prevBlend = GameClient.GraphicsDevice.BlendState;
@@ -599,39 +631,32 @@ public sealed class LightingSystem : EntityDrawSystem
         GameClient.GraphicsDevice.SetVertexBuffer(_shadowVB);
         GameClient.GraphicsDevice.Indices = _shadowIB;
 
-        int shadowIdx = 0;
-        foreach (var entry in _lights)
+        for (int shadowIdx = 0; shadowIdx < _shadowRanges.Count; shadowIdx++)
         {
-            if (!entry.CastShadows) continue;
-            if (shadowIdx >= _lighting.MaxShadowcastingLights)
-            {
-                if (!_warnedShadowCap)
-                {
-                    Log.Warn(
-                        $"LightingSystem: shadow cap ({_lighting.MaxShadowcastingLights}) reached, " +
-                        "extra lights render without shadows. Raise MaxShadowcastingLights or cull more lights.");
-                    _warnedShadowCap = true;
-                }
+            var range = _shadowRanges[shadowIdx];
+            if (range.TriCount == 0)
                 continue;
-            }
 
             GameClient.GraphicsDevice.Viewport = new Viewport(0, shadowIdx, shadowMap.Width, 1);
-            _sdLightPos?.SetValue(entry.WorldPos);
-            _sdLightRadius?.SetValue(entry.Comp.Radius);
+            _sdLightPos?.SetValue(range.LightPos);
+            _sdLightRadius?.SetValue(range.LightRadius);
 
-            // pass 0 = normal range, pass 1 = tail that wraps around the +-pi seam
-            for (int wrapPass = 0; wrapPass < 2; wrapPass++)
+            // pass 0 = normal range, pass 1 = tail that wraps around the +-pi
+            // seam. Skipped entirely when no edge of this light's geometry
+            // straddles the seam, which is the usual case
+            int passes = range.NeedsWrapPass ? 2 : 1;
+            for (int wrapPass = 0; wrapPass < passes; wrapPass++)
             {
                 _sdWrapPass?.SetValue((float)wrapPass);
                 foreach (var pass in depthEffect.CurrentTechnique.Passes)
                 {
                     pass.Apply();
+                    // baseVertex offsets into this light's slice, so the index
+                    // buffer stays a single 0-based quad pattern
                     GameClient.GraphicsDevice.DrawIndexedPrimitives(
-                        PrimitiveType.TriangleList, 0, 0, _shadowTriCount);
+                        PrimitiveType.TriangleList, range.VertexOffset, 0, range.TriCount);
                 }
             }
-
-            shadowIdx++;
         }
 
         GameClient.GraphicsDevice.SetVertexBuffer(null);
@@ -640,39 +665,106 @@ public sealed class LightingSystem : EntityDrawSystem
         GameClient.GraphicsDevice.DepthStencilState = prevDepth;
     }
 
-    // uploads the frame's occluder geometry to the shared vertex buffer.
-    // The geometry doesn't depend on the light (lightPos is a uniform), so
-    // every shadow light draws the same buffer
+    // builds one geometry range per shadow-casting light, holding only the
+    // occluders that light actually reaches, and uploads them all in one go
     private void BuildShadowGeometry()
     {
-        _shadowTriCount = 0;
+        _shadowRanges.Clear();
 
         int count = Math.Min(_occluders.Count, MaxOccluderCap);
         if (count == 0) return;
 
-        if (count > _occluderCapacity || _shadowVB is null || _shadowIB is null)
+        EnsureOccluderCapacity(count);
+
+        int vIdx = 0;
+
+        // the map is rounded up to a power of two and never shrinks, so the
+        // budget is the cvar, not however many rows happen to be allocated
+        int rows = Math.Min(_shadowMap.Height, _lighting.MaxShadowcastingLights);
+
+        foreach (var entry in _lights)
         {
-            while (_occluderCapacity < count)
-                _occluderCapacity *= 2;
-            _occluderCapacity = Math.Min(_occluderCapacity, MaxOccluderCap);
+            if (!entry.CastShadows) continue;
+            if (_shadowRanges.Count >= rows)
+            {
+                if (!_warnedShadowCap)
+                {
+                    Log.Warn(
+                        $"LightingSystem: shadow cap ({rows}) reached, extra lights render " +
+                        "without shadows. Raise MaxShadowcastingLights or cull more lights.");
+                    _warnedShadowCap = true;
+                }
+                break;
+            }
 
-            if (_shadowVerts.Length < _occluderCapacity * 16)
-                _shadowVerts = new ShadowGeometry.OccluderVertex[_occluderCapacity * 16];
+            ShadowGeometry.BuildResult result;
+            while (true)
+            {
+                result = ShadowGeometry.Build(
+                    _occluders, count, _shadowVerts, vIdx, entry.WorldPos, entry.Comp.Radius);
 
-            _shadowVB?.Dispose();
-            _shadowIB?.Dispose();
-            _shadowVB = new DynamicVertexBuffer(GameClient.GraphicsDevice,
-                ShadowGeometry.OccluderVertex.Declaration, _occluderCapacity * 16, BufferUsage.WriteOnly);
-            _shadowIB = new IndexBuffer(GameClient.GraphicsDevice,
-                IndexElementSize.SixteenBits, _occluderCapacity * 24, BufferUsage.WriteOnly);
-            _shadowIB.SetData(BuildQuadIndices(_occluderCapacity * 4));
+                // the array only fills up once per scene, then it's reused
+                if (!result.Truncated || !GrowShadowVerts())
+                    break;
+            }
+
+            _shadowRanges.Add(new ShadowRange
+            {
+                LightPos = entry.WorldPos,
+                LightRadius = entry.Comp.Radius,
+                VertexOffset = vIdx,
+                TriCount = result.VertexCount / 4 * 2,
+                NeedsWrapPass = result.NeedsWrapPass,
+            });
+
+            vIdx += result.VertexCount;
         }
 
-        int vertexCount = ShadowGeometry.Build(_occluders, _shadowVerts);
-        if (vertexCount == 0) return;
+        if (vIdx == 0) return;
 
-        _shadowVB.SetData(_shadowVerts, 0, vertexCount, SetDataOptions.Discard);
-        _shadowTriCount = vertexCount / 4 * 2;
+        EnsureShadowVertexBuffer(vIdx);
+        _shadowVB!.SetData(_shadowVerts, 0, vIdx, SetDataOptions.Discard);
+    }
+
+    // the index buffer is sized for the worst-case single light, since
+    // baseVertex makes every range index from 0
+    private void EnsureOccluderCapacity(int occluderCount)
+    {
+        if (occluderCount <= _occluderCapacity && _shadowIB is not null)
+            return;
+
+        while (_occluderCapacity < occluderCount)
+            _occluderCapacity *= 2;
+        _occluderCapacity = Math.Min(_occluderCapacity, MaxOccluderCap);
+
+        _shadowIB?.Dispose();
+        _shadowIB = new IndexBuffer(GameClient.GraphicsDevice,
+            IndexElementSize.SixteenBits, _occluderCapacity * 24, BufferUsage.WriteOnly);
+        _shadowIB.SetData(BuildQuadIndices(_occluderCapacity * 4));
+    }
+
+    private bool GrowShadowVerts()
+    {
+        if (_shadowVerts.Length >= MaxShadowVertices)
+            return false;
+
+        int size = Math.Min(_shadowVerts.Length * 2, MaxShadowVertices);
+        Array.Resize(ref _shadowVerts, size);
+        return true;
+    }
+
+    private void EnsureShadowVertexBuffer(int vertexCount)
+    {
+        if (_shadowVB is not null && _shadowVBCapacity >= vertexCount)
+            return;
+
+        _shadowVBCapacity = Math.Max(_shadowVBCapacity, 256 * 16);
+        while (_shadowVBCapacity < vertexCount)
+            _shadowVBCapacity *= 2;
+
+        _shadowVB?.Dispose();
+        _shadowVB = new DynamicVertexBuffer(GameClient.GraphicsDevice,
+            ShadowGeometry.OccluderVertex.Declaration, _shadowVBCapacity, BufferUsage.WriteOnly);
     }
 
     // 0,1,2 0,2,3 for every quad. Built once per capacity, the pattern
@@ -715,14 +807,23 @@ public sealed class LightingSystem : EntityDrawSystem
         int vpW = _lightmap.Target!.Width;
         int vpH = _lightmap.Target!.Height;
 
+        int shadowRows = _shadowMap.Height;
+
         int shadowIdx = 0;
         foreach (var entry in _lights)
         {
             float radius = entry.Comp.Radius;
             BuildDiskQuad(entry.WorldPos, radius);
 
-            float lidx = (entry.CastShadows && shadowIdx < _lighting.MaxShadowcastingLights)
-                ? (shadowIdx + 0.5f) / _lighting.MaxShadowcastingLights
+            // -1 skips the shadow lookup in the shader. A light with an empty
+            // range has no occluder in reach, so it's lit everywhere and pays
+            // nothing for the PCF taps
+            bool hasShadowRow = entry.CastShadows
+                && shadowIdx < _shadowRanges.Count
+                && _shadowRanges[shadowIdx].TriCount > 0;
+
+            float lidx = hasShadowRow
+                ? (shadowIdx + 0.5f) / shadowRows
                 : -1f;
 
             var techniqueName = entry.IsSpot
@@ -757,7 +858,9 @@ public sealed class LightingSystem : EntityDrawSystem
                     PrimitiveType.TriangleList, _diskQuad, 0, 2, DiskVertex.Declaration);
             }
 
-            if (entry.CastShadows && shadowIdx < _lighting.MaxShadowcastingLights)
+            // walks _shadowRanges in lockstep with BuildShadowGeometry, which
+            // adds a range per shadow caster in this same order
+            if (entry.CastShadows && shadowIdx < _shadowRanges.Count)
                 shadowIdx++;
         }
 
@@ -767,12 +870,9 @@ public sealed class LightingSystem : EntityDrawSystem
 
     private void DrawTextureLights()
     {
-        var texLightSampler = _lighting.PixelatedLighting ? SamplerState.PointClamp : SamplerState.LinearClamp;
-        GameClient.SpriteBatch.Begin(
-            SpriteSortMode.Deferred,
-            BlendState.Additive,
-            texLightSampler,
-            transformMatrix: _camera.GetViewMatrix());
+        // opened lazily - most scenes have no texture lights at all, and an
+        // empty Begin/End still churns device state every frame
+        bool batchOpen = false;
 
         foreach (var (_, tex, transform) in GetEntitiesWithComp<TextureLightComponent, TransformComponent>())
         {
@@ -785,11 +885,23 @@ public sealed class LightingSystem : EntityDrawSystem
             float maxDim = MathF.Max(
                 spr.Region.Width * MathF.Abs(tex.Scale.X),
                 spr.Region.Height * MathF.Abs(tex.Scale.Y)) * 1.5f;
-            if (!_camera.IsOnScreen(worldPos, new Vector2(maxDim)))
+            // sprite is drawn centered on worldPos, so offset to the corner
+            if (!_camera.IsOnScreen(worldPos - new Vector2(maxDim * 0.5f), new Vector2(maxDim)))
                 continue;
 
             var rotation = (tex.RotatesWithTransform ? transform.Angle : 0f) + tex.Rotation;
             var color = tex.Color * tex.Intensity * _lighting.LightIntensity;
+
+            if (!batchOpen)
+            {
+                var texLightSampler = _lighting.PixelatedLighting ? SamplerState.PointClamp : SamplerState.LinearClamp;
+                GameClient.SpriteBatch.Begin(
+                    SpriteSortMode.Deferred,
+                    BlendState.Additive,
+                    texLightSampler,
+                    transformMatrix: _camera.GetViewMatrix());
+                batchOpen = true;
+            }
 
             GameClient.SpriteBatch.Draw(
                 page.Texture,
@@ -803,7 +915,8 @@ public sealed class LightingSystem : EntityDrawSystem
                 0f);
         }
 
-        GameClient.SpriteBatch.End();
+        if (batchOpen)
+            GameClient.SpriteBatch.End();
     }
 
     // blurs the lightmap at half res, then draws the occluder quads over
@@ -835,11 +948,21 @@ public sealed class LightingSystem : EntityDrawSystem
         }
         if (n == 0) return;
 
-        // two blur iterations so the glow reaches deep enough into the walls
-        BlurPass(_lightmap.Target, _wallBleed.A, 1f);
-        BlurPass(_wallBleed.A, _wallBleed.B, 0f);
-        BlurPass(_wallBleed.B, _wallBleed.A, 1f);
-        BlurPass(_wallBleed.A, _wallBleed.B, 0f);
+        // The glow needs to reach deep into the walls, which used to mean two
+        // stacked blur iterations. Chaining n gaussians of sigma s gives
+        // sigma*sqrt(n), so widening the kernel by sqrt(2/n) buys the same
+        // reach from fewer passes - at n=1 that's half the fill for a glow
+        // that reads the same at half res. n=2 reproduces the old kernel.
+        int iterations = _lighting.WallBleedIterations;
+        float blurScale = MathF.Sqrt(2f / iterations);
+
+        Texture2D source = _lightmap.Target;
+        for (int i = 0; i < iterations; i++)
+        {
+            BlurPass(source, _wallBleed.A, 1f, blurScale);
+            BlurPass(_wallBleed.A, _wallBleed.B, 0f, blurScale);
+            source = _wallBleed.B;
+        }
 
         _wmBlurred?.SetValue(_wallBleed.B);
         _wmViewProj?.SetValue(viewProj);
@@ -872,11 +995,12 @@ public sealed class LightingSystem : EntityDrawSystem
         GameClient.GraphicsDevice.BlendState = BlendState.AlphaBlend;
     }
 
-    private void BlurPass(Texture2D source, RenderTarget2D dest, float isHorizontal)
+    private void BlurPass(Texture2D source, RenderTarget2D dest, float isHorizontal, float blurScale = 1f)
     {
         _blSourceMap?.SetValue(source);
         _blSourceTexel?.SetValue(new Vector2(1f / source.Width, 1f / source.Height));
         _blIsHorizontal?.SetValue(isHorizontal);
+        _blBlurScale?.SetValue(blurScale);
 
         GameClient.GraphicsDevice.SetRenderTarget(dest);
         GameClient.GraphicsDevice.BlendState = BlendState.Opaque;
