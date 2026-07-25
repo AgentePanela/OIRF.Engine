@@ -155,6 +155,16 @@ public sealed class LightingManager
     public int LastShadowMapHeight { get; private set; }
     public double LastLightingTotalMs { get; private set; }
     public double LastShadowPassMs { get; private set; }
+
+    /// <summary>
+    /// Slices of <see cref="LastShadowPassMs"/>: building occluder edge
+    /// geometry, binding and clearing the shadow map, and submitting the
+    /// per-light draws.
+    /// </summary>
+    public double LastShadowBuildMs { get; private set; }
+    public double LastShadowSetupMs { get; private set; }
+    public double LastShadowDrawMs { get; private set; }
+
     public double LastLightPassMs { get; private set; }
     public double LastWallBleedMs { get; private set; }
     public double LastLightBlurMs { get; private set; }
@@ -167,6 +177,9 @@ public sealed class LightingManager
         int shadowMapHeight,
         double totalMs,
         double shadowPassMs,
+        double shadowBuildMs,
+        double shadowSetupMs,
+        double shadowDrawMs,
         double lightPassMs,
         double wallBleedMs,
         double lightBlurMs)
@@ -178,9 +191,34 @@ public sealed class LightingManager
         LastShadowMapHeight = shadowMapHeight;
         LastLightingTotalMs = totalMs;
         LastShadowPassMs = shadowPassMs;
+        LastShadowBuildMs = shadowBuildMs;
+        LastShadowSetupMs = shadowSetupMs;
+        LastShadowDrawMs = shadowDrawMs;
         LastLightPassMs = lightPassMs;
         LastWallBleedMs = wallBleedMs;
         LastLightBlurMs = lightBlurMs;
+    }
+
+    /// <summary>
+    /// Zeroes the per-frame stats. Called on frames where the lighting system
+    /// bails out before doing any work, so the debug readouts don't keep
+    /// showing the last frame that did run.
+    /// </summary>
+    internal void ClearFrameStats()
+    {
+        LastVisibleLights = 0;
+        LastShadowLights = 0;
+        LastOccluders = 0;
+        LastShadowMapWidth = 0;
+        LastShadowMapHeight = 0;
+        LastLightingTotalMs = 0;
+        LastShadowPassMs = 0;
+        LastShadowBuildMs = 0;
+        LastShadowSetupMs = 0;
+        LastShadowDrawMs = 0;
+        LastLightPassMs = 0;
+        LastWallBleedMs = 0;
+        LastLightBlurMs = 0;
     }
 
     /// <summary>

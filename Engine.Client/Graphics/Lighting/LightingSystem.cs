@@ -153,6 +153,13 @@ public sealed class LightingSystem : EntityDrawSystem
 
     private readonly Stopwatch _passTimer = new();
     private readonly Stopwatch _frameTimer = new();
+    private readonly Stopwatch _buildTimer = new();
+
+    // shadow pass broken into its three parts, so it's possible to tell
+    // geometry building from target setup from the per-light draws
+    private double _shadowBuildMs;
+    private double _shadowSetupMs;
+    private double _shadowDrawMs;
 
     public override void Init()
     {
@@ -228,7 +235,10 @@ public sealed class LightingSystem : EntityDrawSystem
     public override void Draw(float dt)
     {
         if (!_lighting.Enabled)
+        {
+            _lighting.ClearFrameStats();
             return;
+        }
 
         BuildLightmap();
 
@@ -248,8 +258,7 @@ public sealed class LightingSystem : EntityDrawSystem
         if (!_lighting.Enabled)
             return;
 
-        var scene = _render.SceneTarget;
-        if (scene is null || _lightmap.Target is null)
+        if (_lightmap.Target is null)
             return;
 
         if (_lighting.DebugDraw)
@@ -262,6 +271,13 @@ public sealed class LightingSystem : EntityDrawSystem
             _render.DrawFullscreenQuad(_lightmap.Target, BlendState.Opaque, SamplerState.PointClamp);
             return;
         }
+
+        // No SceneTarget this frame means DrawQueue found no shape needing the
+        // multiply and drew the world straight to the backbuffer, already lit
+        // by the per-sprite shaders. Nothing left to composite.
+        var scene = _render.SceneTarget;
+        if (!_render.WorldOnSceneTarget || scene is null)
+            return;
 
         // Multiply the lightmap onto SceneTarget in place. StencilTestShadedOnly
         // only lets the blend touch pixels stamped "shaded" (0) by DrawQueue, so
@@ -325,7 +341,10 @@ public sealed class LightingSystem : EntityDrawSystem
         }
         _lightmap.EnsureSize(lightW, lightH);
         if (_lightmap.Target is null)
+        {
+            _lighting.ClearFrameStats();
             return;
+        }
 
         CollectLights();
         CollectOccluders();
@@ -356,7 +375,10 @@ public sealed class LightingSystem : EntityDrawSystem
 
         if (lightBlur)
         {
-            _blurScratch.EnsureSize(lightW, lightH);
+            // half res like the bleed blur - this one only smooths shadow
+            // banding, which survives the downscale, and the vertical pass
+            // upscales back into the lightmap for free extra smoothing
+            _blurScratch.EnsureSize(Math.Max(1, lightW / 2), Math.Max(1, lightH / 2));
             lightBlur = _blurScratch.Target is not null;
         }
         else
@@ -411,7 +433,8 @@ public sealed class LightingSystem : EntityDrawSystem
             _lights.Count, _shadowRanges.Count, _occluders.Count,
             shadowW, shadowH,
             _frameTimer.Elapsed.TotalMilliseconds,
-            shadowPassMs, lightPassMs, wallBleedMs, lightBlurMs);
+            shadowPassMs, _shadowBuildMs, _shadowSetupMs, _shadowDrawMs,
+            lightPassMs, wallBleedMs, lightBlurMs);
     }
 
     private struct LightEntry
@@ -605,6 +628,8 @@ public sealed class LightingSystem : EntityDrawSystem
 
     private void RenderShadowMap()
     {
+        _shadowBuildMs = _shadowSetupMs = _shadowDrawMs = 0;
+
         if (!_shadowMap.Usable)
         {
             _shadowRanges.Clear();
@@ -614,15 +639,23 @@ public sealed class LightingSystem : EntityDrawSystem
         var shadowMap = _shadowMap.Target!;
         var depthEffect = _shadowDepthEffect!;
 
+        _buildTimer.Restart();
         BuildShadowGeometry();
+        _buildTimer.Stop();
+        _shadowBuildMs = _buildTimer.Elapsed.TotalMilliseconds;
 
         // clear color = "no occluder", depth = far so the LESS test accepts the first write
+        _buildTimer.Restart();
         GameClient.GraphicsDevice.SetRenderTarget(shadowMap);
         GameClient.GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.DepthBuffer,
             new Color(255, 255, 0, 255), 1f, 0);
+        _buildTimer.Stop();
+        _shadowSetupMs = _buildTimer.Elapsed.TotalMilliseconds;
 
         if (_shadowRanges.Count == 0 || _shadowVB is null || _shadowIB is null)
             return;
+
+        _buildTimer.Restart();
 
         var prevBlend = GameClient.GraphicsDevice.BlendState;
         var prevDepth = GameClient.GraphicsDevice.DepthStencilState;
@@ -663,6 +696,9 @@ public sealed class LightingSystem : EntityDrawSystem
         GameClient.GraphicsDevice.Indices = null;
         GameClient.GraphicsDevice.BlendState = prevBlend;
         GameClient.GraphicsDevice.DepthStencilState = prevDepth;
+
+        _buildTimer.Stop();
+        _shadowDrawMs = _buildTimer.Elapsed.TotalMilliseconds;
     }
 
     // builds one geometry range per shadow-casting light, holding only the

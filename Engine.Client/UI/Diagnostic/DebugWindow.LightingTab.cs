@@ -253,11 +253,12 @@ public sealed class LightingDebugTab : TabItem, IDisposable
             // these are cpu submit times, not gpu time - GL draws are async, so
             // a low number here doesn't mean the pass is cheap. Toggle the
             // passes off and watch the frame time to get the real cost.
-            $"cpu submit - total: {_lighting.LastLightingTotalMs:0.0}ms | " +
-            $"Shadow: {_lighting.LastShadowPassMs:0.0}ms | " +
-            $"Light: {_lighting.LastLightPassMs:0.0}ms | " +
-            $"WallBleed: {_lighting.LastWallBleedMs:0.0}ms | " +
-            $"Blur: {_lighting.LastLightBlurMs:0.0}ms\n" +
+            $"cpu submit - total: {_lighting.LastLightingTotalMs:0.00}ms | " +
+            $"Shadow: {_lighting.LastShadowPassMs:0.00}ms " +
+            $"(build {_lighting.LastShadowBuildMs:0.00} / setup {_lighting.LastShadowSetupMs:0.00} / draw {_lighting.LastShadowDrawMs:0.00}) | " +
+            $"Light: {_lighting.LastLightPassMs:0.00}ms | " +
+            $"WallBleed: {_lighting.LastWallBleedMs:0.00}ms | " +
+            $"Blur: {_lighting.LastLightBlurMs:0.00}ms\n" +
             $"Ambient: [{_lighting.AmbientLight.R},{_lighting.AmbientLight.G},{_lighting.AmbientLight.B}] | " +
             $"Intensity: {_lighting.LightIntensity:0.00}";
 

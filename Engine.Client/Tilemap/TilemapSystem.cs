@@ -113,6 +113,7 @@ public sealed class TilemapSystem : EntityDrawSystem
 
         effect.Parameters["Time"]?.SetValue(_totalTime);
         effect.Parameters["ViewportSize"]?.SetValue(new Vector2(vp.Width, vp.Height));
+        effect.Parameters["ViewportOffset"]?.SetValue(new Vector2(vp.X, vp.Y));
     }
 
     private void DrawChunk(TilemapComponent comp, TransformComponent trans,
