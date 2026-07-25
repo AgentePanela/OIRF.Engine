@@ -7,12 +7,16 @@ namespace Engine.ResourcesBuilder;
 
 public static class ShaderBuilder
 {
-    public static void Build(TargetPlatform platform = TargetPlatform.DesktopGL, GraphicsProfile profile = GraphicsProfile.Reach, string[]? resourceFolders = default)
+    public static void Build(TargetPlatform platform = TargetPlatform.DesktopGL, GraphicsProfile profile = GraphicsProfile.Reach, string[]? resourceFolders = default, string intermediateDir = "obj/ContentBuilder")
     {
         if (resourceFolders is null)
         {
             var resourcesRoot = SharedResourceManager.GetMainResourcesFolder();
+            #if DEBUG
             var engineResourcesRoot = Path.Combine(resourcesRoot, "..", "Engine", "Engine.Shared", "EngineResources");
+            #else
+            var engineResourcesRoot = Path.Combine(resourcesRoot, "..", "EngineResources");
+            #endif
             resourceFolders = [resourcesRoot, engineResourcesRoot];
         }
 
@@ -21,7 +25,7 @@ public static class ShaderBuilder
             // Sprite shaders get lighting support injected in memory (source
             // files under Shaders/ are never touched) - see
             // ShaderLightingInjector for the rename+wrap mechanism.
-            var generatedRoot = ShaderLightingInjector.GenerateRoot(root);
+            var generatedRoot = ShaderLightingInjector.GenerateRoot(root, intermediateDir);
 
             // A fresh ContentBuilder per root
             var builder = new ShaderContentBuilder();
@@ -30,7 +34,7 @@ public static class ShaderBuilder
                 WorkingDirectory = AppContext.BaseDirectory,
                 SourceDirectory = generatedRoot,
                 OutputDirectory = "",
-                IntermediateDirectory = "obj/ContentBuilder",
+                IntermediateDirectory = intermediateDir,
                 Platform = platform,
                 GraphicsProfile = profile,
                 Mode = ContentBuilderMode.Builder,

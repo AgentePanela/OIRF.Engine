@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -80,16 +81,15 @@ public static class ShaderLightingInjector
     /// root (or <paramref name="sourceRoot"/> unchanged if there's no
     /// Shaders folder to process).
     /// </summary>
-    public static string GenerateRoot(string sourceRoot)
+    public static string GenerateRoot(string sourceRoot, string baseDir)
     {
         var shadersDir = Path.Combine(sourceRoot, "Shaders");
         if (!Directory.Exists(shadersDir))
             return sourceRoot;
 
-        var generatedRoot = Path.Combine(
-            AppContext.BaseDirectory, "obj", "ContentBuilder", "GeneratedShaders",
-            SafeFolderName(sourceRoot));
-        var generatedShadersDir = Path.Combine(generatedRoot, "Shaders");
+        var absoluteBaseDir = Path.IsPathRooted(baseDir) ? baseDir : Path.Combine(AppContext.BaseDirectory, baseDir);
+        var generatedRoot = Path.Combine(absoluteBaseDir, SafeFolderName(sourceRoot));
+        var generatedShadersDir = Path.Combine(generatedRoot);
         Directory.CreateDirectory(generatedShadersDir);
 
         foreach (var file in Directory.GetFiles(shadersDir, "*.fx", SearchOption.TopDirectoryOnly))
@@ -189,7 +189,9 @@ float4 {name}(VertexShaderOutput input) : COLOR
     {
         var full = Path.GetFullPath(path);
         var leaf = Path.GetFileName(Path.TrimEndingDirectorySeparator(full));
-        var hash = Math.Abs(full.GetHashCode());
+        // string.GetHashCode() is randomized per process - use a stable hash so the
+        // generated folder is reused across runs instead of piling up new ones each launch.
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(full)))[..8];
         return $"{leaf}_{hash}";
     }
 }

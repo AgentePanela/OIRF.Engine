@@ -133,7 +133,7 @@ public class GameClient : Game
         Options = options;
 
         // shared registers here
-        IoCManager.Register(new UserStorageManager(Options.DataPath, true)); // user storage manager should be inited per side, instead of in shared
+        IoCManager.Register(new UserStorageManager(Options.DataPath, !Options.SelfContainedDataPath)); // user storage manager should be inited per side, instead of in shared
         IoCManager.Register<SharedContentManager>();
         var sharedContent = IoCManager.Resolve<SharedContentManager>();
         var list = Options.Assemblies.ToList();

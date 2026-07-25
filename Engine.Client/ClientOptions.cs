@@ -40,6 +40,11 @@ public sealed class ClientOptions
     /// The %AppData% location for your game data storage.
     /// </summary>
     public string DataPath = Path.Combine("MyCompany", "MyGame");
+
+    /// <summary>
+    /// This will disable the %AppData%/<see cref="DataPath"/> with a DataPath in the same folder as the executable.
+    /// </summary>
+    public bool SelfContainedDataPath = false;
     
     /// <summary>
     /// Will save the current CVar config when the game closes?
