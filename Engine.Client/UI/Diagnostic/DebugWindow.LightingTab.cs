@@ -38,6 +38,10 @@ public sealed class LightingDebugTab : TabItem, IDisposable
     private MyraLabel _pixelSizeLabel = default!;
     private HorizontalSlider _bleedStrengthSlider = default!;
     private MyraLabel _bleedStrengthLabel = default!;
+    private HorizontalSlider _bleedIterationsSlider = default!;
+    private MyraLabel _bleedIterationsLabel = default!;
+    private HorizontalSlider _bleedRadiusSlider = default!;
+    private MyraLabel _bleedRadiusLabel = default!;
     private MyraLabel _statsLabel = default!;
     private MyraListBox _lightList = default!;
 
@@ -182,6 +186,51 @@ public sealed class LightingDebugTab : TabItem, IDisposable
         bleedStrengthRow.Widgets.Add(_bleedStrengthSlider);
         layout.Widgets.Add(bleedStrengthRow);
 
+        // ---- Wall bleed radius ----
+        // How long the fade to black is at the edge of the glow. Strength
+        // scales it in place, iterations only smooth it - this is the one
+        // that makes the gradient longer.
+        _bleedRadiusLabel = new MyraLabel { Text = "Wall Bleed Radius: 1.0" };
+        _bleedRadiusSlider = new HorizontalSlider
+        {
+            Minimum = 3,
+            Maximum = 60,
+            Value = 10,
+            Width = 200,
+        };
+        _bleedRadiusSlider.ValueChanged += (_, _) =>
+        {
+            var v = _bleedRadiusSlider.Value / 10.0f;
+            _bleedRadiusLabel.Text = $"Wall Bleed Radius: {v:0.0}";
+            _lighting.WallBleedRadius = v;
+        };
+        var bleedRadiusRow = new HorizontalStackPanel { Spacing = 8 };
+        bleedRadiusRow.Widgets.Add(_bleedRadiusLabel);
+        bleedRadiusRow.Widgets.Add(_bleedRadiusSlider);
+        layout.Widgets.Add(bleedRadiusRow);
+
+        // ---- Wall bleed iterations ----
+        // Trades fill for a smoother falloff at the same width - raise this
+        // only if a wide radius starts to band.
+        _bleedIterationsLabel = new MyraLabel { Text = "Wall Bleed Iterations: 2" };
+        _bleedIterationsSlider = new HorizontalSlider
+        {
+            Minimum = 1,
+            Maximum = 4,
+            Value = 2,
+            Width = 200,
+        };
+        _bleedIterationsSlider.ValueChanged += (_, _) =>
+        {
+            int v = (int)_bleedIterationsSlider.Value;
+            _bleedIterationsLabel.Text = $"Wall Bleed Iterations: {v}";
+            _lighting.WallBleedIterations = v;
+        };
+        var bleedIterationsRow = new HorizontalStackPanel { Spacing = 8 };
+        bleedIterationsRow.Widgets.Add(_bleedIterationsLabel);
+        bleedIterationsRow.Widgets.Add(_bleedIterationsSlider);
+        layout.Widgets.Add(bleedIterationsRow);
+
         // ---- Stats ----
         _statsLabel = new MyraLabel { Text = "..." };
         layout.Widgets.Add(new MyraLabel { Text = "Stats" });
@@ -215,6 +264,12 @@ public sealed class LightingDebugTab : TabItem, IDisposable
 
         _bleedStrengthSlider.Value = MathF.Round(_lighting.WallBleedStrength * 10f);
         _bleedStrengthLabel.Text = $"Wall Bleed Strength: {_lighting.WallBleedStrength:0.0}";
+
+        _bleedRadiusSlider.Value = MathF.Round(_lighting.WallBleedRadius * 10f);
+        _bleedRadiusLabel.Text = $"Wall Bleed Radius: {_lighting.WallBleedRadius:0.0}";
+
+        _bleedIterationsSlider.Value = _lighting.WallBleedIterations;
+        _bleedIterationsLabel.Text = $"Wall Bleed Iterations: {_lighting.WallBleedIterations}";
     }
 
     public void Update(float dt)

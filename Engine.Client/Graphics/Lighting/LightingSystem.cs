@@ -984,13 +984,12 @@ public sealed class LightingSystem : EntityDrawSystem
         }
         if (n == 0) return;
 
-        // The glow needs to reach deep into the walls, which used to mean two
-        // stacked blur iterations. Chaining n gaussians of sigma s gives
-        // sigma*sqrt(n), so widening the kernel by sqrt(2/n) buys the same
-        // reach from fewer passes - at n=1 that's half the fill for a glow
-        // that reads the same at half res. n=2 reproduces the old kernel.
+        // Chaining n gaussians of sigma s gives sigma*sqrt(n), so scaling the
+        // tap spacing by sqrt(2/n) keeps the total width fixed however many
+        // iterations run - iterations buy kernel quality, not reach. Reach is
+        // WallBleedRadius, which stretches the whole thing.
         int iterations = _lighting.WallBleedIterations;
-        float blurScale = MathF.Sqrt(2f / iterations);
+        float blurScale = MathF.Sqrt(2f / iterations) * _lighting.WallBleedRadius;
 
         Texture2D source = _lightmap.Target;
         for (int i = 0; i < iterations; i++)

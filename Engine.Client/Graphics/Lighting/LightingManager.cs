@@ -86,16 +86,32 @@ public sealed class LightingManager
     private float _wallBleedStrength = 1.0f;
 
     /// <summary>
-    /// Separable blur iterations for the wall bleed. Each one is a horizontal
-    /// plus a vertical pass; the kernel widens as iterations drop, so 1 looks
-    /// close to the old 2 for half the fill.
+    /// How wide the wall bleed blur reaches, as a multiplier on the tap
+    /// spacing. This is the knob for how long the fade to black is at the
+    /// edge of the glow - <see cref="WallBleedIterations"/> deliberately holds
+    /// the width constant, so raising that one does nothing here. Push this
+    /// far enough and the 9-tap kernel starts to band; add an iteration to
+    /// smooth it back out.
+    /// </summary>
+    public float WallBleedRadius
+    {
+        get => _wallBleedRadius;
+        set => _wallBleedRadius = Math.Clamp(value, 0.25f, 6f);
+    }
+    private float _wallBleedRadius = 1f;
+
+    /// <summary>
+    /// Separable blur iterations for the wall bleed, each a horizontal plus a
+    /// vertical pass. The tap spacing narrows as iterations rise to keep the
+    /// same total sigma, so this trades fill for a smoother, more gaussian
+    /// falloff - not a wider one. Use <see cref="WallBleedRadius"/> for width.
     /// </summary>
     public int WallBleedIterations
     {
         get => _wallBleedIterations;
         set => _wallBleedIterations = Math.Clamp(value, 1, 4);
     }
-    private int _wallBleedIterations = 1;
+    private int _wallBleedIterations = 2;
 
     /// <summary>
     /// Gaussian blur over the finished lightmap, smooths shadow banding.
