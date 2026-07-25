@@ -25,6 +25,7 @@ using Engine.Shared.Prototypes;
 using Engine.Shared.GameObjects;
 using Engine.Client.Graphics.Lighting;
 using Engine.Shared.Locale;
+using System.IO;
 
 namespace Engine.Client;
 
@@ -127,7 +128,6 @@ public class GameClient : Game
         // Set the core's content manager to a reference of the base Game
         // content manager.
         Content = base.Content;
-        Content.RootDirectory = "Content";
 
         IsMouseVisible = true;
         Options = options;
@@ -286,7 +286,7 @@ public class GameClient : Game
     protected override void LoadContent()
     {
         // TODO: use this.Content to load your game content here
-        IoCManager.Resolve<ShaderManager>().Init();
+        //IoCManager.Resolve<ShaderManager>().Init(); - now in loading scene
     }
 
     private int _gen0 = 0;

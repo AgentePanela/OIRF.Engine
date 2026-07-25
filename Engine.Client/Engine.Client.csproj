@@ -13,10 +13,11 @@
     <PackageReference Include="Myra" Version="1.5.10" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="RectangleBinPacking" Version="1.0.2" />
-    <PackageReference Include='MonoSound' Version='1.8.0.4' />
+    <PackageReference Include="MonoSound" Version="1.8.0.4" />
     <PackageReference Include="Apos.Shapes" Version="0.7.2" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Engine.ResourcesBuilder\ResourcesBuilder.csproj" />
     <ProjectReference Include="..\Engine.Shared\Engine.Shared.csproj" />
   </ItemGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">

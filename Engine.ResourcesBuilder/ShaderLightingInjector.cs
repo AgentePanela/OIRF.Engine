@@ -89,14 +89,13 @@ public static class ShaderLightingInjector
 
         var absoluteBaseDir = Path.IsPathRooted(baseDir) ? baseDir : Path.Combine(AppContext.BaseDirectory, baseDir);
         var generatedRoot = Path.Combine(absoluteBaseDir, SafeFolderName(sourceRoot));
-        var generatedShadersDir = Path.Combine(generatedRoot);
-        Directory.CreateDirectory(generatedShadersDir);
+        Directory.CreateDirectory(generatedRoot);
 
         foreach (var file in Directory.GetFiles(shadersDir, "*.fx", SearchOption.TopDirectoryOnly))
         {
             var source = File.ReadAllText(file);
             var transformed = Transform(source);
-            File.WriteAllText(Path.Combine(generatedShadersDir, Path.GetFileName(file)), transformed);
+            File.WriteAllText(Path.Combine(generatedRoot, Path.GetFileName(file)), transformed);
         }
 
         return generatedRoot;

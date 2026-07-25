@@ -1,8 +1,19 @@
+using System;
+using System.IO;
 using System.Threading.Tasks;
+using Engine.Client.Extensions;
 using Engine.Client.Graphics.Fonts;
+using Engine.Client.Graphics.Shaders;
 using Engine.Client.Scenes.Factories;
+using Engine.ResourcesBuilder;
+using Engine.Shared.Assets;
 using Engine.Shared.GameObjects;
 using Engine.Shared.GameObjects.Factories;
+using Engine.Shared.IoC;
+using Engine.Shared.Storage;
+using Microsoft.Xna.Framework.Content.Pipeline;
+using MonoGame.Framework.Utilities;
+using static System.Environment;
 
 namespace Engine.Client.Scenes;
 
@@ -16,7 +27,10 @@ public abstract class LoadingScene : Scene
     [Dependency] protected readonly EntityManager _entMan = default!;
     [Dependency] protected readonly IFontManager _fonts = default!;
     [Dependency] protected readonly TextLayoutService _textLayout = default!;
+    [Dependency] protected readonly UserStorageManager _storage = default!;
+    [Dependency] protected readonly SharedResourceManager _resMan = default!;
     protected Task? _registryTask;
+    protected Task? _shaderTask;
 
     protected bool _autoStartLoading = true;
 
@@ -26,6 +40,7 @@ public abstract class LoadingScene : Scene
     {
         Idle,
         TextureLoading,
+        Shaders,
         Registry,
         Done
     }
@@ -36,7 +51,7 @@ public abstract class LoadingScene : Scene
         if (_autoStartLoading)
             StartLoading();
 
-        _asset.OnLoadingCompleted += () => _state = LoadingState.Registry;
+        _asset.OnLoadingCompleted += () => _state = LoadingState.Shaders;
     }
 
     public override void Update(float dt)
@@ -46,6 +61,9 @@ public abstract class LoadingScene : Scene
         {
             case LoadingState.TextureLoading:
                 TexturesPhase(dt);
+                break;
+            case LoadingState.Shaders:
+                ShadersPhase();
                 break;
             case LoadingState.Registry:
                 RegistryPhase();
@@ -62,6 +80,32 @@ public abstract class LoadingScene : Scene
         _fonts.BootstrapDefaults();
         Log.Debug("LoadingState = TextureLoading.");
         _state = LoadingState.TextureLoading;
+    }
+
+    protected virtual void ShadersPhase()
+    {
+        if (_shaderTask?.IsCompleted == true)
+        {
+            _state = LoadingState.Registry;
+            return;
+        }
+
+        if (_shaderTask is not null)
+            return;
+
+        Log.Debug("LoadingState = Shaders.");
+        _shaderTask = Task.Run(() =>
+        {
+            var cachePath = _storage.GetFullPath("shaders");
+            var platform = PlatformInfo.MonoGamePlatform.ToTargetPlatform();
+            var profile = GameClient.Graphics.GraphicsProfile;
+            var resources = _resMan.GetResourcesFolders();
+            GameClient.Content.RootDirectory = cachePath;
+
+            Log.Debug($"Caching shaders in {cachePath}");
+            ShaderBuilder.Build(platform, profile, resources, cachePath);
+            IoCManager.Resolve<ShaderManager>().Init();
+        });
     }
 
     protected virtual void RegistryPhase()

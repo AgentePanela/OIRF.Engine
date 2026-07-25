@@ -7,7 +7,7 @@ namespace Engine.ResourcesBuilder;
 
 public static class ShaderBuilder
 {
-    public static void Build(TargetPlatform platform = TargetPlatform.DesktopGL, GraphicsProfile profile = GraphicsProfile.Reach, string[]? resourceFolders = default, string intermediateDir = "obj/ContentBuilder")
+    public static void Build(TargetPlatform platform = TargetPlatform.DesktopGL, GraphicsProfile profile = GraphicsProfile.Reach, string[]? resourceFolders = default, string saveDir = "obj/ContentBuilder")
     {
         if (resourceFolders is null)
         {
@@ -25,7 +25,7 @@ public static class ShaderBuilder
             // Sprite shaders get lighting support injected in memory (source
             // files under Shaders/ are never touched) - see
             // ShaderLightingInjector for the rename+wrap mechanism.
-            var generatedRoot = ShaderLightingInjector.GenerateRoot(root, intermediateDir);
+            var generatedRoot = ShaderLightingInjector.GenerateRoot(root, saveDir);
 
             // A fresh ContentBuilder per root
             var builder = new ShaderContentBuilder();
@@ -33,12 +33,17 @@ public static class ShaderBuilder
             {
                 WorkingDirectory = AppContext.BaseDirectory,
                 SourceDirectory = generatedRoot,
-                OutputDirectory = "",
-                IntermediateDirectory = intermediateDir,
+                OutputDirectory = saveDir,
+                IntermediateDirectory = saveDir,
                 Platform = platform,
                 GraphicsProfile = profile,
                 Mode = ContentBuilderMode.Builder,
                 SkipClean = true,
+                #if DEBUG
+                LogLevel = LogLevel.Info,
+                #else
+                LogLevel = LogLevel.Warning,
+                #endif
             };
             builder.Run(parameters);
         }
@@ -50,7 +55,8 @@ internal sealed class ShaderContentBuilder : ContentBuilder
     public override IContentCollection GetContentCollection()
     {
         var content = new ContentCollection();
-        content.Include<WildcardRule>("Shaders/*.fx");
+        content.SetContentRoot("");
+        content.Include<WildcardRule>("*.fx");
         return content;
     }
 }

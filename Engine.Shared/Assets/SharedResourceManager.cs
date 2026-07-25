@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Engine.Shared.IoC;
 
 namespace Engine.Shared.Assets;
@@ -81,6 +82,12 @@ public sealed class SharedResourceManager
     
     public void RemoveResourcesFolder(string path)
         => _resourcesFolders.Remove(path);
+
+    /// <summary>
+    /// Returns a copy array of the resources folders locations
+    /// </summary>
+    public string[] GetResourcesFolders()
+        => _resourcesFolders.ToArray();
 
     public static string NormalizeKey(string root, string fullPath)
     {

@@ -73,6 +73,12 @@ public class DefaultLoadingScene : LoadingScene
         base.RegistryPhase();
     }
 
+    protected override void ShadersPhase()
+    {
+        _loadingFlavour = Loc.GetString("engine-loading-flavour-shaders");
+        base.ShadersPhase();
+    }
+
     public override void Draw(float dt)
     {
         base.Draw(dt);

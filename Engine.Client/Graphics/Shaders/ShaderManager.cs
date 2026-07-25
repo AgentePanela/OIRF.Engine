@@ -22,7 +22,7 @@ public sealed class ShaderManager
     {
         IoCManager.ResolveDependencies(this);
         _content = GameClient.Content;
-        Scan(Path.Combine(_content.RootDirectory, "Shaders"));
+        Scan(_content.RootDirectory);
     }
 
     private void Scan(string root)
