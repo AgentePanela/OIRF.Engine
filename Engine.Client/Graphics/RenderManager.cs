@@ -439,7 +439,9 @@ public sealed partial class RenderManager
     {
         _submitCounter = 0; // reset per frame so SubmitOrder doesnt climb toward int overflow
         DrawStopwatch.Reset();
-        if (_renderQueue.Count == 0)
+
+        bool lightingActive = _lighting?.Enabled ?? false;
+        if (_renderQueue.Count == 0 && !lightingActive)
             return;
 
         DrawStopwatch.Start();
@@ -448,7 +450,6 @@ public sealed partial class RenderManager
         // offscreen SceneTarget so the lighting pass can sample it. The
         // final composite (apply pass + blit) is performed separately by
         // GameClient.Draw after this returns.
-        bool lightingActive = _lighting?.Enabled ?? false;
         Viewport previousViewport = default;
         bool didSwitchTarget = false;
 
@@ -481,7 +482,8 @@ public sealed partial class RenderManager
             didSwitchTarget = true;
         }
 
-        DrawRenderQueue(_renderQueue, _pooledEntries, writeStencil: didSwitchTarget);
+        if (_renderQueue.Count > 0)
+            DrawRenderQueue(_renderQueue, _pooledEntries, writeStencil: didSwitchTarget);
 
         if (didSwitchTarget)
         {
