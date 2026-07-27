@@ -35,10 +35,6 @@ Custom `.fx` shaders now live in a plain `Resources\Shaders\` folder (no symlink
 
 See [Shaders](../Content/Shaders.md) for the full picture, including how lighting support gets injected into ordinary sprite shaders automatically.
 
-### 5. Publishing
-
-`ShaderBuilder.Build()` is meant to run in Debug only; Release publishes skip it on purpose. Run a Debug build at least once before publishing so the compiled `.xnb` files exist to be copied into the publish output. See the `ContentPipelinePublish` MSBuild target in `Project.Eptus.csproj` for a working example of copying `Resources\` and the built `Content\**\*.xnb` into a publish folder.
-
 ---
 
 ## Other relevant changes

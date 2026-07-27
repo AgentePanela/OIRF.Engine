@@ -159,8 +159,7 @@ public static partial class DataFieldConverter
         //   Works across ALL loaded assemblies - no attributes needed.
         // Accepts any IDictionary, not just literally Dictionary<string, object>: PrototypeLoader's
         // own hand-rolled YAML walk always produces Dictionary<string, object>, but a raw value
-        // deserialized via YamlDotNet's own Deserializer (e.g. Eptus.Maps.MapManager's map
-        // loading) comes back as Dictionary<object, object> instead for any untyped nested
+        // comes back as Dictionary<object, object> instead for any untyped nested
         // mapping - YamlDotNet has no static type info to preserve that distinction.
         if (rawValue is IDictionary rawObjDict && !targetType.IsPrimitive)
         {
