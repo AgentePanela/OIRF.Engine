@@ -145,16 +145,57 @@ _animSys.SetLoop(uid, null);    // go back to whatever info.yml says
 _animSys.Reset(uid);
 ```
 
+### Animating sprite layers
+
+`AnimationComponent.Layers` lets individual `SpriteComponent.Layers` entries (see
+[Graphics](Graphics.md)) play their own animation, independent from the base sprite and from each
+other. Each entry is matched to a `SpriteLayer` by `LayerId == SpriteLayer.Id`; entries whose id
+doesn't match any layer are simply skipped that frame.
+
+```yaml
+- type: entity
+  id: Player
+  components:
+  - type: Sprite
+    key: Player/idle
+    layers:
+    - id: Cloak
+      key: Player/cloak-idle
+  - type: Animation
+    key: Player/walk-anim        # base sprite animation (optional)
+    layers:
+    - layerId: Cloak
+      key: Player/cloak-flap-anim
+```
+
+```csharp
+[Dependency] private readonly AnimationSystem _animSys = default!;
+
+// Switch a single layer's animation, restarting from frame 0. Adds AnimationComponent
+// (and the layer's entry) if they don't exist yet.
+_animSys.SetLayerAnimation(uid, "Cloak", "Player/cloak-flap-anim");
+
+_animSys.PauseLayer(uid, "Cloak");
+_animSys.ResumeLayer(uid, "Cloak");
+```
+
+`LayerAnimation` mirrors the base `AnimationComponent` fields (`Key`, `Playing`, `SpeedOverride`,
+`LoopOverride`, `CurrentFrame`, `Elapsed`), plus `LayerId`. The base animation (`AnimationComponent.Key`)
+is optional — leave it empty for entities that only animate through layers.
+
 ### Events
 
 `AnimationSystem` raises entity events you can subscribe to (see [ECS](Ecs.md#event-bus)):
 
 | Event | Fires when |
 |---|---|
-| `AnimationStartedEvent` | `SetAnimation` assigns a (new) animation. |
+| `AnimationStartedEvent` | `SetAnimation`/`SetLayerAnimation` assigns a (new) animation. |
 | `AnimationFrameChangedEvent` | Playback advances to a new frame. Has a `Frame` field — useful for syncing hitboxes, footstep sounds, etc. to specific frames. |
 | `AnimationLoopedEvent` | A looping animation wraps back to frame 0. |
-| `AnimationFinishedEvent` | A non-looping animation reaches its last frame; `AnimationComponent.Playing` is set to `false`. |
+| `AnimationFinishedEvent` | A non-looping animation reaches its last frame; `Playing` is set to `false`. |
+
+Every event has a `LayerId` field (`string?`), `null` for the base animation and the matching
+`LayerAnimation.LayerId` for a layer animation.
 
 ```csharp
 SubscribeEvent<AnimationComponent, AnimationFinishedEvent>(OnAttackFinished);
@@ -175,9 +216,12 @@ public bool TryGetAnimation(string key, out AnimationDef? def);
 
 // AnimationSystem
 public bool SetAnimation(EntityUid uid, string key);   // switches animation, resets to frame 0
+public bool SetLayerAnimation(EntityUid uid, string layerId, string key);  // same, for one layer
 public AnimationDef? GetAnimation(EntityUid uid);
 public void Pause(EntityUid uid);
 public void Resume(EntityUid uid);
+public void PauseLayer(EntityUid uid, string layerId);
+public void ResumeLayer(EntityUid uid, string layerId);
 public void SetSpeed(EntityUid uid, float? speed);  // per-entity override (fps), null = use info.yml
 public void SetLoop(EntityUid uid, bool? loop);      // per-entity override, null = use info.yml
 public void Reset(EntityUid uid);                    // clears overrides, resets to frame 0
