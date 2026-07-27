@@ -79,6 +79,11 @@ public sealed class SpriteLayer
     public SamplerState? SamplerState { get; set; }
 
     /// <summary>
+    /// Offset based on the main layer.
+    /// </summary>
+    public Vector2 Offset { get; set; } = Vector2.Zero;
+
+    /// <summary>
     /// Do not set or get this manually. Use SpriteSystem.GetSprite().
     /// </summary>
     internal Sprite2D? Spr { get; set; }
