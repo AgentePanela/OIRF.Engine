@@ -1,0 +1,11 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Engine.Client/Engine.Client.csproj" />
+  <Project Path="Engine.Server/Engine.Server.csproj" />
+  <Project Path="Engine.Shared/Engine.Shared.csproj" />
+  <Project Path="Engine.ResourcesBuilder/ResourcesBuilder.csproj" />
+</Solution>
