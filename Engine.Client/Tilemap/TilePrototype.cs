@@ -12,7 +12,7 @@ public sealed class TilePrototype : IPrototype
     [DataField("id", required: true)]
     public string ID { get; private set; }
 
-    [DataField("sprite")]
+    [DataField("sprite", required: true)]
     [TextureKey]
     public string Sprite { get; private set; }
 
