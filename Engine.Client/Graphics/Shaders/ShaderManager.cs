@@ -6,6 +6,7 @@ using Engine.Client.Assets;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
 using Engine.Shared.Assets;
+using Engine.Shared.Storage;
 
 namespace Engine.Client.Graphics.Shaders;
 
@@ -27,10 +28,10 @@ public sealed class ShaderManager
 
     private void Scan(string root)
     {
-        if (!Directory.Exists(root))
+        if (!FileSystem.DirectoryExists(root))
             return;
 
-        var dir = Directory.GetFiles(root, "*.xnb", SearchOption.AllDirectories);
+        var dir = FileSystem.GetFiles(root, "*.xnb");
         foreach (var file in dir)
         {
             var relativePath = Path.GetRelativePath(_content.RootDirectory, file);

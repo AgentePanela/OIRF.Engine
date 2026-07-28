@@ -96,14 +96,26 @@ public abstract class LoadingScene : Scene
         Log.Debug("LoadingState = Shaders.");
         _shaderTask = Task.Run(() =>
         {
-            var cachePath = _storage.GetFullPath("shaders");
             var platform = PlatformInfo.MonoGamePlatform.ToTargetPlatform();
-            var profile = GameClient.Graphics.GraphicsProfile;
-            var resources = _resMan.GetResourcesFolders();
-            GameClient.Content.RootDirectory = cachePath;
 
-            Log.Debug($"Caching shaders in {cachePath}");
-            ShaderBuilder.Build(platform, profile, resources, cachePath);
+            // skip running the content-pipeline compiler on-device entirely.
+            if (ShaderBuilder.HasPrecompiled(platform))
+            {
+                var precompiledDir = ShaderBuilder.GetPrecompiledDirectory(platform);
+                Log.Debug($"Using precompiled shaders from {precompiledDir}");
+                GameClient.Content.RootDirectory = precompiledDir;
+            }
+            else
+            {
+                var cachePath = _storage.GetFullPath("shaders");
+                var profile = GameClient.Graphics.GraphicsProfile;
+                var resources = _resMan.GetResourcesFolders();
+                GameClient.Content.RootDirectory = cachePath;
+
+                Log.Debug($"Caching shaders in {cachePath}");
+                ShaderBuilder.Build(platform, profile, resources, cachePath);
+            }
+
             IoCManager.Resolve<ShaderManager>().Init();
         });
     }

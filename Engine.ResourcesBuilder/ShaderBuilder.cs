@@ -1,4 +1,5 @@
 using Engine.Shared.Assets;
+using Engine.Shared.Storage;
 using Microsoft.Xna.Framework.Content.Pipeline;
 using Microsoft.Xna.Framework.Graphics;
 using MonoGame.Framework.Content.Pipeline.Builder;
@@ -7,6 +8,16 @@ namespace Engine.ResourcesBuilder;
 
 public static class ShaderBuilder
 {
+    /// <summary>
+    /// Whether a usable pre-built shader set already exists for <paramref name="platform"/>, so
+    /// <see cref="Build"/> can be skipped entirely and that directory used as-is instead.
+    /// </summary>
+    public static bool HasPrecompiled(TargetPlatform platform)
+    {
+        var dir = GetPrecompiledDirectory(platform);
+        return FileSystem.DirectoryExists(dir) && FileSystem.GetFiles(dir, "*.xnb").Length > 0;
+    }
+
     public static void Build(TargetPlatform platform = TargetPlatform.DesktopGL, GraphicsProfile profile = GraphicsProfile.Reach, string[]? resourceFolders = default, string saveDir = "obj/ContentBuilder")
     {
         if (resourceFolders is null)
@@ -61,6 +72,10 @@ public static class ShaderBuilder
             }
         }
     }
+
+    public static string GetPrecompiledDirectory(TargetPlatform platform)
+        => Path.Combine(AppContext.BaseDirectory, "PrecompiledShaders", platform.ToString());
+
 }
 
 internal sealed class ShaderContentBuilder : ContentBuilder
