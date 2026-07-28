@@ -47,4 +47,10 @@ public sealed class InputAction
     /// </summary>
     [DataField("gamepad")]
     public List<string> Gamepad { get; set; } = new();
+
+    /// <summary>
+    /// If true, this action also fires from any active touch (tap/hold/release)
+    /// </summary>
+    [DataField("touch")]
+    public bool Touch { get; set; }
 }
