@@ -75,6 +75,12 @@ public interface IPrototypeManager
     /// </summary>
     bool HasType(string typeKey);
 
+    /// <summary>
+    /// Absolute path of the YAML file a prototype was loaded from, or null if the type key
+    /// or id isn't known.
+    /// </summary>
+    string? GetSourceFile(string typeKey, string id);
+
     void IgnorePrototypes(string[] prototypesToIgnore);
 }
 
@@ -462,4 +468,9 @@ public sealed partial class PrototypeManager : IPrototypeManager
 
     public bool HasType(string typeKey)
         => _typeMapping.ContainsKey(typeKey);
+
+    public string? GetSourceFile(string typeKey, string id)
+        => _rawByType.TryGetValue(typeKey, out var bucket) && bucket.TryGetValue(id, out var raw)
+            ? raw.SourceFile
+            : null;
 }
