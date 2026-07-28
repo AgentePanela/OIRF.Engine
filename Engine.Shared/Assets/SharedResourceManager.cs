@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Engine.Shared.Storage;
 using Engine.Shared.IoC;
 
 namespace Engine.Shared.Assets;
@@ -15,6 +16,9 @@ public sealed class SharedResourceManager
 
     internal void Init()
     {
+        // todo: new types of file systems
+        FileSystem.Current = new DesktopFileSystem();
+
         var engineResources = Path.Combine(AppContext.BaseDirectory, "EngineResources");
         _resourcesFolders.Add(engineResources); // add the engine resources folder first, before the main content resources folder.
         _resourcesFolders.Add(GetMainResourcesFolder());
@@ -27,10 +31,10 @@ public sealed class SharedResourceManager
         foreach (var resources in _resourcesFolders)
         {
             var dir = Path.Combine(resources, path.Directory);
-            if (!Directory.Exists(dir))
+            if (!FileSystem.DirectoryExists(dir))
                 continue;
-            
-            var rfiles = Directory.GetFiles(dir, $"**.{fileType}", SearchOption.AllDirectories);
+
+            var rfiles = FileSystem.GetFiles(dir, $"**.{fileType}");
             foreach (var file in rfiles)
             {
                 var key = NormalizeKey(dir, file);
@@ -48,9 +52,9 @@ public sealed class SharedResourceManager
         foreach (var resources in _resourcesFolders)
         {
             var dir = Path.Combine(resources, path.Directory);
-            if (!Directory.Exists(dir))
+            if (!FileSystem.DirectoryExists(dir))
                 continue;
-            
+
             dirs.Add(dir);
         }
 
@@ -99,7 +103,7 @@ public sealed class SharedResourceManager
     public static string GetMainResourcesFolder()
     {
         // if we are running from the root (dotnet run), Resources/ is right here
-        if (Directory.Exists("Resources"))
+        if (FileSystem.DirectoryExists("Resources"))
             return "Resources";
 
 #if DEBUG

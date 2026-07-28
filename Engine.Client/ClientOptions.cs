@@ -26,6 +26,8 @@ public sealed class ClientOptions
 
     public SamplerState Samplimg = SamplerState.PointClamp;
 
+    public GraphicsProfile GraphicsProfile = GraphicsProfile.HiDef;
+
     /// <summary>
     /// The main scene the game will load when it get loaded.
     /// </summary>

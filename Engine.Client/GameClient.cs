@@ -202,7 +202,7 @@ public class GameClient : Game
         Graphics.PreferredBackBufferWidth = options.Width;
         Graphics.PreferredBackBufferHeight = options.Height;
         Graphics.IsFullScreen = options.FullScreen;
-        Graphics.GraphicsProfile = GraphicsProfile.HiDef; // required by Apos.Shapes
+        Graphics.GraphicsProfile = options.GraphicsProfile;
 
         // Apply the graphic presentation changes.
         Graphics.ApplyChanges();

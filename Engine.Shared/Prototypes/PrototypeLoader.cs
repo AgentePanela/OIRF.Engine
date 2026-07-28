@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Engine.Shared.Storage;
 using YamlDotNet.RepresentationModel;
 
 namespace Engine.Shared.Prototypes;
@@ -19,11 +20,11 @@ internal sealed class PrototypeLoader
     {
         var result = new List<RawPrototype>();
 
-        if (!Directory.Exists(path))
+        if (!FileSystem.DirectoryExists(path))
             return result;
 
-        var files = Directory.EnumerateFiles(path, "*.yml", SearchOption.AllDirectories)
-            .Concat(Directory.EnumerateFiles(path, "*.yaml", SearchOption.AllDirectories));
+        var files = FileSystem.GetFiles(path, "*.yml")
+            .Concat(FileSystem.GetFiles(path, "*.yaml"));
 
         foreach (var file in files)
         {
@@ -61,7 +62,8 @@ internal sealed class PrototypeLoader
 
     private static void LoadFile(string filePath, List<RawPrototype> output, List<string> prototypesToIgnore)
     {
-        using var reader = new StreamReader(filePath);
+        using var stream = FileSystem.OpenRead(filePath);
+        using var reader = new StreamReader(stream);
         var yaml = new YamlStream();
         yaml.Load(reader);
 

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using Engine.Shared.Assets;
+using Engine.Shared.Storage;
 
 namespace Engine.Client.Audio;
 
@@ -14,7 +15,7 @@ internal sealed partial class AudioManager
     {
         foreach (var dir in resPath.GetFolders())
         {
-            if (!Directory.Exists(dir))
+            if (!FileSystem.DirectoryExists(dir))
                 continue;
 
             var watcher = new FileSystemWatcher(dir)
@@ -46,7 +47,7 @@ internal sealed partial class AudioManager
 
             var key = SharedResourceManager.NormalizeKey(dir, fullPath);
 
-            if (File.Exists(fullPath))
+            if (FileSystem.FileExists(fullPath))
             {
                 if (AudiosPath.TryGetValue(key, out var existing) && existing != fullPath)
                     Log.Warn($"Audio '{key}' now maps to a different file ({existing} > {fullPath}).");

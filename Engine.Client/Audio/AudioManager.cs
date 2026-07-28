@@ -10,6 +10,7 @@ using Microsoft.Xna.Framework.Audio;
 using System;
 using Engine.Shared.IoC;
 using Engine.Shared.Assets;
+using Engine.Shared.Storage;
 
 namespace Engine.Client.Audio;
 
@@ -35,11 +36,11 @@ internal sealed partial class AudioManager : IAudioManager
     /// <summary>
     /// <relative path, stream>
     /// </summary>
-    public readonly Dictionary<string, FileStream> CachedStreams = new();
+    public readonly Dictionary<string, Stream> CachedStreams = new();
     /// <summary>
-    /// Null filestream means that this is using a cached stream.
+    /// Null stream means that this is using a cached stream.
     /// </summary>
-    public readonly List<(FileStream? stream, StreamPackage package)> RunningStreams = new();
+    public readonly List<(Stream? stream, StreamPackage package)> RunningStreams = new();
 
     public readonly ResPath resPath = new("Audio");
 
@@ -85,7 +86,7 @@ internal sealed partial class AudioManager : IAudioManager
     {
         foreach (var dir in dirs)
         {
-            var files = Directory.GetFiles(dir, "*.ogg", SearchOption.AllDirectories);
+            var files = FileSystem.GetFiles(dir, "*.ogg");
             foreach (var file in files)
             {
                 var relative = SharedResourceManager.NormalizeKey(dir, file);
@@ -93,9 +94,9 @@ internal sealed partial class AudioManager : IAudioManager
                     throw new Exception($"{relative} is already loaded. Make sure you dont have a duplicated sound in audio and music folders.");
 
                 AudiosPath.Add(relative, file);
-                
+
                 if (cache)
-                    CachedStreams.Add(relative, File.OpenRead(file));
+                    CachedStreams.Add(relative, FileSystem.OpenRead(file));
             }
         }
     }
@@ -132,8 +133,8 @@ internal sealed partial class AudioManager : IAudioManager
         {
             if (!AudiosPath.TryGetValue(relative, out var fullPath))
                 return null;
-            
-            stream = File.OpenRead(fullPath);
+
+            stream = FileSystem.OpenRead(fullPath);
             cached = false;
         }
         

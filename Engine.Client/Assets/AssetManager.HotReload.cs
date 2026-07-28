@@ -1,4 +1,5 @@
 using Engine.Shared.Assets;
+using Engine.Shared.Storage;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System.Collections.Concurrent;
@@ -66,7 +67,7 @@ internal sealed partial class AssetManager : IAssetManager
         if (!GetTexture(key, out var spr, out _))
             return;
 
-        using var stream = File.OpenRead(path);
+        using var stream = FileSystem.OpenRead(path);
         var tex = Texture2D.FromStream(_graphics, stream);
 
         if (spr.Width != tex.Width || spr.Height != tex.Height)

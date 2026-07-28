@@ -5,6 +5,7 @@ using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Engine.Shared.IoC;
 using Engine.Shared.Assets;
+using Engine.Shared.Storage;
 
 namespace Engine.Client.Graphics.Fonts;
 
@@ -38,7 +39,7 @@ public sealed class FontManager : IFontManager
         for (var index = 0; index < ttfFiles.Length; index++)
         {
             ref readonly var file = ref ttfFiles[index];
-            MyraFontSystem.AddFont(File.ReadAllBytes(file.FilePath));
+            MyraFontSystem.AddFont(FileSystem.ReadAllBytes(file.FilePath));
         }
     }
 

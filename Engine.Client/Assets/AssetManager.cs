@@ -1,6 +1,7 @@
 using Engine.Client.Assets.Atlas;
 using Engine.Client.Graphics;
 using Engine.Shared.Assets;
+using Engine.Shared.Storage;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -96,7 +97,7 @@ internal sealed partial class AssetManager : IAssetManager
             // spritesheet source: keep its natural key, gets sliced in UploadTextures instead of queued as-is
             if (_sheetSources.ContainsKey(resFile.Relative))
             {
-                var sheetBytes = File.ReadAllBytes(resFile.FilePath);
+                var sheetBytes = FileSystem.ReadAllBytes(resFile.FilePath);
                 list.Push((resFile.Relative, sheetBytes));
                 continue;
             }
@@ -106,7 +107,7 @@ internal sealed partial class AssetManager : IAssetManager
                 ? remapped
                 : resFile.Relative;
 
-            var bytes = File.ReadAllBytes(resFile.FilePath);
+            var bytes = FileSystem.ReadAllBytes(resFile.FilePath);
             list.Push((key, bytes));
         }
 
@@ -149,11 +150,7 @@ internal sealed partial class AssetManager : IAssetManager
     [Obsolete]
     internal void LoadTextures(string root)
     {
-        var files = Directory.GetFiles(
-            root,
-            "*.png",
-            SearchOption.AllDirectories
-        );
+        var files = FileSystem.GetFiles(root, "*.png");
 
         foreach (var file in files)
         {
@@ -161,7 +158,7 @@ internal sealed partial class AssetManager : IAssetManager
             {
                 var key = NormalizeKey(root, file);
                 Log.Debug($"Loading texture {key}.png");
-                using var stream = File.OpenRead(file);
+                using var stream = FileSystem.OpenRead(file);
                 var texture = Texture2D.FromStream(_graphics, stream);
 
                 _atlas.QueueSprite(key, texture);
