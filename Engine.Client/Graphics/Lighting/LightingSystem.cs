@@ -289,18 +289,22 @@ public sealed class LightingSystem : EntityDrawSystem
         }
         var baseAmbient = ambientColor * ambientIntensity;
 
+        var scene = _render.SceneTarget;
+        int sceneW = scene?.Width ?? _viewport.VirtualWidth;
+        int sceneH = scene?.Height ?? _viewport.VirtualHeight;
+
         int lightW, lightH;
         if (_lighting.PixelatedLighting)
         {
             int ps = _lighting.LightPixelSize;
-            lightW = Math.Max(1, (_viewport.VirtualWidth  + ps - 1) / ps);
-            lightH = Math.Max(1, (_viewport.VirtualHeight + ps - 1) / ps);
+            lightW = Math.Max(1, (sceneW + ps - 1) / ps);
+            lightH = Math.Max(1, (sceneH + ps - 1) / ps);
         }
         else
         {
             float scale = _lighting.LightmapScale;
-            lightW = Math.Max(1, (int)(_viewport.VirtualWidth  * scale));
-            lightH = Math.Max(1, (int)(_viewport.VirtualHeight * scale));
+            lightW = Math.Max(1, (int)(sceneW * scale));
+            lightH = Math.Max(1, (int)(sceneH * scale));
         }
         _lightmap.EnsureSize(lightW, lightH);
         if (_lightmap.Target is null)
@@ -341,9 +345,12 @@ public sealed class LightingSystem : EntityDrawSystem
         CollectOccluders();
         int shadowLightCount = CountShadowLights();
 
-        // shared by every pass that rasterizes world-space quads
+        // shared by every pass that rasterizes world-space quads - bounds must match the
+        // canvas rectangle SceneTarget captures (sceneW/sceneH above), not the fixed virtual
+        // viewport size, or the light/shadow geometry ends up misaligned with the sprites
+        // once the two diverge (editor FinalTarget).
         var viewProj = _camera.GetViewMatrix() * Matrix.CreateOrthographicOffCenter(
-            0, _viewport.VirtualWidth, _viewport.VirtualHeight, 0, -1, 1);
+            0, sceneW, sceneH, 0, -1, 1);
 
         if (_shadowDepthEffect is not null && _shadowMap.Target is not null)
         {

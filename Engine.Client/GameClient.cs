@@ -371,8 +371,18 @@ public class GameClient : Game
 
             // Allocate (or resize) the offscreen scene target. The world is
             // drawn into this target first so the lighting pass can sample it
-            // and blend the lightmap on top in Renderer.DrawQueue().
-            Renderer.EnsureSceneTarget(Viewport.VirtualWidth, Viewport.VirtualHeight);
+            // and blend the lightmap on top in Renderer.DrawQueue(). Sized to
+            // FinalTarget when one's active (editor viewport panel) rather than
+            // the virtual viewport - otherwise this target's aspect ratio locks
+            // to the OS window while the final blit's destination rect is
+            // whatever the docked panel happens to be, and LightingSystem's
+            // ApplyAfterWorld fullscreen-quads one onto the other, stretching
+            // the whole scene to match. Matching the aspect here up front means
+            // that blit is always a same-shape copy.
+            var (sceneTargetWidth, sceneTargetHeight) = Renderer.FinalTarget is { } finalTarget
+                ? (finalTarget.Width, finalTarget.Height)
+                : (Viewport.VirtualWidth, Viewport.VirtualHeight);
+            Renderer.EnsureSceneTarget(sceneTargetWidth, sceneTargetHeight);
 
             EntityManager.Draw(GameTime.DeltaTime);
         }

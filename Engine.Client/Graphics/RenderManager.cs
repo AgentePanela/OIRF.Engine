@@ -475,8 +475,9 @@ public sealed partial class RenderManager
                 previousViewport = new Viewport(0, 0, pp.BackBufferWidth, pp.BackBufferHeight);
             }
 
+            var clearColor = GameClient.Scenes.CurrentScene?.BackgroundColor ?? GameClient.Options.BackgroundColor;
             GameClient.GraphicsDevice.SetRenderTarget(SceneTarget);
-            GameClient.GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.Stencil, Color.Transparent, 0f, 0);
+            GameClient.GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.Stencil, clearColor, 0f, 0);
             GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, SceneTarget.Width, SceneTarget.Height);
             didSwitchTarget = true;
         }
