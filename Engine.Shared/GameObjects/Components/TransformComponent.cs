@@ -9,7 +9,7 @@ public sealed class TransformComponent : Component
     public Vector2? Scale { get; set; }
     public float Angle { get; set; } = 0f;
     public bool Visible { get; set; } = true;
-
+    public EntityUid? Parent { get; set; }
 
     //public EntityUid MapId = EntityUid.Empty;
 }
