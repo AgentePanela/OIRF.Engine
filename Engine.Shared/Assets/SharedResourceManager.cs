@@ -102,6 +102,9 @@ public sealed class SharedResourceManager
 
     public static string GetMainResourcesFolder()
     {
+        if (TryGetResDirArg(out var resDir))
+            return resDir;
+
         // if we are running from the root (dotnet run), Resources/ is right here
         if (FileSystem.DirectoryExists("Resources"))
             return "Resources";
@@ -109,7 +112,35 @@ public sealed class SharedResourceManager
 #if DEBUG
         return Path.Combine("..", "..", "Resources");
 #else
-        return Path.Combine("Resources");
+        return Path.Combine("..", "Resources");
 #endif
+    }
+
+    /// <summary>
+    /// Looks for a "--resDir" command line argument (e.g. --resDir "../Resources")
+    /// that overrides the default resources folder location.
+    /// </summary>
+    private static bool TryGetResDirArg(out string resDir)
+    {
+        var args = Environment.GetCommandLineArgs();
+        for (var i = 0; i < args.Length; i++)
+        {
+            const string prefix = "--resDir";
+
+            if (args[i].StartsWith(prefix + "=", StringComparison.OrdinalIgnoreCase))
+            {
+                resDir = args[i][(prefix.Length + 1)..];
+                return true;
+            }
+
+            if (string.Equals(args[i], prefix, StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
+            {
+                resDir = args[i + 1];
+                return true;
+            }
+        }
+
+        resDir = string.Empty;
+        return false;
     }
 }
