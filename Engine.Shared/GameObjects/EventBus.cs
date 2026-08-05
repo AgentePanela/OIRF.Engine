@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Engine.Shared.IoC;
+using Engine.Shared.Threading;
 
 namespace Engine.Shared.GameObjects;
 
@@ -46,6 +47,8 @@ public sealed class EventBus
     /// </summary>
     public void Subscribe<T>(GlobalEventHandler<T> handler) where T : EntityEvent
     {
+        MainThread.AssertMainThread();
+
         var type = typeof(T);
 
         if (!_events.TryGetValue(type, out var list))
@@ -73,6 +76,8 @@ public sealed class EventBus
         where CompT : Component
         where EventT : EntityEvent
     {
+        MainThread.AssertMainThread();
+
         var type = typeof(EventT);
 
         if (!_events.TryGetValue(type, out var list))
@@ -90,6 +95,8 @@ public sealed class EventBus
     /// </summary>
     public void RaiseEvent<T>(T ev) where T : EntityEvent
     {
+        MainThread.AssertMainThread();
+
         if (!_events.TryGetValue(typeof(T), out var list))
             return;
 
@@ -119,6 +126,8 @@ public sealed class EventBus
     /// </summary>
     public void RaiseEvent<T>(EntityUid uid, T ev) where T : EntityEvent
     {
+        MainThread.AssertMainThread();
+
         ev.Uid = uid;
 
         if (!_events.TryGetValue(typeof(T), out var list))

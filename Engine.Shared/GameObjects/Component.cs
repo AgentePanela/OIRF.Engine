@@ -1,4 +1,5 @@
 using Engine.Shared.IoC;
+using Engine.Shared.Threading;
 
 namespace Engine.Shared.GameObjects;
 
@@ -13,6 +14,8 @@ public class Component
 
     internal void RemoveComponent()
     {
+        MainThread.AssertMainThread();
+
         Deleted = true;
         State = CompState.Removing;
         IoCManager.Resolve<EntityManager>().CompsPendingRemove.Add(this);

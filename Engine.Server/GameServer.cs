@@ -14,6 +14,7 @@ using Engine.Shared.IoC;
 using Engine.Shared.Locale;
 using Engine.Shared.Prototypes;
 using Engine.Shared.Storage;
+using Engine.Shared.Threading;
 
 namespace Engine.Server;
 
@@ -142,6 +143,8 @@ public class GameServer : IDisposable
     /// </summary>
     public void Run()
     {
+        MainThread.Capture();
+
         _cts = new CancellationTokenSource();
         _running = true;
 

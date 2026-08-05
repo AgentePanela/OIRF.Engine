@@ -1,11 +1,11 @@
 using System;
-using System.Collections.Generic;
+using System.Collections.Concurrent;
 
 namespace Engine.Shared.GameObjects;
 
 public interface IEntityScene
 {
-    public Dictionary<EntityUid, Entity> Entities { get; }
+    public ConcurrentDictionary<EntityUid, Entity> Entities { get; }
     public int EntUidIndex { get; set; }
-    public Dictionary<Type, Dictionary<EntityUid, Component>> Components { get; }
+    public ConcurrentDictionary<Type, ConcurrentDictionary<EntityUid, Component>> Components { get; }
 }

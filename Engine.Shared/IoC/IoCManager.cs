@@ -144,12 +144,12 @@ public static class IoCManager
             if (attr.RegisterAs is not null)
             {
                 var inst = Activator.CreateInstance(type)!;
-                _singletons[attr.RegisterAs] = inst;
+                Register(attr.RegisterAs, inst);
                 continue;
             }
 
             var instance = Activator.CreateInstance(type)!;
-            _singletons[type] = instance;
+            Register(type, instance);
         }
     }
 }
