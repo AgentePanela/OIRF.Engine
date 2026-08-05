@@ -95,6 +95,8 @@ public class GameServer : IDisposable
         assemblies.Add(Assembly.GetExecutingAssembly());
         sharedContent.InitAsServer(assemblies.ToArray());
 
+        IoCManager.Register<IParallelManager, ParallelManager>();
+
         EntityManager = IoCManager.Resolve<EntityManager>();
         ConfigManager = IoCManager.Resolve<IConfigurationManager>();
         Prototypes = IoCManager.Resolve<IPrototypeManager>();

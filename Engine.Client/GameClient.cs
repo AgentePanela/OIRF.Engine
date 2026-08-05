@@ -145,6 +145,7 @@ public class GameClient : Game
         IoCManager.Register<IAssetManager, AssetManager>();
         IoCManager.Register<IAudioManager, AudioManager>();
         IoCManager.Register<ShaderManager>();
+        IoCManager.Register<IParallelManager, ParallelManager>();
 
         // Text/font services
         IoCManager.Register<TextStyleLibrary>();

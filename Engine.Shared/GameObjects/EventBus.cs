@@ -48,7 +48,6 @@ public sealed class EventBus
     public void Subscribe<T>(GlobalEventHandler<T> handler) where T : EntityEvent
     {
         MainThread.AssertMainThread();
-
         var type = typeof(T);
 
         if (!_events.TryGetValue(type, out var list))
@@ -77,7 +76,6 @@ public sealed class EventBus
         where EventT : EntityEvent
     {
         MainThread.AssertMainThread();
-
         var type = typeof(EventT);
 
         if (!_events.TryGetValue(type, out var list))

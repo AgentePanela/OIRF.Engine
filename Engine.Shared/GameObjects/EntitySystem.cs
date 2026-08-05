@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Engine.Shared.Prototypes;
@@ -132,6 +133,33 @@ public abstract class EntitySystem
     protected IEnumerable<(EntityUid uid, T1, T2, T3)>
         GetEntitiesWithComp<T1, T2, T3>() where T1 : Component where T2 : Component where T3 : Component
             => _entManager.Query<T1, T2, T3>();
+
+    /// <inheritdoc cref="EntityManager.ParallelQuery{T, TJob}(TJob)"/>
+    protected void ParallelQuery<T, TJob>(TJob job) where T : Component where TJob : struct, IEntityJob<T>
+        => _entManager.ParallelQuery<T, TJob>(job);
+
+    /// <inheritdoc cref="EntityManager.ParallelQuery{T}(Action{EntityUid, T})"/>
+    protected void ParallelQuery<T>(Action<EntityUid, T> body) where T : Component
+        => _entManager.ParallelQuery(body);
+
+    /// <inheritdoc cref="EntityManager.ParallelQuery{T1, T2, TJob}(TJob)"/>
+    protected void ParallelQuery<T1, T2, TJob>(TJob job)
+        where T1 : Component where T2 : Component where TJob : struct, IEntityJob<T1, T2>
+        => _entManager.ParallelQuery<T1, T2, TJob>(job);
+
+    /// <inheritdoc cref="EntityManager.ParallelQuery{T1, T2}(Action{EntityUid, T1, T2})"/>
+    protected void ParallelQuery<T1, T2>(Action<EntityUid, T1, T2> body) where T1 : Component where T2 : Component
+        => _entManager.ParallelQuery(body);
+
+    /// <inheritdoc cref="EntityManager.ParallelQuery{T1, T2, T3, TJob}(TJob)"/>
+    protected void ParallelQuery<T1, T2, T3, TJob>(TJob job)
+        where T1 : Component where T2 : Component where T3 : Component where TJob : struct, IEntityJob<T1, T2, T3>
+        => _entManager.ParallelQuery<T1, T2, T3, TJob>(job);
+
+    /// <inheritdoc cref="EntityManager.ParallelQuery{T1, T2, T3}(Action{EntityUid, T1, T2, T3})"/>
+    protected void ParallelQuery<T1, T2, T3>(Action<EntityUid, T1, T2, T3> body)
+        where T1 : Component where T2 : Component where T3 : Component
+        => _entManager.ParallelQuery(body);
 
     // ==== entities
     
