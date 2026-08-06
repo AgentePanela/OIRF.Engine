@@ -4,6 +4,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Reflection;
 using Engine.Shared.Prototypes;
+using Engine.Shared.Threading;
 using Microsoft.Xna.Framework;
 
 namespace Engine.Shared.GameObjects;
@@ -24,10 +25,13 @@ public sealed partial class EntityManager
     /// </summary>
     internal Entity CreateEmptyEntity(string? name = default, bool i = true)
     {
+        MainThread.AssertMainThread();
+
         var uid = new EntityUid(_scene.EntUidIndex);
         var ent = new Entity(uid, name ?? string.Empty);
         ent.SetScene(_scene);
-        _scene.Entities.Add(uid, ent);
+        if (!_scene.Entities.TryAdd(uid, ent))
+            throw new Exception($"Entity {uid} already exists.");
         _scene.EntUidIndex++;
         EventBus.RaiseEvent(uid, new EntityInitEvent());
         return ent;

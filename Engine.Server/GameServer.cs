@@ -14,6 +14,7 @@ using Engine.Shared.IoC;
 using Engine.Shared.Locale;
 using Engine.Shared.Prototypes;
 using Engine.Shared.Storage;
+using Engine.Shared.Threading;
 
 namespace Engine.Server;
 
@@ -94,6 +95,8 @@ public class GameServer : IDisposable
         assemblies.Add(Assembly.GetExecutingAssembly());
         sharedContent.InitAsServer(assemblies.ToArray());
 
+        IoCManager.Register<IParallelManager, ParallelManager>();
+
         EntityManager = IoCManager.Resolve<EntityManager>();
         ConfigManager = IoCManager.Resolve<IConfigurationManager>();
         Prototypes = IoCManager.Resolve<IPrototypeManager>();
@@ -142,6 +145,8 @@ public class GameServer : IDisposable
     /// </summary>
     public void Run()
     {
+        MainThread.Capture();
+
         _cts = new CancellationTokenSource();
         _running = true;
 

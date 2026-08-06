@@ -1,5 +1,6 @@
 using Engine.Shared.IoC;
 using Engine.Shared.Prototypes;
+using Engine.Shared.Threading;
 using System.Text.Json.Serialization;
 
 namespace Engine.Shared.GameObjects;
@@ -67,6 +68,8 @@ public sealed class Entity
     /// </summary>
     public void Delete()
     {
+        MainThread.AssertMainThread();
+
         Deleting = true;
         IoCManager.Resolve<EntityManager>().EntitiesToRemove.Add(Uid);
     }

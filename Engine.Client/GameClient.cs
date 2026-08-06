@@ -25,6 +25,7 @@ using Engine.Shared.Prototypes;
 using Engine.Shared.GameObjects;
 using Engine.Client.Graphics.Lighting;
 using Engine.Shared.Locale;
+using Engine.Shared.Threading;
 using System.IO;
 
 namespace Engine.Client;
@@ -144,6 +145,7 @@ public class GameClient : Game
         IoCManager.Register<IAssetManager, AssetManager>();
         IoCManager.Register<IAudioManager, AudioManager>();
         IoCManager.Register<ShaderManager>();
+        IoCManager.Register<IParallelManager, ParallelManager>();
 
         // Text/font services
         IoCManager.Register<TextStyleLibrary>();
@@ -269,6 +271,8 @@ public class GameClient : Game
 
     protected override void Initialize()
     {
+        MainThread.Capture();
+
         // Set the core's graphics device to a reference of the base Game
         // graphics device.
         GraphicsDevice = base.GraphicsDevice;

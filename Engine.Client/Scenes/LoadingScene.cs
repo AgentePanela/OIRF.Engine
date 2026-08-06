@@ -1,4 +1,3 @@
-using System;
 using System.IO;
 using System.Threading.Tasks;
 using Engine.Client.Extensions;
@@ -11,6 +10,7 @@ using Engine.Shared.GameObjects;
 using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.IoC;
 using Engine.Shared.Storage;
+using Engine.Shared.Threading;
 using Microsoft.Xna.Framework.Content.Pipeline;
 using MonoGame.Framework.Utilities;
 using static System.Environment;
@@ -135,11 +135,21 @@ public abstract class LoadingScene : Scene
         Log.Debug("LoadingState = Registry.");
         _registryTask = Task.Run(() =>
         {
-            _sceneFac.LoadScenes();
-            _compFac.LoadComponents();
-                
-            _entMan.Init();
-            _entMan.RegisterSystems();
+            //required to run safe with threading.
+            var threadId = CurrentManagedThreadId;
+            MainThread.SafeThreads.Add(threadId);
+            try
+            {
+                _sceneFac.LoadScenes();
+                _compFac.LoadComponents();
+
+                _entMan.Init();
+                _entMan.RegisterSystems();
+            }
+            finally
+            {
+                MainThread.SafeThreads.Remove(threadId);
+            }
         });
     }
 

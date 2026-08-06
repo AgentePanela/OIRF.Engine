@@ -7,6 +7,7 @@ using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace Engine.Client.Scenes;
@@ -32,9 +33,9 @@ public abstract class Scene : IEntityScene, IDisposable
     [Dependency] protected EntityManager _entManager;
     public Color? BackgroundColor;
     public bool IsDisposed { get; private set; }
-    public Dictionary<EntityUid, Entity> Entities { get; private set; } = new();
+    public ConcurrentDictionary<EntityUid, Entity> Entities { get; private set; } = new();
     public int EntUidIndex { get; set; } = 0;
-    public Dictionary<Type, Dictionary<EntityUid, Component>> Components { get; private set; } = new();
+    public ConcurrentDictionary<Type, ConcurrentDictionary<EntityUid, Component>> Components { get; private set; } = new();
 
     public abstract UICanvas? DefaultCanvas { get; protected set; }
 
@@ -101,11 +102,7 @@ public abstract class Scene : IEntityScene, IDisposable
         if (!Entities.ContainsKey(uid))
             throw new InvalidOperationException($"Cannot attach component '{comp.GetType().Name}' to unknown entity '{uid}'.");
 
-        if (!Components.TryGetValue(comp.GetType(), out var pool))
-        {
-            pool = new Dictionary<EntityUid, Component>();
-            Components[comp.GetType()] = pool;
-        }
+        var pool = Components.GetOrAdd(comp.GetType(), _ => new ConcurrentDictionary<EntityUid, Component>());
 
         if (pool.ContainsKey(uid))
             throw new InvalidOperationException($"Entity '{uid}' already has component '{comp.GetType().Name}'.");
