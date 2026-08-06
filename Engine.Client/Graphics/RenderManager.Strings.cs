@@ -122,8 +122,7 @@ public sealed partial class RenderManager
             shadowColor,
             label.Rotation,
             label.Origin,
-            scale,
-            label.Depth);
+            scale);
     }
 
     private void DrawOutline(
@@ -152,8 +151,7 @@ public sealed partial class RenderManager
                     outlineColor,
                     label.Rotation,
                     label.Origin,
-                    scale,
-                    label.Depth);
+                    scale);
             }
         }
     }

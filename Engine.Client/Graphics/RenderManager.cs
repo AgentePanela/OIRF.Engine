@@ -36,16 +36,26 @@ public sealed partial class RenderManager
     /// </summary>
     public RenderTarget2D? FinalTarget { get; set; }
 
-    private readonly SortedDictionary<int, List<RenderQueue>> _renderQueue = new();
+    private readonly List<RenderQueue> _renderQueue = new();
     private readonly List<IPooledRenderable> _pooledEntries = new();
 
     // Stamped on every RenderQueue entry as it's enqueued, so same-Depth entries
     // in a layer keep their submit order instead of jumping around.
     private int _submitCounter;
+
+    // Single flat sort key: Layer first (coarse bucket), then Depth within it,
+    // then SubmitOrder as a stable tiebreak. Same ordering as the old
+    // SortedDictionary<Layer, List<RenderQueue>> produced, just without the
+    // per-layer bucketing - one sort over one list instead of one dictionary
+    // lookup per submit plus one sort per layer.
     private static readonly Comparison<RenderQueue> DepthComparison = (a, b) =>
     {
-        var cmp = a.Target.Depth.CompareTo(b.Target.Depth);
-        return cmp != 0 ? cmp : a.SubmitOrder.CompareTo(b.SubmitOrder);
+        var layerCmp = a.Target.Layer.CompareTo(b.Target.Layer);
+        if (layerCmp != 0)
+            return layerCmp;
+
+        var depthCmp = a.Target.Depth.CompareTo(b.Target.Depth);
+        return depthCmp != 0 ? depthCmp : a.SubmitOrder.CompareTo(b.SubmitOrder);
     };
 
     // Marks stencil=0 (shaded) / stencil=1 (unshaded) while the merged queue draws
@@ -180,14 +190,8 @@ public sealed partial class RenderManager
 
     private void Enqueue(RenderQueue queue)
     {
-        var layer = queue.Target.Layer;
-        if (!_renderQueue.TryGetValue(layer, out var layerQueue))
-        {
-            layerQueue = new List<RenderQueue>();
-            _renderQueue.Add(layer, layerQueue);
-        }
         queue.SubmitOrder = _submitCounter++;
-        layerQueue.Add(queue);
+        _renderQueue.Add(queue);
     }
 
     // True when the effect's active technique is named "Unshaded".
@@ -215,7 +219,7 @@ public sealed partial class RenderManager
     //   or intentionally don't (Unshaded.fx) - the shared post-multiply must never
     //   touch them, or a shaded sprite would get lit twice.
     private void DrawRenderQueue(
-        SortedDictionary<int, List<RenderQueue>> queues,
+        List<RenderQueue> queue,
         List<IPooledRenderable> pooled,
         bool writeStencil)
     {
@@ -228,84 +232,81 @@ public sealed partial class RenderManager
         DepthStencilState StencilFor(bool unshaded) =>
             !writeStencil ? DepthStencilState.None : (unshaded ? StencilWriteUnshaded : StencilWriteShaded);
 
-        foreach (var (_, queue) in queues)
+        queue.Sort(DepthComparison);
+        foreach (var r in queue)
         {
-            queue.Sort(DepthComparison);
-            foreach (var r in queue)
+            if (r.Target is IShapeRenderable)
             {
-                if (r.Target is IShapeRenderable)
+                if (spriteOpen)
                 {
-                    if (spriteOpen)
-                    {
-                        End();
-                        spriteOpen = false;
-                        currentShader = null;
-                        currentSampler = null;
-                    }
-
-                    if (!shapeOpen || r.Target.SamplerState != currentSampler || r.Unshaded != currentUnshaded)
-                    {
-                        if (shapeOpen)
-                            EndShapes();
-
-                        BeginShapes(r.Target.SamplerState, StencilFor(r.Unshaded));
-                        shapeOpen = true;
-                        currentSampler = r.Target.SamplerState;
-                        currentUnshaded = r.Unshaded;
-                    }
+                    End();
+                    spriteOpen = false;
+                    currentShader = null;
+                    currentSampler = null;
                 }
-                else
+
+                if (!shapeOpen || r.Target.SamplerState != currentSampler || r.Unshaded != currentUnshaded)
                 {
                     if (shapeOpen)
-                    {
                         EndShapes();
-                        shapeOpen = false;
-                        currentSampler = null;
-                    }
 
-                    if (!spriteOpen || r.Shader != currentShader || r.Target.SamplerState != currentSampler || r.Unshaded != currentUnshaded)
-                    {
-                        if (spriteOpen)
-                            End();
-
-                        // Default (no custom shader) sprites use DefaultLit so they
-                        // can sample the lightmap themselves; Unshaded.fx and any
-                        // other custom shader (Grayscale/MetallicFloor) are used as-is.
-                        var shaderToUse = (writeStencil && r.Shader is null) ? GetDefaultLitEffect() : r.Shader;
-
-                        if (shaderToUse is not null)
-                        {
-                            // LightingEnabled must always be pushed, not just when
-                            // writeStencil is true: Grayscale/MetallicFloor's
-                            // injected lighting wrapper is baked into the compiled
-                            // shader unconditionally, so when lighting is off it
-                            // still runs - without this flag it would sample an
-                            // unbound LightMap (black) and multiply every sprite
-                            // to solid black instead of skipping the multiply.
-                            shaderToUse.Parameters["LightingEnabled"]?.SetValue(writeStencil);
-                            shaderToUse.Parameters["LightMap"]?.SetValue(_lighting.CurrentLightMap);
-                            shaderToUse.Parameters["ViewportSize"]?.SetValue(new Vector2(SceneTarget?.Width ?? 0, SceneTarget?.Height ?? 0));
-                            shaderToUse.Parameters["PixelatedLighting"]?.SetValue(_lighting.PixelatedLighting);
-                            shaderToUse.Parameters["Time"]?.SetValue((float)GameClient.GameTime.TotalTime);
-                        }
-
-                        // Sprites always self-light or self-bypass now, so the
-                        // shape-oriented post-multiply must never touch them -
-                        // always mark "skip me", regardless of r.Unshaded, so a
-                        // sprite drawn over a shape overwrites any stale "shape
-                        // needs multiply" stencil value left underneath it.
-                        var dss = !writeStencil ? DepthStencilState.None : StencilWriteUnshaded;
-
-                        Begin(shaderToUse, r.Target.SamplerState, dss);
-                        spriteOpen = true;
-                        currentShader = r.Shader;
-                        currentSampler = r.Target.SamplerState;
-                        currentUnshaded = r.Unshaded;
-                    }
+                    BeginShapes(r.Target.SamplerState, StencilFor(r.Unshaded));
+                    shapeOpen = true;
+                    currentSampler = r.Target.SamplerState;
+                    currentUnshaded = r.Unshaded;
+                }
+            }
+            else
+            {
+                if (shapeOpen)
+                {
+                    EndShapes();
+                    shapeOpen = false;
+                    currentSampler = null;
                 }
 
-                r.Target.Draw(this, r.Position);
+                if (!spriteOpen || r.Shader != currentShader || r.Target.SamplerState != currentSampler || r.Unshaded != currentUnshaded)
+                {
+                    if (spriteOpen)
+                        End();
+
+                    // Default (no custom shader) sprites use DefaultLit so they
+                    // can sample the lightmap themselves; Unshaded.fx and any
+                    // other custom shader (Grayscale/MetallicFloor) are used as-is.
+                    var shaderToUse = (writeStencil && r.Shader is null) ? GetDefaultLitEffect() : r.Shader;
+
+                    if (shaderToUse is not null)
+                    {
+                        // LightingEnabled must always be pushed, not just when
+                        // writeStencil is true: Grayscale/MetallicFloor's
+                        // injected lighting wrapper is baked into the compiled
+                        // shader unconditionally, so when lighting is off it
+                        // still runs - without this flag it would sample an
+                        // unbound LightMap (black) and multiply every sprite
+                        // to solid black instead of skipping the multiply.
+                        shaderToUse.Parameters["LightingEnabled"]?.SetValue(writeStencil);
+                        shaderToUse.Parameters["LightMap"]?.SetValue(_lighting.CurrentLightMap);
+                        shaderToUse.Parameters["ViewportSize"]?.SetValue(new Vector2(SceneTarget?.Width ?? 0, SceneTarget?.Height ?? 0));
+                        shaderToUse.Parameters["PixelatedLighting"]?.SetValue(_lighting.PixelatedLighting);
+                        shaderToUse.Parameters["Time"]?.SetValue((float)GameClient.GameTime.TotalTime);
+                    }
+
+                    // Sprites always self-light or self-bypass now, so the
+                    // shape-oriented post-multiply must never touch them -
+                    // always mark "skip me", regardless of r.Unshaded, so a
+                    // sprite drawn over a shape overwrites any stale "shape
+                    // needs multiply" stencil value left underneath it.
+                    var dss = !writeStencil ? DepthStencilState.None : StencilWriteUnshaded;
+
+                    Begin(shaderToUse, r.Target.SamplerState, dss);
+                    spriteOpen = true;
+                    currentShader = r.Shader;
+                    currentSampler = r.Target.SamplerState;
+                    currentUnshaded = r.Unshaded;
+                }
             }
+
+            r.Target.Draw(this, r.Position);
         }
 
         if (spriteOpen)
@@ -313,7 +314,7 @@ public sealed partial class RenderManager
         if (shapeOpen)
             EndShapes();
 
-        queues.Clear();
+        queue.Clear();
 
         foreach (var p in pooled)
             p.ReturnToPool();
@@ -556,6 +557,11 @@ public sealed partial class RenderManager
         region.X += (int)sprite.Offset.X;
         region.Y += (int)sprite.Offset.Y;
 
+        // Depth is only a sort key for the render queue (see DepthComparison) -
+        // draw order is already final by the time we get here. MonoGame's Draw
+        // overload requires a layerDepth argument, but it's meaningless under
+        // SpriteSortMode.Deferred (no per-call depth stencil test either), so
+        // it's always 0f rather than sprite.Depth.
         _spriteBatch.Draw(
             texture,
             position,
@@ -565,7 +571,7 @@ public sealed partial class RenderManager
             sprite.Origin,
             sprite.Scale,
             sprite.Effects,
-            sprite.Depth);
+            0f);
     }
 
     public void DrawTexture(TextureRect texture, Vector2 position)
@@ -579,7 +585,7 @@ public sealed partial class RenderManager
             texture.Origin,
             texture.Scale,
             SpriteEffects.None,
-            texture.Depth);
+            0f);
     }
 
     public void DrawString(Label2D label, Vector2 position)
@@ -611,7 +617,6 @@ public sealed partial class RenderManager
             drawColor,
             label.Rotation,
             label.Origin,
-            drawScale,
-            label.Depth);
+            drawScale);
     }
 }
