@@ -22,6 +22,7 @@ Everything you need to build a game on top of ORIF.
 | [Graphics](Content/Graphics.md) | Rendering, sprites, labels, shapes, and camera |
 | [Animations](Content/Animations.md) | Spritesheet/frame-based animations via info.yml |
 | [Lighting](Content/Lighting.md) | Dynamic 2D lighting, shadows, and ambient light |
+| [Audio](Content/Audio.md) | ECS-integrated sound, tags, spatial audio, and volume |
 | [Fonts](Content/Fonts.md) | Font registration, FontKey, and TextStyle |
 | [Shaders](Content/Shaders.md) | Custom shaders and the resource builder pipeline |
 | [Input](Content/Input.md) | Keyboard, mouse, gamepad, and action maps |
