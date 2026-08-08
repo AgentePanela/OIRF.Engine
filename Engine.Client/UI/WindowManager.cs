@@ -13,8 +13,8 @@ namespace Engine.Client.UI;
 // registered explicitly in GameClient.cs — not [RegisterIoC], that would double-register it
 public sealed class WindowManager
 {
-    [Dependency] private readonly InputManager _input = default!;
-    [Dependency] private readonly UIManager _ui = default!;
+    //[Dependency] private readonly InputManager _input = default!;
+    //[Dependency] private readonly UIManager _ui = default!;
     /*
 
     private readonly Panel _rootWidget = new() { Id = "_WindowsDefault" };
