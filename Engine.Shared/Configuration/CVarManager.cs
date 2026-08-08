@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using Engine.Shared.IoC;
 using Engine.Shared.Storage;
@@ -188,6 +189,7 @@ public sealed class ConfigurationManager : IConfigurationManager
         {
             string s => $"\"{s}\"",
             bool b => b.ToString().ToLower(),
+            float f => f.ToString(CultureInfo.InvariantCulture),
             _ => value.ToString()!
         };
     }
@@ -206,6 +208,9 @@ public sealed class ConfigurationManager : IConfigurationManager
 
         if (generic == typeof(bool))
             return bool.Parse(raw);
+
+        if (generic == typeof(float))
+            return float.Parse(raw, CultureInfo.InvariantCulture);
 
         return raw;
     }

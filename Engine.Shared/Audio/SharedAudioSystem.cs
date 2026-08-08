@@ -176,6 +176,23 @@ public abstract class SharedAudioSystem : EntitySystem
     public bool IsPlaying(EntityUid uid)
         => TryComp<AudioComponent>(uid, out var comp) && comp.Elapsed is not null;
 
+    /// <summary>
+    /// Every entity currently playing an AudioComponent tagged with "tag".
+    /// </summary>
+    public IEnumerable<EntityUid> GetPlayingByTag(ProtoId<AudioTagPrototype> tag)
+    {
+#if DEBUG
+        if (!_proto.HasIndex(tag))
+            throw new UnknowPrototypeException($"Unknow audioTag prototype {tag.Id}.");
+#endif
+
+        foreach (var (uid, comp) in GetEntitiesWithComp<AudioComponent>())
+        {
+            if (comp.Elapsed is not null && comp.Tags.Contains(tag))
+                yield return uid;
+        }
+    }
+
     /// <summary>Override to layer real playback on top. Return false to abort - the entity won't be considered playing.</summary>
     protected virtual bool OnPlay(EntityUid uid, AudioComponent comp) => true;
 
