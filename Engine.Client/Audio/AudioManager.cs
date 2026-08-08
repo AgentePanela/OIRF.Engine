@@ -42,6 +42,11 @@ public interface IAudioManager
     public void SetPan(StreamPackage package, float pan);
 
     /// <summary>
+    /// Apply a sound in a spatial 3D world.
+    /// </summary>
+    public void Apply3D(StreamPackage package, AudioListener listener, AudioEmitter emitter);
+
+    /// <summary>
     /// Current volume multiplier for a tag (0..1, default 1).
     /// </summary>
     public float GetTagVolume(ProtoId<AudioTagPrototype> tag);
@@ -179,6 +184,9 @@ internal sealed partial class AudioManager : IAudioManager
 
     public void SetPan(StreamPackage package, float pan)
         => package.PlayingSound.Pan = pan;
+
+    public void Apply3D(StreamPackage package, AudioListener listener, AudioEmitter emitter)
+        => package.PlayingSound.Apply3D(listener, emitter);
 
     public float GetTagVolume(ProtoId<AudioTagPrototype> tag)
     {

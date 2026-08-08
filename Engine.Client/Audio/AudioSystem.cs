@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using Engine.Client.Graphics;
 using Engine.Shared.Audio;
+using Engine.Shared.Common;
 using Engine.Shared.GameObjects;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Audio;
 using MonoSound.Streaming;
 
 namespace Engine.Client.Audio;
@@ -23,6 +25,10 @@ public sealed class AudioSystem : SharedAudioSystem
     private readonly Dictionary<EntityUid, FadeState> _fades = new();
     private readonly List<EntityUid> _scratchFadesDone = new();
     private readonly List<EntityUid> _scratchFadeStops = new();
+
+    // Reused every ApplySpatial call
+    private readonly AudioListener _listener = new();
+    private readonly AudioEmitter _emitter = new();
 
     public override void Update(float dt)
     {
@@ -147,16 +153,18 @@ public sealed class AudioSystem : SharedAudioSystem
     }
 
     private void ApplySpatial(StreamPackage package, AudioComponent comp, TransformComponent transform, Vector2 listenerPos)
+        => ApplySpatial(package, comp, transform, listenerPos.ToVector3());
+
+    private void ApplySpatial(StreamPackage package, AudioComponent comp, TransformComponent transform, Vector3 listenerPos)
     {
         var maxDistance = MathHelper.Max(comp.MaxDistance, 1f);
-        var toListener = transform.Position - listenerPos;
+        var toListener = transform.Position - listenerPos.ToVector2();
         var distance = toListener.Length();
-
         var attenuation = MathHelper.Clamp(1f - distance / maxDistance, 0f, 1f);
-        var pan = MathHelper.Clamp(toListener.X / maxDistance, -1f, 1f);
-
         _audio.SetVolume(package, comp.Volume * attenuation);
-        _audio.SetPan(package, pan);
+        var direction = distance > 0.0001f ? toListener / distance : Vector2.Zero;
+        _emitter.Position = new Vector3(direction.X, listenerPos.Z, direction.Y);
+        _audio.Apply3D(package, _listener, _emitter);
     }
 
     protected override bool OnPlay(EntityUid uid, AudioComponent comp)
