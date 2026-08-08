@@ -12,7 +12,7 @@ namespace Engine.Shared.Audio;
 /// </summary>
 public sealed class SharedAudioManager
 {
-    public readonly ResPath ResPath = new("Audio");
+    public readonly ResPath ResPath = new("Audios");
 
     private readonly Dictionary<string, string> _paths = new();
     private readonly Dictionary<string, AudioMetadata> _metadata = new();

@@ -28,12 +28,22 @@ public interface IAudioManager
 
     /// <summary>Stops playback and disposes the stream immediately.</summary>
     public void Stop(StreamPackage package);
+
+    /// <summary>
+    /// Live volume update for an already-playing stream.
+    /// </summary>
+    public void SetVolume(StreamPackage package, float volume);
+
+    /// <summary>
+    /// Live stereo pan update for an already-playing stream. -1 = full left, 1 = full right.
+    /// </summary>
+    public void SetPan(StreamPackage package, float pan);
 }
 
 internal sealed partial class AudioManager : IAudioManager
 {
     /// <summary>
-    /// The shared file/metadata manifest (see AudioResourceRegistry) - already populated by
+    /// The shared file/metadata manifest (see SharedAudioManager) - already populated by
     /// SharedContentManager.PostInit() by the time this manager's Init() runs.
     /// </summary>
     [Dependency] private readonly SharedAudioManager _registry = default!;
@@ -119,6 +129,12 @@ internal sealed partial class AudioManager : IAudioManager
 
     public bool HasAudio(string file)
         => _registry.HasAudio(file);
+
+    public void SetVolume(StreamPackage package, float volume)
+        => package.PlayingSound.Volume = volume;
+
+    public void SetPan(StreamPackage package, float pan)
+        => package.PlayingSound.Pan = pan;
 
     private StreamPackage? GetPackage(string relative)
     {
