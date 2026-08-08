@@ -48,6 +48,12 @@ public interface IAudioManager
 
     public void SetTagVolume(ProtoId<AudioTagPrototype> tag, float volume);
 
+    /// <summary>
+    /// Ramps a tag volume multiplier to <paramref name="target"/> over <paramref name="duration"/>
+    /// seconds.
+    /// </summary>
+    public void FadeTagVolume(ProtoId<AudioTagPrototype> tag, float target, float duration);
+
     /// <summary>Every currently-playing stream tagged with "tag".</summary>
     public IEnumerable<StreamPackage> GetPlayingByTag(ProtoId<AudioTagPrototype> tag);
 }
@@ -66,6 +72,9 @@ internal sealed partial class AudioManager : IAudioManager
 
     // runtime-only volume multiplier per tag (0..1, default 1) - not persisted.
     private readonly Dictionary<string, float> _tagVolumes = new();
+
+    private readonly Dictionary<string, TagFadeState> _tagFades = new();
+    private readonly List<string> _scratchTagFadesDone = new();
 
     public AudioManager()
         => IoCManager.ResolveDependencies(this);
@@ -88,6 +97,8 @@ internal sealed partial class AudioManager : IAudioManager
         #if DEBUG
         DrainHotReloadQueue();
         #endif
+
+        UpdateTagFades(dt);
 
         for (int i = RunningStreams.Count - 1; i >= 0; i--)
         {
@@ -182,6 +193,53 @@ internal sealed partial class AudioManager : IAudioManager
         RecomputeVolumes();
     }
 
+    public void FadeTagVolume(ProtoId<AudioTagPrototype> tag, float target, float duration)
+    {
+        AssertValidTag(tag);
+
+        if (duration <= 0f)
+        {
+            _tagFades.Remove(tag.Id);
+            SetTagVolume(tag, target);
+            return;
+        }
+
+        _tagFades[tag.Id] = new TagFadeState
+        {
+            From = GetTagVolume(tag),
+            To = target,
+            Duration = duration,
+            Elapsed = 0f,
+        };
+    }
+
+    private void UpdateTagFades(float dt)
+    {
+        if (_tagFades.Count == 0)
+            return;
+
+        _scratchTagFadesDone.Clear();
+
+        foreach (var tagId in _tagFades.Keys)
+        {
+            var fade = _tagFades[tagId];
+            fade.Elapsed += dt;
+            var t = Math.Clamp(fade.Elapsed / fade.Duration, 0f, 1f);
+
+            _tagVolumes[tagId] = fade.From + (fade.To - fade.From) * t;
+
+            if (t >= 1f)
+                _scratchTagFadesDone.Add(tagId);
+            else
+                _tagFades[tagId] = fade;
+        }
+
+        foreach (var tagId in _scratchTagFadesDone)
+            _tagFades.Remove(tagId);
+
+        RecomputeVolumes();
+    }
+
     private void AssertValidTag(ProtoId<AudioTagPrototype> tag)
     {
         #if DEBUG
@@ -227,5 +285,13 @@ internal sealed partial class AudioManager : IAudioManager
         var sound = StreamLoader.GetStreamedSound(stream, AudioType.OGG, false);
         RunningStreams.Add((stream, sound, tags, baseVolume));
         return sound;
+    }
+
+    private struct TagFadeState
+    {
+        public float From;
+        public float To;
+        public float Duration;
+        public float Elapsed;
     }
 }
