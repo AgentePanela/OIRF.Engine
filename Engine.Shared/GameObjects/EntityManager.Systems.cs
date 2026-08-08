@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 
 namespace Engine.Shared.GameObjects;
 
@@ -31,6 +32,10 @@ public sealed partial class EntityManager
         {
             if (type.IsAbstract || !type.IsSubclassOf(typeof(EntitySystem)))
                 continue;
+            
+            var ignore = type.GetCustomAttribute<IgnoreSystemRegistryAttribute>();
+            if (ignore is not null)
+                continue;
 
             var instance = Activator.CreateInstance(type) as EntitySystem;
             if (instance is null)
@@ -43,6 +48,10 @@ public sealed partial class EntityManager
             IoCManager.Register(type, instance);
             for (var baseType = type.BaseType; baseType is not null && baseType != typeof(EntitySystem) && baseType.IsAbstract; baseType = baseType.BaseType)
             {
+                var ignoreBase = baseType.GetCustomAttribute<IgnoreSystemRegistryAttribute>();
+                if (ignoreBase is not null)
+                    continue;
+
                 _systemLookup.Add(baseType, instance);
                 IoCManager.Register(baseType, instance);
             }
