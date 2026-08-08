@@ -1,4 +1,5 @@
 using Engine.Client.Assets;
+using Engine.Client.Audio;
 using Engine.Client.GameObjects;
 using Engine.Client.Graphics;
 using Engine.Client.UI;
@@ -29,6 +30,7 @@ public abstract class Scene : IEntityScene, IDisposable
     protected ContentManager _content { get; private set; }
     [Dependency] protected SceneManager _scene;
     [Dependency] protected IAssetManager _asset;
+    [Dependency] protected IAudioManager _audio;
     [Dependency] protected RenderManager _renderer;
     [Dependency] protected EntityManager _entManager;
     public Color? BackgroundColor;

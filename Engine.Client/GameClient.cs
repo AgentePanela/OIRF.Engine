@@ -313,7 +313,6 @@ public class GameClient : Game
 
         GameTime.UpdateDelta(gameTime);
         InputManager.Update(IsActive);
-        Audio.Update(GameTime.DeltaTime);
         base.Update(gameTime);
         Assets.Update(gameTime);
         Prototypes.Update();
@@ -332,6 +331,7 @@ public class GameClient : Game
 
         float simulationDeltaTime = _paused ? 0f : GameTime.DeltaTime;
         EntityManager.Update(simulationDeltaTime);
+        Audio.Update(GameTime.DeltaTime); // after ECS so AudioSystem sees FinishedStreaming before packages get disposed here
 
         _gen0 = GC.CollectionCount(0);
         _gen1 = GC.CollectionCount(1);

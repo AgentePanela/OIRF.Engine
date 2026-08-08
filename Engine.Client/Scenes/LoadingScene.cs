@@ -77,6 +77,7 @@ public abstract class LoadingScene : Scene
     protected virtual void StartLoading()
     {
         _asset.Init(GameClient.GraphicsDevice, GameClient.SpriteBatch);
+        _audio.Init();
         _fonts.BootstrapDefaults();
         Log.Debug("LoadingState = TextureLoading.");
         _state = LoadingState.TextureLoading;
