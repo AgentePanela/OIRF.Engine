@@ -1,6 +1,43 @@
 # Pre-Release
 Versions released before the engine first full release
 
+## PR 0.5.0?
+
+## PR 0.4.0
+08/08/2026
+
+### New Features
+- Audio system rewrite: `SharedAudioSystem`, `AudioComponent`, `AudioListenerComponent` and `SharedAudioManifest` replace the old audio code, adding spatial (3D) audio with proper distance attenuation/panning via MonoGame's `AudioListener`/`AudioEmitter`, fading, sound tags, and server-side audio support. See `Docs/Content/Audio.md`.
+- Basic threading support: new `Engine.Shared.Threading` namespace (`IParallelManager`, `IJob`, `IParallelJob`, `IParallelRangeJob`) dispatches work onto the thread pool, falling back to inline execution for workloads under a job's minimum batch size. `MainThread.AssertMainThread()` (Debug-only) catches ECS state touched off the main thread, and `MainThread.SafeThreads` lets a background thread opt in for bounded stretches of work (e.g. boot). Tunable via the `threading.parallelprocesscount` CVar.
+- Transform parenting: `TransformComponent.Parent` plus a new `TransformSystem` that moves/rotates children along with their parent every tick and cascades entity deletion to children.
+- Animation layers: `AnimationComponent.Layers` lets individual `SpriteComponent` layers play their own animation independently from the base sprite, via `AnimationSystem.SetLayerAnimation`/`PauseLayer`/`ResumeLayer`. Animation events now carry a `LayerId`.
+- Touch input: `InputManager` reads touch via MonoGame's `TouchPanel` (`AnyTouchTapped`/`AnyTouchDown`/`AnyTouchReleased`, `TouchScreenPosition`/`TouchWorldPosition`) and emulates the left mouse button from touch by default (`input.EmulateMouseFromTouch`).
+- File system abstraction: `IFileSystem`/`FileSystem`/`DesktopFileSystem` decouple resource and user-data I/O from the disk, wired once through `SharedResourceManager`.
+- Hot reloading for prototypes, locale `.ftl` files, and audio banks, on top of the shader hot reloading already in 0.3.0.
+- `SpriteLayer.Offset` positions a layer relative to the main sprite (rotated with the entity)
+- Abstract `EntitySystem` base classes can now be injected/resolved like concrete ones (`EntityManager.Systems`).
+- `EntityManager.WipeAllEntities()` clears the entire entity set at once.
+- Compiled shader cache is now encrypted at rest (`ShaderCrypto`, AES-GCM)
+- `ClientOptions.SelfContainedDataPath` stores user data next to the executable instead of `%AppData%`.
+
+### Improvements
+- Lighting: further occluder offset/seam fixes on top of the 0.3.0 rework, plus a lighting tab in the debug window and an occluder debug draw system.
+- Shaders now compile during game loading with progress reported through the loading scene, and the resource builder gained finer build control.
+- `RenderManager` sprite depth-sorting refactored.
+- Fixed dictionary (de)serialization and raw-section output in `DataFieldConverter`, and entity prototype id no longer failing to propagate.
+- New `[AnimationKeyAttribute]`, `[ShaderKeyAttribute]`, `[TextureKeyAttribute]` resource key attributes for editor/tooling integration.
+- `EntityUid` gained an `Invalid` check.
+- `.sln` replaced by `.slnx` (new XML-based solution format).
+
+### Bugfixes
+- Fixed render target viewport rendering and a `Camera2D` viewport bug.
+- Fixed `TilePrototype.Sprite` not actually being required.
+- Fixed engine version string.
+
+### Breaking Changes
+- `OIRF.Engine.sln` was removed in favor of `OIRF.Engine.slnx`.
+- The old audio API surface was replaced by `SharedAudioSystem`/`AudioComponent`/`AudioListenerComponent` - see `Docs/Content/Audio.md`.
+
 ## PR 0.3.0
 
 ### New Features
