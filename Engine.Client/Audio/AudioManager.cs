@@ -10,6 +10,7 @@ using Microsoft.Xna.Framework.Audio;
 using System;
 using Engine.Shared.IoC;
 using Engine.Shared.Assets;
+using Engine.Shared.Audio;
 using Engine.Shared.Storage;
 
 namespace Engine.Client.Audio;
@@ -19,30 +20,25 @@ public interface IAudioManager
     internal void Init();
     internal void Update(float dt);
 
-    public StreamPackage? Play(string file, float volume = 1f, bool loop = false);
+    public StreamPackage? Play(string file, float volume = 1f, bool loop = false, float pitch = 0f);
 
-    public bool TryPlay(string file, [NotNullWhen(true)] out StreamPackage? audio, float volume = 1f, bool loop = false);
+    public bool TryPlay(string file, [NotNullWhen(true)] out StreamPackage? audio, float volume = 1f, bool loop = false, float pitch = 0f);
 
     public bool HasAudio(string audio);
+
+    /// <summary>Stops playback and disposes the stream immediately.</summary>
+    public void Stop(StreamPackage package);
 }
 
 internal sealed partial class AudioManager : IAudioManager
 {
     /// <summary>
-    /// Stores the relative path | full path for a audio file, all audio files that will be played 
-    /// must be present in this dictionary that is filled during the game loading.
+    /// The shared file/metadata manifest (see AudioResourceRegistry) - already populated by
+    /// SharedContentManager.PostInit() by the time this manager's Init() runs.
     /// </summary>
-    public readonly Dictionary<string, string> AudiosPath = new();
-    /// <summary>
-    /// <relative path, stream>
-    /// </summary>
-    public readonly Dictionary<string, Stream> CachedStreams = new();
-    /// <summary>
-    /// Null stream means that this is using a cached stream.
-    /// </summary>
-    public readonly List<(Stream? stream, StreamPackage package)> RunningStreams = new();
+    [Dependency] private readonly SharedAudioManager _registry = default!;
 
-    public readonly ResPath resPath = new("Audio");
+    public readonly List<(Stream stream, StreamPackage package)> RunningStreams = new();
 
     public AudioManager()
         => IoCManager.ResolveDependencies(this);
@@ -50,11 +46,6 @@ internal sealed partial class AudioManager : IAudioManager
     void IAudioManager.Init()
     {
         MonoSoundLibrary.Init(GameClient.Instance);
-        var audioDirs = resPath.GetFolders();
-        LoadFiles(audioDirs);
-
-        //var musicDir = Path.Combine(_asset.GetResourcesFolder(), "Music");
-        //LoadFiles(musicDir, false /* todo: change how cache works (use byte[] instead)*/); // will keep the audios in stream
 
         #if DEBUG
         InitHotReload();
@@ -76,38 +67,19 @@ internal sealed partial class AudioManager : IAudioManager
             if (sound.package.FinishedStreaming)
             {
                 sound.package.Dispose();
-                sound.stream?.Dispose();
+                sound.stream.Dispose();
                 RunningStreams.RemoveAt(i);
             }
         }
     }
 
-    public void LoadFiles(string[] dirs, bool cache = false)
+    public StreamPackage? Play(string file, float volume = 1f, bool loop = false, float pitch = 0f)
     {
-        foreach (var dir in dirs)
-        {
-            var files = FileSystem.GetFiles(dir, "*.ogg");
-            foreach (var file in files)
-            {
-                var relative = SharedResourceManager.NormalizeKey(dir, file);
-                if (HasAudio(relative))
-                    throw new Exception($"{relative} is already loaded. Make sure you dont have a duplicated sound in audio and music folders.");
-
-                AudiosPath.Add(relative, file);
-
-                if (cache)
-                    CachedStreams.Add(relative, FileSystem.OpenRead(file));
-            }
-        }
-    }
-
-    public StreamPackage? Play(string file, float volume = 1f, bool loop = false)  
-    {
-        TryPlay(file, out var audio, volume, loop);
+        TryPlay(file, out var audio, volume, loop, pitch);
         return audio;
     }
 
-    public bool TryPlay(string file, [NotNullWhen(true)] out StreamPackage? audio, float volume = 1f, bool loop = false)
+    public bool TryPlay(string file, [NotNullWhen(true)] out StreamPackage? audio, float volume = 1f, bool loop = false, float pitch = 0f)
     {
         audio = default;
         if (!HasAudio(file))
@@ -118,33 +90,45 @@ internal sealed partial class AudioManager : IAudioManager
             return false;
 
         audio.PlayingSound.Volume = volume;
+        audio.PlayingSound.Pitch = pitch;
         audio.IsLooping = loop;
         audio.Play();
         return true;
     }
 
+    /// <summary>
+    /// Stops playback and immediately reaps the RunningStreams entry - a manual stop isn't
+    /// guaranteed to flip FinishedStreaming, so Update()'s GC pass can't be relied on here.
+    /// </summary>
+    public void Stop(StreamPackage package)
+    {
+        package.Stop();
+
+        for (int i = RunningStreams.Count - 1; i >= 0; i--)
+        {
+            if (!ReferenceEquals(RunningStreams[i].package, package))
+                continue;
+
+            var (stream, pkg) = RunningStreams[i];
+            RunningStreams.RemoveAt(i);
+            pkg.Dispose();
+            stream.Dispose();
+            break;
+        }
+    }
+
     public bool HasAudio(string file)
-        => AudiosPath.ContainsKey(file);
+        => _registry.HasAudio(file);
 
     private StreamPackage? GetPackage(string relative)
     {
-        var cached = true;
-        if (!CachedStreams.TryGetValue(relative, out var stream))
-        {
-            if (!AudiosPath.TryGetValue(relative, out var fullPath))
-                return null;
+        if (!_registry.TryGetPath(relative, out var fullPath))
+            return null;
 
-            stream = FileSystem.OpenRead(fullPath);
-            cached = false;
-        }
-        
+        var stream = FileSystem.OpenRead(fullPath);
         stream.Position = 0;
         var sound = StreamLoader.GetStreamedSound(stream, AudioType.OGG, false);
-        if (cached)
-            RunningStreams.Add((null, sound));
-        else
-            RunningStreams.Add((stream, sound));
-        
+        RunningStreams.Add((stream, sound));
         return sound;
     }
 }
