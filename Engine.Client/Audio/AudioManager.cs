@@ -64,7 +64,7 @@ internal sealed partial class AudioManager : IAudioManager
     /// The shared file/metadata manifest (see SharedAudioManager) - already populated by
     /// SharedContentManager.PostInit() by the time this manager's Init() runs.
     /// </summary>
-    [Dependency] private readonly SharedAudioManager _registry = default!;
+    [Dependency] private readonly SharedAudioManifest _registry = default!;
     [Dependency] private readonly IConfigurationManager _cfg = default!;
     [Dependency] private readonly IPrototypeManager _proto = default!;
 

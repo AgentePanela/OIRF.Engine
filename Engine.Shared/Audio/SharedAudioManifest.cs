@@ -10,7 +10,7 @@ namespace Engine.Shared.Audio;
 /// Shared audio manifest: scans the "Audio" resource root for .ogg files and reads their
 /// metadata (duration/sample rate/channels).
 /// </summary>
-public sealed class SharedAudioManager
+public sealed class SharedAudioManifest
 {
     public readonly ResPath ResPath = new("Audios");
 

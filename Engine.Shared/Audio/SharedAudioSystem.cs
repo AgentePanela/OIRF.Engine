@@ -12,7 +12,7 @@ namespace Engine.Shared.Audio;
 public abstract class SharedAudioSystem : EntitySystem
 {
     [Dependency] protected readonly IPrototypeManager _proto = default!;
-    [Dependency] protected readonly SharedAudioManager _registry = default!;
+    [Dependency] protected readonly SharedAudioManifest _registry = default!;
 
     private readonly List<EntityUid> _scratchFinished = new();
 
