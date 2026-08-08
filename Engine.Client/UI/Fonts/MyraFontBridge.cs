@@ -1,3 +1,5 @@
+/* commented out: depends on Myra, pending migration to the new UI system
+
 using Engine.Shared.IoC;
 using EngineTextStyle = Engine.Client.Graphics.Fonts.TextStyle;
 using EngineTextStyleLibrary = Engine.Client.Graphics.Fonts.TextStyleLibrary;
@@ -28,7 +30,7 @@ public sealed class MyraFontBridge
         return label;
     }
 
-    public MyraButton CreateButton(string text, EngineTextStyle buttonStyle = EngineTextStyle.Button, 
+    public MyraButton CreateButton(string text, EngineTextStyle buttonStyle = EngineTextStyle.Button,
         EngineTextStyle contentStyle = EngineTextStyle.ButtonText)
     {
         var button = new MyraButton
@@ -52,3 +54,5 @@ public sealed class MyraFontBridge
             ApplyStyle(label, style);
     }
 }
+
+*/

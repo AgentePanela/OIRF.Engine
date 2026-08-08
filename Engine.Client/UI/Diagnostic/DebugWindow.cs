@@ -1,3 +1,5 @@
+/* commented out: depends on Myra, pending migration to the new UI system
+
 using Engine.Shared.Configuration;
 using Engine.Client.Assets;
 
@@ -69,3 +71,5 @@ public sealed class DebugWindow : DefaultWindow
         base.OnClose();
     }
 }
+
+*/

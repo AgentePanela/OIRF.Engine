@@ -1,3 +1,5 @@
+/* commented out: depends on Myra, pending migration to the new UI system
+
 using Engine.Client.Assets;
 using Engine.Client.Graphics;
 using Engine.Shared.IoC;
@@ -93,3 +95,5 @@ public class SpriteWidget : Image
         Height = atlasSpr.Height;
     }
 }
+
+*/

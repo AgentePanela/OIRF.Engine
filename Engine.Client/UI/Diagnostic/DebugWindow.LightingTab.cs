@@ -1,3 +1,5 @@
+/* commented out: depends on Myra, pending migration to the new UI system
+
 #pragma warning disable CS0618
 
 using System;
@@ -275,3 +277,5 @@ public sealed class LightingDebugTab : TabItem, IDisposable
         }
     }
 }
+
+*/

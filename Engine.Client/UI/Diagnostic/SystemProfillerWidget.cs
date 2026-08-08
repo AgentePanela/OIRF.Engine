@@ -1,3 +1,5 @@
+/* commented out: depends on Myra, pending migration to the new UI system
+
 using Engine.Client.Debug.Diagnostics;
 
 using FontStashSharp;
@@ -29,7 +31,7 @@ public sealed class SystemProfilerWidget : Widget
     private const int PaddingX = 8;
     private const int PaddingY = 8;
     private const int SectionGap = 12;
- 
+
     private static readonly Color HeaderColor = new(220, 220, 220, 255);
     private static readonly Color SectionTitleColor = new(180, 180, 180, 255);
     private static readonly Color UpdateBarColor = new(80, 180, 255, 220);
@@ -38,14 +40,14 @@ public sealed class SystemProfilerWidget : Widget
     private static readonly Color LabelColor = new(210, 210, 210, 255);
     private static readonly Color UpdateValueColor = new(140, 210, 255, 255);
     private static readonly Color DrawValueColor = new(140, 255, 170, 255);
- 
+
     // Pre-baked render entry — built on Tick, read-only on Render.
     private readonly struct RenderEntry
     {
         public readonly string Label;
         public readonly string Value;
         public readonly float BarFraction; // 0..1
- 
+
         public RenderEntry(string label, string value, float barFraction)
         {
             Label = label;
@@ -53,20 +55,20 @@ public sealed class SystemProfilerWidget : Widget
             BarFraction = barFraction;
         }
     }
- 
+
     private readonly SpriteFontBase _font;
     private readonly SystemsProfiler _profiler;
- 
+
     // Two fixed-capacity lists reused across ticks — no re-allocation after warmup.
     private readonly List<RenderEntry> _updateEntries = new(10);
     private readonly List<RenderEntry> _drawEntries = new(10);
- 
+
     // Scratch list reused in Tick to avoid allocating on every refresh.
     private readonly List<SystemSnapshot> _scratch = new(64);
- 
+
     private float _refreshTimer;
     private const float RefreshInterval = 0.25f;
- 
+
     public SystemProfilerWidget(SpriteFontBase font, SystemsProfiler profiler)
     {
         _font = font;
@@ -74,88 +76,88 @@ public sealed class SystemProfilerWidget : Widget
         Width = PanelWidth;
         UpdateHeight();
     }
- 
+
     public override void InternalRender(RenderContext context)
     {
         var b = ActualBounds;
         int x = b.X + PaddingX;
         int y = b.Y + PaddingY;
- 
+
         context.DrawString(_font, "SYSTEMS PROFILER", new Vector2(x, y), HeaderColor);
         y += HeaderHeight;
- 
+
         y = DrawSection(context, x, y, "UPDATE", _updateEntries, UpdateBarColor, UpdateValueColor);
         y += SectionGap;
         DrawSection(context, x, y, "DRAW", _drawEntries, DrawBarColor, DrawValueColor);
     }
- 
+
     private int DrawSection(RenderContext context, int x, int y, string title,
         List<RenderEntry> entries, Color barColor, Color valueColor)
     {
         context.DrawString(_font, title, new Vector2(x, y), SectionTitleColor);
         y += SectionTitleHeight;
- 
+
         if (entries.Count == 0)
         {
             context.DrawString(_font, "no data yet...", new Vector2(x, y + 2), LabelColor);
             return y + RowHeight;
         }
- 
+
         int barAreaX = x + LabelWidth;
         int valueX = barAreaX + BarMaxWidth + 6;
- 
+
         for (int i = 0; i < entries.Count; i++)
         {
             var e = entries[i];
- 
+
             context.DrawString(_font, e.Label, new Vector2(x, y + 1), LabelColor);
- 
+
             context.FillRectangle(new Rectangle(barAreaX, y, BarMaxWidth, BarHeight), BarBackColor);
- 
+
             int barW = (int)(e.BarFraction * BarMaxWidth);
             if (barW > 0)
                 context.FillRectangle(new Rectangle(barAreaX, y, barW, BarHeight), barColor);
- 
+
             context.DrawString(_font, e.Value, new Vector2(valueX, y + 1), valueColor);
- 
+
             y += RowHeight;
         }
- 
+
         return y;
     }
- 
+
     public void Tick(float dt)
     {
         _refreshTimer += dt;
         if (_refreshTimer < RefreshInterval)
             return;
- 
+
         _refreshTimer = 0f;
- 
+
         _scratch.Clear();
         foreach (var s in _profiler.GetAll())
             _scratch.Add(s);
- 
+
         BakeEntries(_scratch, s => s.UpdateMs, _updateEntries);
         BakeEntries(_scratch, s => s.DrawMs, _drawEntries);
- 
+
         UpdateHeight();
     }
- 
+
     private static void BakeEntries(List<SystemSnapshot> source,
         Func<SystemSnapshot, double> getValue, List<RenderEntry> dest)
     {
         dest.Clear();
- 
+
         // Partial insertion sort for top-10 — avoids allocating a sorted copy.
         const int max = 10;
         int take = Math.Min(max, source.Count);
- 
+
         // Find top `take` by value using a simple selection approach.
         // For N=10 and typical system counts (< 50) this is fine.
         Span<int> topIdx = stackalloc int[max];
         Span<bool> used = stackalloc bool[source.Count];
- 
+
         for (int rank = 0; rank < take; rank++)
         {
             double best = -1;
@@ -170,11 +172,11 @@ public sealed class SystemProfilerWidget : Widget
             topIdx[rank] = bestIdx;
             used[bestIdx] = true;
         }
- 
+
         double maxMs = 0.001;
         for (int i = 0; i < take; i++)
             maxMs = Math.Max(maxMs, getValue(source[topIdx[i]]));
- 
+
         for (int i = 0; i < take; i++)
         {
             var snap = source[topIdx[i]];
@@ -185,12 +187,12 @@ public sealed class SystemProfilerWidget : Widget
                 (float)(ms / maxMs)));
         }
     }
- 
+
     private void UpdateHeight()
     {
         int updateRows = Math.Max(1, _updateEntries.Count);
         int drawRows = Math.Max(1, _drawEntries.Count);
- 
+
         Height = PaddingY * 2
                + HeaderHeight
                + SectionTitleHeight + updateRows * RowHeight
@@ -198,13 +200,13 @@ public sealed class SystemProfilerWidget : Widget
                + SectionTitleHeight + drawRows * RowHeight
                + PaddingY;
     }
- 
+
     private static string TruncateName(string name, int maxChars)
     {
         name = name.Replace("System", "Sys").Replace("Manager", "Mgr");
         return name.Length <= maxChars ? name : name[..maxChars];
     }
- 
+
     private static string FormatTime(double ms)
     {
         if (ms >= 1000.0) return $"{ms / 1000.0:0.00}s";
@@ -213,3 +215,5 @@ public sealed class SystemProfilerWidget : Widget
         return "0µs";
     }
 }
+
+*/

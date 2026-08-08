@@ -1,3 +1,5 @@
+/* commented out: depends on Myra, pending migration to the new UI system
+
 using Engine.Client.Graphics;
 using Engine.Shared.GameObjects;
 using Engine.Shared.IoC;
@@ -62,12 +64,12 @@ public class EntityWidget : Panel
             return;
 
         var entityManager = IoCManager.Resolve<EntityManager>();
-        
+
         if (!entityManager.HasEntity(_entityUid, out var ent) || ent.Deleting)
         {
             if (Widgets.Count > 0)
                 Widgets.Clear();
-            
+
             return;
         }
 
@@ -75,10 +77,10 @@ public class EntityWidget : Panel
         {
             if (Widgets.Count > 0)
                 Widgets.Clear();
-            
+
             return;
         }
-        int expectedWidgets = (string.IsNullOrEmpty(spriteComp.Key) ? 0 : 1) + 
+        int expectedWidgets = (string.IsNullOrEmpty(spriteComp.Key) ? 0 : 1) +
                               (spriteComp.Layers?.Count(l => l.Visible && !string.IsNullOrEmpty(l.Key)) ?? 0);
 
         if (Widgets.Count != expectedWidgets)
@@ -161,3 +163,5 @@ public class EntityWidget : Panel
         }
     }
 }
+
+*/

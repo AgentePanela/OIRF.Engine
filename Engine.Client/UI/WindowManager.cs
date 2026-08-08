@@ -1,6 +1,6 @@
 using Engine.Shared.IoC;
 using Engine.Client.Inputs;
-using Engine.Client.UI.Debug;
+//using Engine.Client.UI.Debug;
 using Microsoft.Xna.Framework.Input;
 using Myra.Graphics2D.UI;
 using System;
@@ -15,21 +15,23 @@ public sealed class WindowManager
 {
     [Dependency] private readonly InputManager _input = default!;
     [Dependency] private readonly UIManager _ui = default!;
+    /*
 
     private readonly Panel _rootWidget = new() { Id = "_WindowsDefault" };
     private readonly List<DefaultWindow> _windows = new();
     private readonly Dictionary<DefaultWindow, EventHandler> _closedHandlers = new();
 
     private DebugOverlayScreen? _debugOverlay;
+    */
 
     public WindowManager()
     {
         IoCManager.ResolveDependencies(this);
-        _ui.AddRootWidget(_rootWidget);
-        _rootWidget.ZIndex = 999;
+        //_ui.AddRootWidget(_rootWidget);
+        //_rootWidget.ZIndex = 999;
     }
 
-    public DefaultWindow OpenWindow(DefaultWindow window)
+    /*public DefaultWindow OpenWindow(DefaultWindow window)
     {
         if (_windows.Contains(window))
             return window;
@@ -189,5 +191,5 @@ public sealed class WindowManager
         _debugOverlay.BuildElements();
         _debugOverlay.Initialize();
         _ui.AddRootWidget(_debugOverlay.Root);
-    }
+    }*/
 }

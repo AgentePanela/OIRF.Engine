@@ -1,3 +1,5 @@
+/* commented out: depends on Myra, pending migration to the new UI system
+
 using Engine.Shared.IoC;
 using Myra.Graphics2D.UI;
 using System;
@@ -54,7 +56,7 @@ public abstract class DefaultWindow : Window, IDisposable
             RemoveElement(element);
     }
 
-    public T? GetElement<T>(string id) where T : Widget 
+    public T? GetElement<T>(string id) where T : Widget
         => Root.FindChildById<T>(id);
 
     public void Dispose()
@@ -115,3 +117,5 @@ public abstract class DefaultWindow : Window, IDisposable
         base.Close();
     }
 }
+
+*/

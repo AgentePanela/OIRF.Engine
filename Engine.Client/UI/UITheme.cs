@@ -1,3 +1,5 @@
+/* commented out: depends on Myra, pending migration to the new UI system
+
 using Microsoft.Xna.Framework;
 using Myra.Graphics2D.Brushes;
 using Myra.Graphics2D.UI.Styles;
@@ -119,3 +121,5 @@ public static class UITheme
             label.TextColor = TextColor;
     }
 }
+
+*/

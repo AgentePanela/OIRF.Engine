@@ -1,3 +1,5 @@
+/* commented out: depends on Myra, pending migration to the new UI system
+
 using Myra.Graphics2D.UI;
 using System;
 
@@ -42,7 +44,7 @@ public abstract class UICanvas : IDisposable
             RemoveElement(element);
     }
 
-    public T? GetElement<T>(string id) where T : Widget 
+    public T? GetElement<T>(string id) where T : Widget
         => Root.FindChildById<T>(id);
 
     public void Dispose()
@@ -78,4 +80,43 @@ public abstract class UICanvas : IDisposable
     public virtual void Draw(float dt) { }
 
     public virtual void OnClose() { }
+}
+
+*/
+
+using System;
+using Myra.Graphics2D.UI;
+
+namespace Engine.Client.UI;
+
+/// <summary>
+/// Represents a UI overlay that can display various widgets directly on top of the game-world.
+/// </summary>
+public abstract class UICanvas : IDisposable
+{
+    public Widget Root { get; internal set; }
+
+
+    public void Dispose()
+    {
+        
+    }
+
+    internal void Update(float dt)
+    {
+    }
+
+
+    internal void Draw(float dt)
+    {
+    }
+
+    internal void BuildElements()
+    {
+    }
+
+    internal void Initialize()
+    {
+    }
+
 }

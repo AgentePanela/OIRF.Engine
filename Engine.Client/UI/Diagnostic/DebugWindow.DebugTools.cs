@@ -1,3 +1,5 @@
+/* commented out: depends on Myra, pending migration to the new UI system
+
 using Engine.Shared.Configuration;
 #pragma warning disable CS0618
 
@@ -101,3 +103,5 @@ public sealed class DebugToolsTab : TabItem, IDisposable
         _cfg.Set(PhysicsCvars.CollisionMask, _collisionCheck.IsChecked);
     }
 }
+
+*/

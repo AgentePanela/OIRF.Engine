@@ -1,3 +1,5 @@
+/* commented out: depends on Myra, pending migration to the new UI system
+
 using Engine.Client.Graphics;
 using Engine.Shared.Configuration;
 
@@ -55,7 +57,7 @@ public sealed class DebugOverlayScreen : UICanvas
         Root.HorizontalAlignment = HorizontalAlignment.Stretch;
         Root.VerticalAlignment = VerticalAlignment.Stretch;
         Root.ZIndex = 998;
- 
+
         var leftPanel = new VerticalStackPanel
         {
             HorizontalAlignment = HorizontalAlignment.Left,
@@ -97,7 +99,7 @@ public sealed class DebugOverlayScreen : UICanvas
         leftPanel.Widgets.Add(_gameStateLabel);
         leftPanel.Widgets.Add(_elapsedLabel);
         leftPanel.Widgets.Add(CreateSpacer());
- 
+
         _profilerWidget = new SystemProfilerWidget(_fpsLabel.Font, _proff)
         {
             HorizontalAlignment = HorizontalAlignment.Right,
@@ -105,7 +107,7 @@ public sealed class DebugOverlayScreen : UICanvas
             Padding = new (8, 6),
             Background = _bgColor,
         };
- 
+
         AddElement(leftPanel);
         AddElement(_profilerWidget);
 
@@ -141,7 +143,7 @@ public sealed class DebugOverlayScreen : UICanvas
         _generalLabel.Text = $"{GameClient.Options.Title} - {_cfg.Get(GameCVars.GameVersion)}\n" +
                             $"Engine Version: {_cfg.Get(EngineCvars.EngineVersion)}\n" +
                             $"{PlatformInfo.GraphicsBackend} | {PlatformInfo.MonoGamePlatform}";
-        
+
         _renderSpentTime.Text = $"Renderer draw time: {FormatMs(_renderMan.DrawStopwatch.Elapsed.TotalMilliseconds)}";
         RefreshProfilerLabels();
 
@@ -221,3 +223,5 @@ public sealed class DebugOverlayScreen : UICanvas
         return "0µs";
     }
 }
+
+*/
