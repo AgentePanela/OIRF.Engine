@@ -10,7 +10,12 @@ namespace Engine.Shared.GameObjects;
 public sealed partial class EntityManager
 {
     [Dependency] internal SystemsProfiler _sysProff = default!;
+
     internal Dictionary<Type, EntitySystem> Systems = new();
+
+    // lookup used by GetSystem<T>/GetSystem(Type): real type + every abstract ancestor
+    private readonly Dictionary<Type, EntitySystem> _systemLookup = new();
+
     internal readonly Stopwatch _systemTimer = new();
 
     internal void RegisterSystems()
@@ -22,22 +27,27 @@ public sealed partial class EntityManager
                 try { return a.GetTypes(); }
                 catch { return Array.Empty<Type>(); }
             });
-        
         foreach (var type in types)
         {
             if (type.IsAbstract || !type.IsSubclassOf(typeof(EntitySystem)))
                 continue;
-            
+
             var instance = Activator.CreateInstance(type) as EntitySystem;
             if (instance is null)
                 continue;
-            
+
             Log.Debug($"Resgistring system type: {type.Name}");
             Systems.Add(type, instance);
+            _systemLookup.Add(type, instance);
             //IoCManager.ResolveDependencies(instance);
             IoCManager.Register(type, instance);
+            for (var baseType = type.BaseType; baseType is not null && baseType != typeof(EntitySystem) && baseType.IsAbstract; baseType = baseType.BaseType)
+            {
+                _systemLookup.Add(baseType, instance);
+                IoCManager.Register(baseType, instance);
+            }
+
             instance.SetBus(EventBus);
-            
         }
 
         foreach ((_, var system) in Systems) // resolve dependencies and init the system
@@ -61,7 +71,7 @@ public sealed partial class EntityManager
     public T? GetSystem<T>() where T : EntitySystem
     {
         var type = typeof(T);
-        if (!Systems.TryGetValue(type, out var sys))
+        if (!_systemLookup.TryGetValue(type, out var sys))
             return null;
         return (T) sys;
     }
@@ -71,7 +81,7 @@ public sealed partial class EntityManager
     /// </summary>
     public EntitySystem? GetSystem(Type type)
     {
-        if (!Systems.TryGetValue(type, out var sys))
+        if (!_systemLookup.TryGetValue(type, out var sys))
             return null;
         return sys;
     }
