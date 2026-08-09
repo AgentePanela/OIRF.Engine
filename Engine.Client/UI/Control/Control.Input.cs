@@ -22,6 +22,9 @@ public abstract partial class Control : IDisposable
     /// </summary>
     internal void SetFocused(bool focused)
     {
+        if (focused && !Focusable)
+            return;
+
         if (IsFocused == focused)
             return;
 

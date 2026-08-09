@@ -255,9 +255,6 @@ public class GameClient : Game
         if (Viewport != null)
             Viewport.UpdateScaleMatrix();
 
-        InterfaceManager.Resize();
-        //todo WindowManager.Resize();
-
         SuppressDraw();
     }
 

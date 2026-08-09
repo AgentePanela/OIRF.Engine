@@ -111,9 +111,14 @@ public abstract partial class Control : IDisposable
 
     #endregion
 
+    private bool _disposed;
     public void Dispose()
     {
+        if (_disposed)
+            return;
+        _disposed = true;
         OnDispose();
+        
         foreach (var child in _children.ToArray())
             child.Dispose();
 

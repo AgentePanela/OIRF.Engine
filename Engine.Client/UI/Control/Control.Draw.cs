@@ -12,7 +12,7 @@ public abstract partial class Control : IDisposable
     /// Draws this control and its subtree, clipped to <see cref="Bounds"/> intersected with
     /// whatever was already clipped by an ancestor.
     /// </summary>
-    internal void Draw(ShapeBatch sb, IFontManager fontManager)
+    internal void Draw(ShapeBatch sb, IFontManager fontManager, float dt)
     {
         if (!EffectivelyVisible)
             return;
@@ -26,10 +26,10 @@ public abstract partial class Control : IDisposable
 
         device.ScissorRectangle = clipped;
 
-        DrawSelf(sb, fontManager);
+        DrawSelf(sb, fontManager, dt);
 
         foreach (var child in Children)
-            child.Draw(sb, fontManager);
+            child.Draw(sb, fontManager, dt);
 
         device.ScissorRectangle = previousScissor;
     }
@@ -38,7 +38,7 @@ public abstract partial class Control : IDisposable
     /// Draws this control's own visuals (background, text, sprite, etc... not its children).
     /// Runs before children, so children render on top. The base implementation draws nothing.
     /// </summary>
-    protected virtual void DrawSelf(ShapeBatch sb, IFontManager fontManager)
+    protected virtual void DrawSelf(ShapeBatch sb, IFontManager fontManager, float dt)
     {
     }
 }

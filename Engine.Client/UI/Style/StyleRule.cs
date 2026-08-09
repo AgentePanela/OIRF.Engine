@@ -5,6 +5,8 @@ namespace Engine.Client.UI;
 
 // TODO: multiple classes per selector (styleClass: [danger, large], requiring all at once)
 // TODO: and ancestor combinators (descendant/child, like CSS ".dialog Button" / ".dialog > Button")
+
+// todo: automatic inheritance of property
 public sealed class StyleClass
 {
     [DataField("control")] public string? ControlType { get; set; }
