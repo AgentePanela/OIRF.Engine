@@ -31,18 +31,27 @@ public sealed partial class UIManager
     {
         IoCManager.ResolveDependencies(this);
         _shapeBatch = new ShapeBatch(GameClient.GraphicsDevice);
-        var bc = new BoxContainer();
-        bc.Separation = 5;
-        AddChild(bc);
-        bc.AddChild(new TestControl());
-        bc.AddChild(new TestControl());
-        bc.AddChild(new TestControl());
-        bc.AddChild(new TestControl());
-        bc.AddChild(new TestControl());
-        bc.AddChild(new TestControl());
-        bc.AddChild(new TestControl());
-        bc.AddChild(new TestControl());
-        bc.AddChild(new TestControl());
+
+        var root = new BoxContainer { Orientation = Orientation.Vertical, Separation = 10 };
+        AddChild(root);
+
+        var row = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 5 };
+        root.AddChild(row);
+
+        for (var i = 0; i < 9; i++)
+        {
+            var tc = new TestControl();
+            if (i is 2 or 5)
+                tc.HorizontalExpand = true;
+
+            row.AddChild(tc);
+        }
+
+        var column = new BoxContainer { Orientation = Orientation.Vertical, Separation = 5 };
+        root.AddChild(column);
+
+        for (var i = 0; i < 4; i++)
+            column.AddChild(new TestControl());
     }
 
     public void AddChild(Control control) => Root.AddChild(control);
