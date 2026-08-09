@@ -44,6 +44,15 @@ public enum VerticalAlignment
 }
 
 /// <summary>
+/// Which axis a BoxContainer lays its children out along.
+/// </summary>
+public enum Orientation
+{
+    Horizontal,
+    Vertical
+}
+
+/// <summary>
 /// Controls how a control participates in mouse hit-testing.
 /// </summary>
 public enum MouseFilterMode

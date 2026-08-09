@@ -1,6 +1,7 @@
 using Apos.Shapes;
 using Engine.Client.Graphics.Fonts;
 using Engine.Client.Inputs;
+using Engine.Client.UI.Controls;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -15,7 +16,12 @@ public sealed partial class UIManager
     [Dependency] private readonly IFontManager _fontMan = default!;
     [Dependency] private readonly InputManager _input = default!;
 
-    public PanelContainer Root { get; } = new();
+    public PanelContainer Root { get; } = new()
+    {
+        Margin = new(15),
+        VerticalAlignment = VerticalAlignment.Top,
+        HorizontalAlignment = HorizontalAlignment.Left,
+    };
 
     private ShapeBatch _shapeBatch = default!;
 
@@ -25,6 +31,18 @@ public sealed partial class UIManager
     {
         IoCManager.ResolveDependencies(this);
         _shapeBatch = new ShapeBatch(GameClient.GraphicsDevice);
+        var bc = new BoxContainer();
+        bc.Separation = 5;
+        AddChild(bc);
+        bc.AddChild(new TestControl());
+        bc.AddChild(new TestControl());
+        bc.AddChild(new TestControl());
+        bc.AddChild(new TestControl());
+        bc.AddChild(new TestControl());
+        bc.AddChild(new TestControl());
+        bc.AddChild(new TestControl());
+        bc.AddChild(new TestControl());
+        bc.AddChild(new TestControl());
     }
 
     public void AddChild(Control control) => Root.AddChild(control);

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Engine.Shared.Prototypes;
 
 namespace Engine.Client.UI;
 
@@ -63,14 +64,22 @@ public abstract partial class Control
                 best = rule;
         }
 
-        if (best is null || best.Properties[name] is not T typed)
+        if (best is null)
         {
             value = default;
             return false;
         }
 
-        value = typed;
-        return true;
+        try
+        {
+            value = (T?)DataFieldConverter.Convert(typeof(T), best.Properties[name]);
+            return true;
+        }
+        catch
+        {
+            value = default;
+            return false;
+        }
     }
 
     /// <summary>

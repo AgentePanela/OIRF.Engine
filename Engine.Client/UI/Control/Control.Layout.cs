@@ -22,6 +22,11 @@ public abstract partial class Control
 
     public Thickness Margin { get; set; }
 
+    /// <summary>
+    /// Space between this control's own Bounds and its content/children.
+    /// </summary>
+    public Thickness Padding { get; set; }
+
     public HorizontalAlignment HorizontalAlignment { get; set; } = HorizontalAlignment.Stretch;
     public VerticalAlignment VerticalAlignment { get; set; } = VerticalAlignment.Stretch;
 
@@ -61,12 +66,14 @@ public abstract partial class Control
         }
 
         var marginSize = new Vector2(Margin.Left + Margin.Right, Margin.Top + Margin.Bottom);
+        var paddingSize = new Vector2(Padding.Left + Padding.Right, Padding.Top + Padding.Bottom);
         var availableForContent = Vector2.Max(availableSize - marginSize, Vector2.Zero);
 
         var constrainedWidth = MathHelper.Clamp(Width ?? availableForContent.X, MinWidth, MaxWidth);
         var constrainedHeight = MathHelper.Clamp(Height ?? availableForContent.Y, MinHeight, MaxHeight);
 
-        var measured = MeasureCore(new Vector2(constrainedWidth, constrainedHeight));
+        var innerAvailable = Vector2.Max(new Vector2(constrainedWidth, constrainedHeight) - paddingSize, Vector2.Zero);
+        var measured = MeasureCore(innerAvailable) + paddingSize;
 
         var contentWidth = MathHelper.Clamp(Width ?? measured.X, MinWidth, MaxWidth);
         var contentHeight = MathHelper.Clamp(Height ?? measured.Y, MinHeight, MaxHeight);
@@ -120,7 +127,14 @@ public abstract partial class Control
         };
 
         Bounds = new Rectangle((int)x, (int)y, (int)width, (int)height);
-        ArrangeCore(Bounds);
+
+        var innerRect = new Rectangle(
+            Bounds.X + Padding.Left,
+            Bounds.Y + Padding.Top,
+            Math.Max(0, Bounds.Width - Padding.Left - Padding.Right),
+            Math.Max(0, Bounds.Height - Padding.Top - Padding.Bottom));
+
+        ArrangeCore(innerRect);
     }
 
     /// <summary>
