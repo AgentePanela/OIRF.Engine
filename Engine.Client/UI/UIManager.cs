@@ -41,12 +41,12 @@ public sealed partial class UIManager
         if (control is not null && !control.Focusable)
             return;
 
-        if (FocusedControl == control)
+        if (_focusedControl == control)
             return;
 
-        FocusedControl?.SetFocused(false);
-        FocusedControl = control;
-        FocusedControl?.SetFocused(true);
+        _focusedControl?.SetFocused(false);
+        SetTracked(ref _focusedControl, control);
+        _focusedControl?.SetFocused(true);
     }
 
     public void Update(float dt)
@@ -66,12 +66,12 @@ public sealed partial class UIManager
     {
         var hit = Root.HitTest(_input.MouseScreenPosition);
 
-        if (hit == HoveredControl)
+        if (hit == _hoveredControl)
             return;
 
-        HoveredControl?.UpdateMouseInside(false);
-        HoveredControl = hit;
-        HoveredControl?.UpdateMouseInside(true);
+        _hoveredControl?.UpdateMouseInside(false);
+        SetTracked(ref _hoveredControl, hit);
+        _hoveredControl?.UpdateMouseInside(true);
     }
 
     public void Draw(float dt)

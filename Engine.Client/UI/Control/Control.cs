@@ -112,17 +112,25 @@ public abstract partial class Control : IDisposable
     #endregion
 
     private bool _disposed;
+
+    /// <summary>
+    /// Fired right after this control finishes disposing.
+    /// </summary>
+    public event Action<Control>? Disposed;
+
     public void Dispose()
     {
         if (_disposed)
             return;
+
         _disposed = true;
         OnDispose();
-        
         foreach (var child in _children.ToArray())
             child.Dispose();
 
         Parent?.RemoveChild(this);
+
+        Disposed?.Invoke(this);
     }
 
     /// <summary>
