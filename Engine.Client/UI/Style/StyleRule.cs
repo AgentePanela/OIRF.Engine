@@ -3,6 +3,8 @@ using Engine.Shared.Prototypes;
 
 namespace Engine.Client.UI;
 
+// TODO: multiple classes per selector (styleClass: [danger, large], requiring all at once)
+// TODO: and ancestor combinators (descendant/child, like CSS ".dialog Button" / ".dialog > Button")
 public sealed class StyleClass
 {
     [DataField("control")] public string? ControlType { get; set; }
@@ -27,7 +29,15 @@ public sealed class StyleClass
         return true;
     }
 
-    public int Specificity { get; set; }
+    /// <summary>
+    /// How specific this selector is. Used to pick a winner when multiple rules match the
+    /// same control, same order as CSS: id > pseudo-class/style-class > control type.
+    /// </summary>
+    public int Specificity =>
+        (Identifier is not null ? 100 : 0) +
+        (Class is not null ? 5 : 0) +
+        (PseudoClass is not null ? 5 : 0) +
+        (ControlType is not null ? 10 : 0);
 }
 
 public sealed class StyleRule

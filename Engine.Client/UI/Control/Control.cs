@@ -6,13 +6,13 @@ namespace Engine.Client.UI;
 /// <summary>
 /// The basic node in the GUI system.
 /// </summary>
-public partial class Control : IDisposable
+public abstract partial class Control : IDisposable
 {
     private bool _visible = true;
 
     /// <summary>
     /// Whether this control itself wants to be visible. Does not account for ancestors
-    /// being invisible — use <see cref="EffectivelyVisible"/> for that.
+    /// being invisible - use <see cref="EffectivelyVisible"/> for that.
     /// </summary>
     public bool Visible
     {
@@ -33,10 +33,6 @@ public partial class Control : IDisposable
     public bool EffectivelyVisible => _visible && (Parent?.EffectivelyVisible ?? true);
 
     public event Action<Control>? OnVisibilityChanged;
-
-    // Determines if this control requires space, even when
-    // it's visibility has been set to false
-    private bool _reservesSpace = false;
 
     /// <summary>
     /// The name of this control.
@@ -101,7 +97,7 @@ public partial class Control : IDisposable
     /// <summary>
     /// Removes a child from this control. Does nothing if the child is not parent of this control.
     /// </summary>
-    public void RemoveChild(Control child)
+    public void RemoveChild(Control child, bool dispose = false)
     {
         if (child.Parent != this)
             return;
@@ -109,50 +105,27 @@ public partial class Control : IDisposable
         _children.Remove(child);
         child.Parent = null;
         child.NotifyEffectiveVisibilityChanged();
-    }
-
-    #endregion
-
-    #region Styles
-
-    public HashSet<string> StyleClasses { get; } = new();
-
-    public HashSet<string> PseudoClasses { get; private set; } = new();
-
-    /// <summary>
-    /// A unique style identifier, similar to #id in CSS.
-    /// </summary>
-    public string? StyleIdentifier { get; set; }
-
-    private StylePrototype? _stylesheetOverride;
-    public StylePrototype? StylesheetOverride
-    {
-        get => _stylesheetOverride;
-        set
-        {
-            if (_stylesheetOverride == value)
-                return;
-            _stylesheetOverride = value;
-            OnThemeUpdated();
-        }
-    }
-
-    /// <summary>
-    /// Called when this control's theme in the control tree changed.
-    /// </summary>
-    protected virtual void OnThemeUpdated()
-    {
-
+        if (dispose)
+            child.Dispose();
     }
 
     #endregion
 
     public void Dispose()
     {
+        OnDispose();
         foreach (var child in _children.ToArray())
             child.Dispose();
 
         Parent?.RemoveChild(this);
+    }
+
+    /// <summary>
+    /// Happends right before all dispose logic.
+    /// </summary>
+    protected virtual void OnDispose()
+    {
+        
     }
 
     /// <summary>
