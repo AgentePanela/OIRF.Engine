@@ -85,7 +85,6 @@ public abstract class UICanvas : IDisposable
 */
 
 using System;
-using Myra.Graphics2D.UI;
 
 namespace Engine.Client.UI;
 
@@ -94,8 +93,7 @@ namespace Engine.Client.UI;
 /// </summary>
 public abstract class UICanvas : IDisposable
 {
-    public Widget Root { get; internal set; }
-
+    public Control Root { get; internal set; }
 
     public void Dispose()
     {

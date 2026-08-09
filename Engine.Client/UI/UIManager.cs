@@ -144,7 +144,7 @@ public sealed class UIManager
 
         IoCManager.ResolveDependencies(CurrentScreen);
         CurrentScreen.BuildElements();
-        _root.Widgets.Add(CurrentScreen.Root);
+        //_root.Widgets.Add(CurrentScreen.Root);
         CurrentScreen.Initialize();
     }
 }

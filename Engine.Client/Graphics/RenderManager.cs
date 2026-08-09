@@ -556,12 +556,6 @@ public sealed partial class RenderManager
 
         region.X += (int)sprite.Offset.X;
         region.Y += (int)sprite.Offset.Y;
-
-        // Depth is only a sort key for the render queue (see DepthComparison) -
-        // draw order is already final by the time we get here. MonoGame's Draw
-        // overload requires a layerDepth argument, but it's meaningless under
-        // SpriteSortMode.Deferred (no per-call depth stencil test either), so
-        // it's always 0f rather than sprite.Depth.
         _spriteBatch.Draw(
             texture,
             position,

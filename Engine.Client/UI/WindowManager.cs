@@ -10,7 +10,6 @@ using System.Linq;
 
 namespace Engine.Client.UI;
 
-// registered explicitly in GameClient.cs — not [RegisterIoC], that would double-register it
 public sealed class WindowManager
 {
     //[Dependency] private readonly InputManager _input = default!;
