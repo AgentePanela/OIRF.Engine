@@ -4,7 +4,7 @@ using System;
 
 namespace Engine.Client.UI.Controls;
 
-public sealed class TestControl : PanelContainer
+public sealed partial class TestControl : PanelContainer
 {
     private ColorGradient? _normalOutline;
     private Thickness _normalOutlineThickness;

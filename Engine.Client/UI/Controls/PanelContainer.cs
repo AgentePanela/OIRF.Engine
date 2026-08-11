@@ -8,27 +8,31 @@ namespace Engine.Client.UI;
 /// Stacks every child in the same rectangle. Each one arranges independently within
 /// the space this container was given, using its own alignment to position itself inside it.
 /// </summary>
-public class PanelContainer : Control
+public partial class PanelContainer : Control
 {
     /// <summary>
     /// Fill for this control's own Bounds.
     /// </summary>
-    public ColorGradient? Background { get; set; }
+    [StyleField("background")]
+    private ColorGradient? _background;
 
     /// <summary>
     /// Border fill drawn around this control's own Bounds.
     /// </summary>
-    public ColorGradient? OutlineColor { get; set; }
+    [StyleField("outlineColor")]
+    private ColorGradient? _outlineColor;
 
     /// <summary>
-    /// Border thickness in pixels.
+    /// Border thickness in pixels, per side.
     /// </summary>
-    public Thickness OutlineThickness { get; set; } = new(1);
+    [StyleField("outlineThickness", 1)]
+    private Thickness? _outlineThickness;
 
     /// <summary>
-    /// Amounts of anti-analising this control will receive in rendering.
+    /// Amount of anti-aliasing this control receives when rendering.
     /// </summary>
-    public float AntiAnalising { get; set; }= 0;
+    [StyleField("antiAnalising", 0f)]
+    private float? _antiAnalising;
 
     protected override Vector2 MeasureCore(Vector2 availableSize)
     {
@@ -52,7 +56,7 @@ public class PanelContainer : Control
     protected override void DrawSelf(ShapeBatch sb, IFontManager fontManager, float dt)
     {
         if (Background is not null)
-            sb.FillRectangle(new Vector2(Bounds.X, Bounds.Y), new Vector2(Bounds.Width, Bounds.Height), 
+            sb.FillRectangle(new Vector2(Bounds.X, Bounds.Y), new Vector2(Bounds.Width, Bounds.Height),
                 Background.Value.Resolve(Bounds), aaSize: AntiAnalising);
 
         if (OutlineColor is null)
@@ -61,19 +65,19 @@ public class PanelContainer : Control
         // resolved once against the whole panel Bounds, not per-bar.
         var color = OutlineColor.Value.Resolve(Bounds);
         if (OutlineThickness.Top > 0)
-            sb.FillRectangle(new Vector2(Bounds.X - AntiAnalising, Bounds.Y - AntiAnalising), 
+            sb.FillRectangle(new Vector2(Bounds.X - AntiAnalising, Bounds.Y - AntiAnalising),
                 new Vector2(Bounds.Width + AntiAnalising * 2, OutlineThickness.Top + AntiAnalising * 2), color, aaSize: AntiAnalising);
 
         if (OutlineThickness.Bottom > 0)
-            sb.FillRectangle(new Vector2(Bounds.X - AntiAnalising, Bounds.Bottom - OutlineThickness.Bottom - AntiAnalising), 
+            sb.FillRectangle(new Vector2(Bounds.X - AntiAnalising, Bounds.Bottom - OutlineThickness.Bottom - AntiAnalising),
                 new Vector2(Bounds.Width + AntiAnalising * 2, OutlineThickness.Bottom + AntiAnalising * 2), color, aaSize: AntiAnalising);
 
         if (OutlineThickness.Left > 0)
-            sb.FillRectangle(new Vector2(Bounds.X - AntiAnalising, Bounds.Y - AntiAnalising), 
+            sb.FillRectangle(new Vector2(Bounds.X - AntiAnalising, Bounds.Y - AntiAnalising),
                 new Vector2(OutlineThickness.Left + AntiAnalising * 2, Bounds.Height + AntiAnalising * 2), color, aaSize: 0);
 
         if (OutlineThickness.Right > 0)
-            sb.FillRectangle(new Vector2(Bounds.Right - OutlineThickness.Right - AntiAnalising, Bounds.Y - AntiAnalising), 
+            sb.FillRectangle(new Vector2(Bounds.Right - OutlineThickness.Right - AntiAnalising, Bounds.Y - AntiAnalising),
                 new Vector2(OutlineThickness.Right + AntiAnalising * 2, Bounds.Height + AntiAnalising * 2), color, aaSize: AntiAnalising);
     }
 }

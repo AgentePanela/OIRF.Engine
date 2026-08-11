@@ -35,10 +35,10 @@ public sealed partial class UIManager
         _shapeBatch = new ShapeBatch(GameClient.GraphicsDevice);
         _defaultStyleProto = _protoMan.Index(_defaultStyleId);
 
-        var root = new BoxContainer { Orientation = Orientation.Vertical, Separation = 10 };
+        var root = new BoxContainer { Orientation = Orientation.Vertical, _separation = 10 };
         AddChild(root);
 
-        var row = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 5 };
+        var row = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 5 };
         root.AddChild(row);
 
         for (var i = 0; i < 9; i++)
@@ -50,7 +50,7 @@ public sealed partial class UIManager
             row.AddChild(tc);
         }
 
-        var column = new BoxContainer { Orientation = Orientation.Vertical, Separation = 5 };
+        var column = new BoxContainer { Orientation = Orientation.Vertical, _separation = 5 };
         root.AddChild(column);
 
         for (var i = 0; i < 4; i++)

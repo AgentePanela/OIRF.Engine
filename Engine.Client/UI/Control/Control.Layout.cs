@@ -6,38 +6,78 @@ namespace Engine.Client.UI;
 public abstract partial class Control
 {
     /// <summary>
-    /// Explicit width. Null means auto.
+    /// Explicit width.
     /// </summary>
-    public float? Width { get; set; }
+    [StyleField("width")]
+    private float? _width;
 
     /// <summary>
-    /// Explicit height. Null means auto.
+    /// Explicit height.
     /// </summary>
-    public float? Height { get; set; }
+    [StyleField("height")]
+    private float? _height;
 
-    public float MinWidth { get; set; } = 0f;
-    public float MinHeight { get; set; } = 0f;
-    public float MaxWidth { get; set; } = float.PositiveInfinity;
-    public float MaxHeight { get; set; } = float.PositiveInfinity;
+    /// <summary>
+    /// Lower clamp applied to the resolved width.
+    /// </summary>
+    [StyleField("minWidth", 0f)]
+    private float? _minWidth;
 
-    public Thickness Margin { get; set; }
+    /// <summary>
+    /// Lower clamp applied to the resolved height.
+    /// </summary>
+    [StyleField("minHeight", 0f)]
+    private float? _minHeight;
+
+    /// <summary>
+    /// Upper clamp applied to the resolved width.
+    /// </summary>
+    [StyleField("maxWidth", float.PositiveInfinity)]
+    private float? _maxWidth;
+
+    /// <summary>
+    /// Upper clamp applied to the resolved height.
+    /// </summary>
+    [StyleField("maxHeight", float.PositiveInfinity)]
+    private float? _maxHeight;
+
+    /// <summary>
+    /// Space reserved outside this control's own Bounds, between it and its siblings/parent.
+    /// </summary>
+    [StyleField("margin", 0)]
+    private Thickness? _margin;
 
     /// <summary>
     /// Space between this control's own Bounds and its content/children.
     /// </summary>
-    public Thickness Padding { get; set; }
-
-    public HorizontalAlignment HorizontalAlignment { get; set; } = HorizontalAlignment.Stretch;
-    public VerticalAlignment VerticalAlignment { get; set; } = VerticalAlignment.Stretch;
+    [StyleField("padding", 0)]
+    private Thickness? _padding;
 
     /// <summary>
-    /// Whether this control claims a share of the leftover space when its container 
-    /// has more room than the sum of its children's DesiredSize.
+    /// How this control positions itself horizontally within the space its parent assigned it.
     /// </summary>
-    public bool HorizontalExpand { get; set; }
+    [StyleField("horizontalAlignment", HorizontalAlignment.Stretch)]
+    private HorizontalAlignment? _horizontalAlignment;
 
-    /// <inheritdoc cref="HorizontalExpand"/>
-    public bool VerticalExpand { get; set; }
+    /// <summary>
+    /// How this control positions itself vertically within the space its parent assigned it.
+    /// </summary>
+    [StyleField("verticalAlignment", VerticalAlignment.Stretch)]
+    private VerticalAlignment? _verticalAlignment;
+
+    /// <summary>
+    /// Whether this control claims a share of the leftover horizontal space when its
+    /// container has more room than the sum of its children's DesiredSize.
+    /// </summary>
+    [StyleField("horizontalExpand", false)]
+    private bool? _horizontalExpand;
+
+    /// <summary>
+    /// Whether this control claims a share of the leftover vertical space when its
+    /// container has more room than the sum of its children's DesiredSize.
+    /// </summary>
+    [StyleField("verticalExpand", false)]
+    private bool? _verticalExpand;
 
     /// <summary>
     /// The size this control wants, computed by the last <see cref="Measure"/> pass. Includes margin.

@@ -19,6 +19,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Engine.ResourcesBuilder\ResourcesBuilder.csproj" />
     <ProjectReference Include="..\Engine.Shared\Engine.Shared.csproj" />
+    <ProjectReference Include="..\Engine.Generators\Engine.Generators.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <DefineConstants>TRACE;PUBLISH</DefineConstants>

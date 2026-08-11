@@ -7,5 +7,6 @@
   <Project Path="Engine.Client/Engine.Client.csproj" />
   <Project Path="Engine.Server/Engine.Server.csproj" />
   <Project Path="Engine.Shared/Engine.Shared.csproj" />
+  <Project Path="Engine.Generators/Engine.Generators.csproj" />
   <Project Path="Engine.ResourcesBuilder/ResourcesBuilder.csproj" />
 </Solution>
