@@ -3,6 +3,7 @@ using Engine.Client.Graphics.Fonts;
 using Engine.Client.Inputs;
 using Engine.Client.UI.Controls;
 using Engine.Shared.IoC;
+using Engine.Shared.Prototypes;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -15,6 +16,7 @@ public sealed partial class UIManager
 {
     [Dependency] private readonly IFontManager _fontMan = default!;
     [Dependency] private readonly InputManager _input = default!;
+    [Dependency] private readonly IPrototypeManager _protoMan = default!;
 
     public PanelContainer Root { get; } = new()
     {
@@ -31,6 +33,7 @@ public sealed partial class UIManager
     {
         IoCManager.ResolveDependencies(this);
         _shapeBatch = new ShapeBatch(GameClient.GraphicsDevice);
+        _defaultStyleProto = _protoMan.Index(_defaultStyleId);
 
         var root = new BoxContainer { Orientation = Orientation.Vertical, Separation = 10 };
         AddChild(root);

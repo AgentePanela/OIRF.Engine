@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Engine.Shared.IoC;
 using Engine.Shared.Prototypes;
 
 namespace Engine.Client.UI;
@@ -25,17 +26,31 @@ public abstract partial class Control
             if (_stylesheetOverride == value)
                 return;
             _stylesheetOverride = value;
-            OnThemeUpdated();
+            AnnounceThemeUpdate();
         }
     }
 
+    internal void AnnounceThemeUpdate()
+    {
+        OnThemeUpdated();
+        foreach (var child in Children)
+            child.AnnounceThemeUpdate();
+    }
+
     /// <summary>
-    /// Called when this control theme in the control tree changed.
+    /// Called when this control theme in the control tree changed or the main UiManager theme has updated.
     /// </summary>
     protected virtual void OnThemeUpdated()
     {
 
     }
+
+    /// <summary>
+    /// Resolves a style property for this control and returns the value,
+    /// returns <paramref name="fallback"/> if no property exist.
+    /// </summary>
+    public T GetStyleProperty<T>(string name, T fallback)
+        => TryGetStyleProperty<T>(name, out var value) && value is not null ? value : fallback;
     
     /// <summary>
     /// Resolves a style property for this control and
@@ -44,11 +59,6 @@ public abstract partial class Control
     public bool TryGetStyleProperty<T>(string name, out T? value)
     {
         var sheet = FindEffectiveStylesheet();
-        if (sheet is null)
-        {
-            value = default;
-            return false;
-        }
 
         StyleRule? best = null;
 
@@ -83,10 +93,11 @@ public abstract partial class Control
     }
 
     /// <summary>
-    /// Walks up from this control (inclusive) to the nearest ancestor with a
-    /// <see cref="StylesheetOverride"/> set.
+    /// Walks up from this control to the nearest ancestor with a
+    /// <see cref="StylesheetOverride"/> set. Falls back to the UIManager's ActiveTheme if
+    /// nothing in the chain has one - never null.
     /// </summary>
-    private StylePrototype? FindEffectiveStylesheet()
+    private StylePrototype FindEffectiveStylesheet()
     {
         for (var control = this; control is not null; control = control.Parent)
         {
@@ -94,7 +105,7 @@ public abstract partial class Control
                 return control.StylesheetOverride;
         }
 
-        return null;
+        return IoCManager.Resolve<UIManager>().ActiveTheme;
     }
 
     #endregion
