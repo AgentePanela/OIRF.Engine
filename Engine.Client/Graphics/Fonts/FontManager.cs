@@ -1,78 +1,117 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Linq;
 using FontStashSharp;
+using FontStashSharp.Rasterizers.FreeType;
 using Microsoft.Xna.Framework;
 using Engine.Shared.Assets;
+using Engine.Shared.IoC;
+using Engine.Shared.Prototypes;
 using Engine.Shared.Storage;
-using FontStashSharp.Rasterizers.FreeType;
 
 namespace Engine.Client.Graphics.Fonts;
 
-/// <summary>
-/// Default engine font manager. Fonts are rasterized on demand from the TTF files loaded
-/// into per-family <see cref="FontSystem"/> instances - no content-pipeline .xnb needed.
-/// A family is just a .ttf's file name without extension; there's no further grouping (a
-/// "Roboto-Regular.ttf" and "Roboto-Bold.ttf" are two separate families, not one with variants).
-/// </summary>
 public sealed class FontManager : IFontManager
 {
     public const float DefaultSize = 16f;
+    [Dependency] private readonly IPrototypeManager _protoMan = default!;
 
-    private static readonly Dictionary<string, FontSystem> _fontSystems = new();
-    private static string? _defaultFamily;
-    private static bool _loadedGameFonts;
+    private static readonly Dictionary<string, ResFile> _ttfFiles = new();
+    private static readonly Dictionary<string, ResFile> _ttfFilesByName = new();
+    private static readonly Dictionary<(string Family, FontVariant Variant), FontSystem> _fontSystems = new();
+    private static bool _indexed;
 
     public readonly ResPath resPath = new("Fonts");
 
-    public IReadOnlyCollection<string> Families => _fontSystems.Keys;
-
     public FontManager()
     {
-        if (_loadedGameFonts)
-            return; 
+        IoCManager.ResolveDependencies(this);
+
+        if (_indexed)
+            return;
 
         FontSystemDefaults.TextShaper = new HarfBuzzTextShaper();
         FontSystemDefaults.FontLoader = new FreeTypeLoader();
-        _loadedGameFonts = true;
+        _indexed = true;
 
         var ttfFiles = resPath.GetFiles("ttf");
         for (var index = 0; index < ttfFiles.Length; index++)
         {
             ref readonly var file = ref ttfFiles[index];
-            var family = Path.GetFileNameWithoutExtension(file.Relative);
-
-            if (!_fontSystems.TryGetValue(family, out var system))
-            {
-                system = new FontSystem();
-                _fontSystems[family] = system;
-                _defaultFamily ??= family;
-                system.CurrentAtlasFull += (e, a) => system.Reset();
-            }
-
-            system.AddFont(FileSystem.ReadAllBytes(file.FilePath));
+            _ttfFiles[file.Relative] = file;
+            _ttfFilesByName[Path.GetFileNameWithoutExtension(file.Relative)] = file;
         }
     }
 
-    public SpriteFontBase Get(float size = DefaultSize)
-        => Get(size, _defaultFamily ?? string.Empty);
+    public IReadOnlyCollection<string> Families
+        => _protoMan.EnumerateAll<FontFamilyPrototype>().Select(p => p.ID).ToArray();
 
-    public SpriteFontBase Get(float size, string family)
+    public SpriteFontBase Get(float size = DefaultSize, FontVariant variant = FontVariant.Regular)
+        => Get(size, DefaultFamily() ?? string.Empty, variant);
+
+    public SpriteFontBase Get(float size, string family, FontVariant variant = FontVariant.Regular)
     {
-        if (_fontSystems.TryGetValue(family, out var system))
+        if (TryGetSystem(family, variant, out var system))
             return system.GetFont(size);
 
-        if (_defaultFamily is not null && _fontSystems.TryGetValue(_defaultFamily, out var fallback))
-            return fallback.GetFont(size);
+        // variant not configured for this family - fall back to Regular
+        if (variant != FontVariant.Regular && TryGetSystem(family, FontVariant.Regular, out system))
+            return system.GetFont(size);
+
+        // family itself does not exist - fall back to the default family
+        var defaultFamily = DefaultFamily();
+        if (defaultFamily is not null && defaultFamily != family && TryGetSystem(defaultFamily, FontVariant.Regular, out system))
+            return system.GetFont(size);
 
         throw new InvalidOperationException(
-            $"No font family '{family}' loaded, and no fallback family available. " +
-            $"Loaded families: {(Families.Count == 0 ? "(none)" : string.Join(", ", Families))}");
+            $"No font family '{family}' (variant {variant}) loaded, and no fallback available. " +
+            $"Known families: {(Families.Count == 0 ? "(none)" : string.Join(", ", Families))}");
     }
 
     public SpriteFontBase GetFallback() => Get(DefaultSize);
 
-    public Vector2 Measure(string text, float size) => Get(size).MeasureString(text ?? string.Empty);
+    public Vector2 Measure(string text, float size)
+        => Get(size).MeasureString(text ?? string.Empty);
 
-    public Vector2 Measure(string text, string family, float size) => Get(size, family).MeasureString(text ?? string.Empty);
+    public Vector2 Measure(string text, string font, float size, FontVariant variant = FontVariant.Regular)
+        => Get(size, font, variant).MeasureString(text ?? string.Empty);
+
+    private string? DefaultFamily()
+        => _protoMan.EnumerateAll<FontFamilyPrototype>().FirstOrDefault()?.ID;
+
+    private bool TryGetSystem(string font, FontVariant variant, [NotNullWhen(true)] out FontSystem? system)
+    {
+        if (_fontSystems.TryGetValue((font, variant), out system))
+            return true;
+
+        system = null;
+        ResFile file;
+
+        if (_protoMan.TryIndex<FontFamilyPrototype>(font, out var proto))
+        {
+            var fileName = proto.GetFile(variant);
+            if (fileName is null || !_ttfFiles.TryGetValue(fileName, out file))
+                return false;
+        }
+        // no fontFamily prototype registered under this name - last resort: a loose .ttf
+        // whose file name (without extension) matches exactly. Only stands in for Regular;
+        // a loose file has no bold/italic pairing to speak of.
+        else if (variant == FontVariant.Regular && _ttfFilesByName.TryGetValue(font, out file))
+        {
+        }
+        else
+        {
+            return false;
+        }
+
+        var created = new FontSystem();
+        created.CurrentAtlasFull += (_, _) => created.Reset();
+        created.AddFont(FileSystem.ReadAllBytes(file.FilePath));
+
+        _fontSystems[(font, variant)] = created;
+        system = created;
+        return true;
+    }
 }

@@ -54,6 +54,12 @@ public struct Label2D : IRenderable
         String = str;
     }
 
+    public Label2D(string str, float size, string family, FontVariant variant = FontVariant.Regular)
+    {
+        Font = IoCManager.Resolve<IFontManager>().Get(size, family, variant);
+        String = str;
+    }
+
     public Label2D(SpriteFontBase? font, string str)
     {
         Font = font;
@@ -86,6 +92,14 @@ public struct Label2D : IRenderable
     public void SetFontSize(float size)
     {
         Font = IoCManager.Resolve<IFontManager>().Get(size);
+    }
+
+    /// <summary>
+    /// Switches this label to a specific font family/variant at the given size.
+    /// </summary>
+    public void SetFont(float size, string family, FontVariant variant = FontVariant.Regular)
+    {
+        Font = IoCManager.Resolve<IFontManager>().Get(size, family, variant);
     }
 
     private readonly SpriteFontBase ResolveFont()

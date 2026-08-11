@@ -5,25 +5,26 @@ using Microsoft.Xna.Framework;
 namespace Engine.Client.Graphics.Fonts;
 
 /// <summary>
-/// Rasterizes and measures text from the engine's loaded font families. Pure size/family
-/// lookup - no notion of named/semantic styles, that lives one layer up.
+/// Rasterizes and measures text from the engine's loaded font families
+/// (<see cref="FontFamilyPrototype"/>).
 /// </summary>
 public interface IFontManager
 {
     /// <summary>
-    /// Every font family name loaded, derived from each .ttf's file name.
+    /// Every font family ID made via <see cref="FontFamilyPrototype"/>.
     /// </summary>
     IReadOnlyCollection<string> Families { get; }
 
     /// <summary>
     /// Gets a font from the default family (the first one loaded), rasterized at the given pixel size.
     /// </summary>
-    SpriteFontBase Get(float size = FontManager.DefaultSize);
+    SpriteFontBase Get(float size = FontManager.DefaultSize, FontVariant variant = FontVariant.Regular);
 
     /// <summary>
-    /// Gets a font from a specific family, rasterized at the given pixel size.
+    /// Gets a font from a specific family, rasterized at the given pixel size. Falls back to
+    /// that family's Regular if the requested variant isn't configured.
     /// </summary>
-    SpriteFontBase Get(float size, string family);
+    SpriteFontBase Get(float size, string family, FontVariant variant = FontVariant.Regular);
 
     /// <summary>
     /// Font used when no size/family was specified.
@@ -38,5 +39,5 @@ public interface IFontManager
     /// <summary>
     /// Measures text as it would be drawn with a specific family at the given pixel size.
     /// </summary>
-    Vector2 Measure(string text, string family, float size);
+    Vector2 Measure(string text, string family, float size, FontVariant variant = FontVariant.Regular);
 }
