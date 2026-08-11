@@ -26,7 +26,6 @@ public abstract class LoadingScene : Scene
     [Dependency] protected readonly ComponentFactory _compFac = default!;
     [Dependency] protected readonly EntityManager _entMan = default!;
     [Dependency] protected readonly IFontManager _fonts = default!;
-    [Dependency] protected readonly TextLayoutService _textLayout = default!;
     [Dependency] protected readonly UserStorageManager _storage = default!;
     [Dependency] protected readonly SharedResourceManager _resMan = default!;
     protected Task? _registryTask;
@@ -78,7 +77,6 @@ public abstract class LoadingScene : Scene
     {
         _asset.Init(GameClient.GraphicsDevice, GameClient.SpriteBatch);
         _audio.Init();
-        _fonts.BootstrapDefaults();
         Log.Debug("LoadingState = TextureLoading.");
         _state = LoadingState.TextureLoading;
     }

@@ -581,36 +581,4 @@ public sealed partial class RenderManager
             SpriteEffects.None,
             0f);
     }
-
-    public void DrawString(Label2D label, Vector2 position)
-    {
-        var font = ResolveFont(label);
-        var styleDef = ResolveStyleDefinition(label);
-
-        var drawColor = ResolveColor(label, styleDef);
-        var drawScale = ResolveScale(label, styleDef);
-
-        var shadowEnabled = ResolveShadowEnabled(label, styleDef);
-        var shadowColor = ResolveShadowColor(label, styleDef);
-        var shadowOffset = ResolveShadowOffset(label, styleDef);
-
-        var outlineEnabled = ResolveOutlineEnabled(label, styleDef);
-        var outlineColor = ResolveOutlineColor(label, styleDef);
-        var outlineThickness = ResolveOutlineThickness(label, styleDef);
-
-        if (outlineEnabled)
-            DrawOutline(font, label.String ?? string.Empty, position, label, drawScale, outlineColor, outlineThickness);
-
-        if (shadowEnabled)
-            DrawShadow(font, label.String ?? string.Empty, position, label, drawScale, shadowColor, shadowOffset);
-
-        _spriteBatch.DrawString(
-            font,
-            label.String ?? string.Empty,
-            position,
-            drawColor,
-            label.Rotation,
-            label.Origin,
-            drawScale);
-    }
 }

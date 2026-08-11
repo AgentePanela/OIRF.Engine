@@ -6,6 +6,8 @@
     <NoWarn>CS8618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="FontStashSharp.Rasterizers.FreeType" Version="1.2.6" />
+    <PackageReference Include="FontStashSharp.TextShapers.HarfBuzz" Version="1.2.6" />
     <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.*">
       <PrivateAssets>All</PrivateAssets>
     </PackageReference>
@@ -19,8 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Engine.ResourcesBuilder\ResourcesBuilder.csproj" />
     <ProjectReference Include="..\Engine.Shared\Engine.Shared.csproj" />
-    <ProjectReference Include="..\Engine.Generators\Engine.Generators.csproj"
-                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Engine.Generators\Engine.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <DefineConstants>TRACE;PUBLISH</DefineConstants>

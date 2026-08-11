@@ -148,9 +148,7 @@ public class GameClient : Game
         IoCManager.Register<IParallelManager, ParallelManager>();
 
         // Text/font services
-        IoCManager.Register<TextStyleLibrary>();
         IoCManager.Register<IFontManager, FontManager>();
-        IoCManager.Register<TextLayoutService>();
         //!REMOVE IoCManager.Register<MyraFontBridge>();
 
         IoCManager.Register(new SceneManager(this));
