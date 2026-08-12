@@ -14,25 +14,25 @@ public sealed class FontFamilyPrototype : IPrototype
     public string ID { get; set; } = "";
 
     /// <summary>
-    /// E.g: Arial.ttf
+    /// File name of the .ttf, without extension. E.g: Arial
     /// </summary>
     [DataField("regular", required: true)]
     public string Regular { get; set; } = "";
 
     /// <summary>
-    /// E.g: Arial-Bold.ttf
+    /// File name of the .ttf, without extension. E.g: Arial-Bold
     /// </summary>
     [DataField("bold")]
     public string? Bold { get; set; }
 
     /// <summary>
-    /// E.g: Arial-Italic.ttf
+    /// File name of the .ttf, without extension. E.g: Arial-Italic
     /// </summary>
     [DataField("italic")]
     public string? Italic { get; set; }
 
     /// <summary>
-    /// E.g: Arial-BoldItalic.ttf
+    /// File name of the .ttf, without extension. E.g: Arial-BoldItalic
     /// </summary>
     [DataField("boldItalic")]
     public string? BoldItalic { get; set; }

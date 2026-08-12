@@ -55,6 +55,8 @@ public sealed partial class UIManager
 
         for (var i = 0; i < 4; i++)
             column.AddChild(new TestControl());
+
+        column.AddChild(new Label() { Text = "Test" });
     }
 
     public void AddChild(Control control) => Root.AddChild(control);

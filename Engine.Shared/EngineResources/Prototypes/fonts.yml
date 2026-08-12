@@ -1,6 +1,6 @@
 - type: fontFamily
   id: Arial
-  regular: Arial.ttf
-  bold: Arial-Bold.ttf
-  italic: Arial-Italic.ttf
-  boldItalic: Arial-BoldItalic.ttf
+  regular: Arial
+  bold: Arial-Bold
+  italic: Arial-Italic
+  boldItalic: Arial-BoldItalic

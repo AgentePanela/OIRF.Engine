@@ -4,7 +4,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using FontStashSharp;
-using FontStashSharp.Rasterizers.FreeType;
 using Microsoft.Xna.Framework;
 using Engine.Shared.Assets;
 using Engine.Shared.IoC;
@@ -18,8 +17,8 @@ public sealed class FontManager : IFontManager
     public const float DefaultSize = 16f;
     [Dependency] private readonly IPrototypeManager _protoMan = default!;
 
-    private static readonly Dictionary<string, ResFile> _ttfFiles = new();
-    private static readonly Dictionary<string, ResFile> _ttfFilesByName = new();
+    private static readonly Dictionary<string, ResFile> _ttfFiles = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, ResFile> _ttfFilesByName = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<(string Family, FontVariant Variant), FontSystem> _fontSystems = new();
     private static bool _indexed;
 
@@ -33,7 +32,8 @@ public sealed class FontManager : IFontManager
             return;
 
         FontSystemDefaults.TextShaper = new HarfBuzzTextShaper();
-        FontSystemDefaults.FontLoader = new FreeTypeLoader();
+        //! not supported rn
+        //FontSystemDefaults.FontLoader = new FreeTypeLoader(); 
         _indexed = true;
 
         var ttfFiles = resPath.GetFiles("ttf");

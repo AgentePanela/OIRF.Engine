@@ -6,7 +6,6 @@
     <NoWarn>CS8618</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="FontStashSharp.Rasterizers.FreeType" Version="1.2.6" />
     <PackageReference Include="FontStashSharp.TextShapers.HarfBuzz" Version="1.2.6" />
     <PackageReference Include="MonoGame.Framework.DesktopGL" Version="3.8.*">
       <PrivateAssets>All</PrivateAssets>

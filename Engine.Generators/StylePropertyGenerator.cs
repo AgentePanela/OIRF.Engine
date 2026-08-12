@@ -72,7 +72,13 @@ public sealed class StylePropertyGenerator : IIncrementalGenerator
         var fieldType = field.Type is INamedTypeSymbol { ConstructedFrom.SpecialType: SpecialType.System_Nullable_T } named
             ? named.TypeArguments[0]
             : field.Type;
-        var underlyingType = fieldType.ToDisplayString();
+
+        // A nullable value type (Thickness?) unwraps above to its clean, non-nullable
+        // TypeArguments[0] - but a nullable REFERENCE type (string?) is still the same String
+        // symbol, just annotated, and ToDisplayString() renders that annotation as a trailing
+        // "?" on its own. Strip it explicitly so Generate() doesn't end up appending a second
+        // one (isNullable fields get their own "?" tacked on there) and emitting "string??".
+        var underlyingType = fieldType.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
 
         string? defaultLiteral = null;
         Location? errorLocation = null;
