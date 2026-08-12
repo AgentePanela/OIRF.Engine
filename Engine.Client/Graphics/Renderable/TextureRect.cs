@@ -6,7 +6,7 @@ namespace Engine.Client.Graphics;
 /// <summary>
 /// Represents a texture "fragment" that contains all fiels to be rendered by SpriteBatch.
 /// </summary>
-public struct TextureRect : IRenderable
+public struct RawTexture : IRenderable
 {
     public int Layer { get; set; }
     public SamplerState? SamplerState { get; set; }
@@ -25,14 +25,14 @@ public struct TextureRect : IRenderable
 
     public bool Visible = true;
 
-    public TextureRect(Texture2D texture)
+    public RawTexture(Texture2D texture)
     {
         Texture = texture;
         Region = texture.Bounds;
         Origin = new Vector2(texture.Width / 2f, texture.Height / 2f);
     }
 
-    public TextureRect (
+    public RawTexture (
         Texture2D texture,
         Rectangle region,
         Vector2 offset,

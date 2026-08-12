@@ -243,7 +243,7 @@ internal sealed partial class AssetManager : IAssetManager
         return false;
     }
 
-    public Sprite2D AddSprite(TextureRect texture, string key)
+    public Sprite2D AddSprite(Graphics.RawTexture texture, string key)
     {
         _atlas.AddSprite(key, texture.Texture);
         var aSpr = _atlas.sprites[key];

@@ -568,7 +568,7 @@ public sealed partial class RenderManager
             0f);
     }
 
-    public void DrawTexture(TextureRect texture, Vector2 position)
+    public void DrawTexture(RawTexture texture, Vector2 position)
     {
         _spriteBatch.Draw(
             texture.Texture,
