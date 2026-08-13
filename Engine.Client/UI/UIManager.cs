@@ -57,6 +57,14 @@ public sealed partial class UIManager
             column.AddChild(new TestControl());
 
         column.AddChild(new Label() { Text = "Test" });
+
+        column.AddChild(new TextureRect
+        {
+            Key = "EngineInternal/9Slice",
+            NineSliceMargins = new Thickness(32),
+            Width = 150,
+            Height = 85,
+        });
     }
 
     public void AddChild(Control control) => Root.AddChild(control);

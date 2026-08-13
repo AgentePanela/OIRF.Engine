@@ -188,6 +188,11 @@ internal sealed partial class AssetManager : IAssetManager
 
     public bool GetTexture(string key, [NotNullWhen(true)] out AtlasSprite sprite, [NotNullWhen(true)] out AtlasPage page)
     {
+        sprite = default;
+        page = default!;
+        if (_atlas.sprites.Count == 0)
+            return false;
+        
         sprite = _atlas.sprites["EngineInternal/Placeholders/Null"]; // invalid sprite
         page = _atlas.pages[sprite.Page];
 

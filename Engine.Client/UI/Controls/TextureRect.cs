@@ -1,6 +1,7 @@
 using Apos.Shapes;
 using Engine.Client.Assets;
 using Engine.Client.Assets.Atlas;
+using Engine.Client.Graphics;
 using Engine.Client.Graphics.Fonts;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
@@ -9,7 +10,7 @@ using MonoGame.Extended;
 namespace Engine.Client.UI;
 
 /// <summary>
-/// Displays a sprite from the game <see cref="IAssetManager"/>.
+/// Displays a sprite from the game's texture atlas.
 /// </summary>
 public sealed partial class TextureRect : Control
 {
@@ -28,9 +29,16 @@ public sealed partial class TextureRect : Control
 
     /// <summary>
     /// If true, stretches the sprite to fill Bounds instead of drawing it at its native size.
+    /// Ignored when <see cref="NineSliceMargins"/> is set.
     /// </summary>
     [StyleField("stretch", false)]
     private bool? _stretch;
+
+    /// <summary>
+    /// Cut margins (in source pixels) for the 9-slice grid.
+    /// </summary>
+    [StyleField("nineSliceMargins")]
+    private Thickness? _nineSliceMargins;
 
     private Rectangle GetEffectiveRegion(AtlasSprite sprite) => SourceRect is { } sub
         ? new Rectangle(sprite.Region.X + sub.X, sprite.Region.Y + sub.Y, sub.Width, sub.Height)
@@ -51,12 +59,22 @@ public sealed partial class TextureRect : Control
             return;
 
         var region = GetEffectiveRegion(sprite);
-        var source = new RectangleF(region.X, region.Y, region.Width, region.Height);
 
+        if (NineSliceMargins is { } margins)
+        {
+            foreach (var patch in NineSlicePatch.Compute(region, margins, Bounds))
+                sb.Draw(page.Texture, ToRectF(patch.Dest), ToRectF(patch.Source), Tint);
+
+            return;
+        }
+
+        var source = ToRectF(region);
         var destination = Stretch
             ? new RectangleF(Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height)
             : new RectangleF(Bounds.X, Bounds.Y, region.Width, region.Height);
 
         sb.Draw(page.Texture, destination, source, Tint);
     }
+
+    private static MonoGame.Extended.RectangleF ToRectF(Rectangle r) => new(r.X, r.Y, r.Width, r.Height);
 }

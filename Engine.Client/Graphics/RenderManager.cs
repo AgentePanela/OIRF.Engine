@@ -533,26 +533,34 @@ public sealed partial class RenderManager
             layerDepth);
     }
 
-    public void DrawSprite(Sprite2D sprite, Vector2 position)
+    // Shared by anything drawing a Sprite2D by key: cached atlas data if SpriteSystem already
+    // resolved it once, otherwise a fresh asset manager lookup. False means the key doesn't
+    // exist (yet) - callers should just skip drawing for that frame.
+    private bool TryResolveSprite(Sprite2D sprite, out Texture2D texture, out Rectangle region)
     {
-        Texture2D texture;
-        Rectangle region;
-
-        // use cached atlas data if available (resolved once by SpriteSystem)
         if (sprite.CachedTexture is not null)
         {
             texture = sprite.CachedTexture;
             region = sprite.CachedRegion;
+            return true;
         }
-        else
-        {
-            // resolve from asset manager (for sprites not cached by SpriteSystem)
-            if (!_asset.GetTexture(sprite.Key, out var atlasSpr, out var atlasPage))
-                return;
 
-            texture = atlasPage.Texture;
-            region = atlasSpr.Region;
+        if (!_asset.GetTexture(sprite.Key, out var atlasSpr, out var atlasPage))
+        {
+            texture = null!;
+            region = default;
+            return false;
         }
+
+        texture = atlasPage.Texture;
+        region = atlasSpr.Region;
+        return true;
+    }
+
+    public void DrawSprite(Sprite2D sprite, Vector2 position)
+    {
+        if (!TryResolveSprite(sprite, out var texture, out var region))
+            return;
 
         region.X += (int)sprite.Offset.X;
         region.Y += (int)sprite.Offset.Y;
@@ -580,5 +588,16 @@ public sealed partial class RenderManager
             texture.Scale,
             SpriteEffects.None,
             0f);
+    }
+
+    public void DrawNineSlice(NineSlice2D slice, Vector2 position)
+    {
+        if (!TryResolveSprite(slice.Sprite, out var texture, out var region))
+            return;
+
+        var dest = new Rectangle((int)position.X, (int)position.Y, (int)slice.Size.X, (int)slice.Size.Y);
+
+        foreach (var patch in NineSlicePatch.Compute(region, slice.Margin, dest))
+            _spriteBatch.Draw(texture, patch.Dest, patch.Source, slice.Tint);
     }
 }
