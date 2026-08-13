@@ -3,6 +3,8 @@ using Engine.Client.Graphics;
 using Engine.Client.Graphics.Fonts;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
+using HAlign = Engine.Client.UI.HorizontalAlignment;
+using VAlign = Engine.Client.UI.VerticalAlignment;
 using SpriteFontBase = FontStashSharp.SpriteFontBase;
 
 namespace Engine.Client.UI;
@@ -13,7 +15,7 @@ namespace Engine.Client.UI;
 public sealed partial class Label : Control
 {
     /// <summary>
-    /// Text drawn by this label. Not a style property - a theme has no business deciding content.
+    /// Text drawn by this label.
     /// </summary>
     public string Text { get; set; } = "";
 
@@ -24,7 +26,7 @@ public sealed partial class Label : Control
     private Color? _color;
 
     /// <summary>
-    /// Font family to draw with. Null falls back to the theme, then to IFontManager's default family.
+    /// Font family to draw with.
     /// </summary>
     [StyleField("fontFamily")]
     private string? _fontFamily;
@@ -36,10 +38,22 @@ public sealed partial class Label : Control
     private FontVariant? _fontVariant;
 
     /// <summary>
-    /// If true, wraps Text onto multiple lines instead of overflowing the available width.
+    /// Wraps Text onto multiple lines instead of overflowing the available width.
     /// </summary>
     [StyleField("autoWrap", false)]
     private bool? _autoWrap;
+
+    /// <summary>
+    /// How the text lines up horizontally within own Bounds.
+    /// </summary>
+    [StyleField("textAlign", HAlign.Left)]
+    private HAlign? _textAlign;
+
+    /// <summary>
+    /// How the text lines up vertically within own Bounds.
+    /// </summary>
+    [StyleField("textVerticalAlign", VAlign.Top)]
+    private VAlign? _textVerticalAlign;
 
     private SpriteFontBase ResolveFont(IFontManager fonts)
         => FontFamily is null ? fonts.Get(FontSize, FontVariant) : fonts.Get(FontSize, FontFamily, FontVariant);
@@ -64,6 +78,22 @@ public sealed partial class Label : Control
         if (AutoWrap)
             text = new Label2D(font, text).WrapText(Bounds.Width);
 
-        sb.DrawString(font, text, new Vector2(Bounds.X, Bounds.Y), Color);
+        var textSize = font.MeasureString(text);
+
+        var x = TextAlign switch
+        {
+            HAlign.Center => Bounds.X + (Bounds.Width - textSize.X) / 2f,
+            HAlign.Right => Bounds.Right - textSize.X,
+            _ => Bounds.X, // Left, Stretch
+        };
+
+        var y = TextVerticalAlign switch
+        {
+            VAlign.Center => Bounds.Y + (Bounds.Height - textSize.Y) / 2f,
+            VAlign.Bottom => Bounds.Bottom - textSize.Y,
+            _ => Bounds.Y, // Top, Stretch
+        };
+
+        sb.DrawString(font, text, new Vector2(x, y), Color);
     }
 }
