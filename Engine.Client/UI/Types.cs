@@ -1,3 +1,5 @@
+using Engine.Shared.Prototypes;
+
 namespace Engine.Client.UI;
 
 /// <summary>
@@ -5,10 +7,15 @@ namespace Engine.Client.UI;
 /// </summary>
 public struct Thickness
 {
-    public int Left;
-    public int Top;
-    public int Right;
-    public int Bottom;
+    [DataField("left")] public int Left;
+    [DataField("top")] public int Top;
+    [DataField("right")] public int Right;
+    [DataField("bottom")] public int Bottom;
+
+    // serialization req limitation
+    public Thickness() : this(0)
+    {
+    }
 
     public Thickness(int all) : this(all, all, all, all)
     {

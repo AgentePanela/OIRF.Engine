@@ -20,6 +20,6 @@ public sealed class StylePrototype : IPrototype, IInheritingPrototype
     [DataField("abstract")]
     public bool Abstract { get; set; }
 
-    [DataField("rules")]
+    [DataField("rules"), AppendCollectionDataField]
     public List<StyleRule> Rules = new();
 }

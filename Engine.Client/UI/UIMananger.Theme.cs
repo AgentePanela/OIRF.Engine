@@ -18,7 +18,7 @@ public sealed partial class UIManager
         private set => _activeTheme = value;
     }
 
-    public void UpdateTheme(ProtoId<StylePrototype> id)
+    public void SetMainTheme(ProtoId<StylePrototype> id)
     {
         if (!_protoMan.TryIndex(id, out var theme))
             return;

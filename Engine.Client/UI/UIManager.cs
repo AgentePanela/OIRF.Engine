@@ -72,6 +72,24 @@ public sealed partial class UIManager
             Height = 85,
         });
 
+        var btn = new Button
+        {
+            Text = "Test Button"
+        };
+        btn.OnClick += _ => Log.Debug("I was clicked!");
+        column.AddChild(btn);
+
+        column.AddChild(new CheckButton
+        {
+            Text = "Check Button"
+        });
+
+        column.AddChild(new Button
+        {
+            Text = "Disabled Button",
+            Disabled = true
+        });
+
         var cc = new CenterContainer
         {
             Background = Color.SkyBlue,

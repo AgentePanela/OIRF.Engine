@@ -80,6 +80,10 @@ public struct ColorGradient
     {
     }
 
+    public ColorGradient() : this(Color.White)
+    {
+    }
+
     // mirror XNA Color constructor
 
     public ColorGradient(int r, int g, int b) : this(new Color(r, g, b))

@@ -92,6 +92,13 @@ public sealed class DataFieldAttribute : Attribute
 public sealed class ComponentsDataFieldAttribute : Attribute { }
 
 /// <summary>
+/// Marks a [DataField] that holds a plain list or dictionary where inheritance should merge
+/// with the parent's value instead of replacing it outright.
+/// </summary>
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
+public sealed class AppendCollectionDataFieldAttribute : Attribute { }
+
+/// <summary>
 /// Exception type for prototype loading errors.
 /// </summary>
 public sealed class PrototypeLoadException : Exception

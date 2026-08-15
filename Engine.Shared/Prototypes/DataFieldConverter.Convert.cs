@@ -92,7 +92,31 @@ public static partial class DataFieldConverter
  
         if (targetType == typeof(Microsoft.Xna.Framework.Color))
             return ParseColor(rawValue, str);
- 
+
+        if (rawValue is not IDictionary && targetType.FullName == "Engine.Client.UI.ColorGradient")
+        {
+            var color = ParseColor(rawValue, str);
+            var implicitFromColor = targetType.GetMethod(
+                "op_Implicit",
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                new[] { typeof(Microsoft.Xna.Framework.Color) },
+                null);
+
+            if (implicitFromColor is not null)
+                return implicitFromColor.Invoke(null, new object[] { color });
+        }
+
+        // ── Engine.Client.UI.Thickness (uniform-value shorthand) ──────────
+        // Same reasoning as ColorGradient above - matched by name, and only for a scalar
+        // value. A dictionary ({ left: ..., top: ... }) falls through to the generic
+        // [DataField] object path, which already knows Thickness's four fields.
+        if (rawValue is not IDictionary && targetType.FullName == "Engine.Client.UI.Thickness")
+        {
+            var uniform = System.Convert.ToInt32(str, CultureInfo.InvariantCulture);
+            return Activator.CreateInstance(targetType, uniform);
+        }
+
         // ── ProtoId<T> ────────────────────────────────────────────────────
         if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(ProtoId<>))
             return Activator.CreateInstance(targetType, str);
