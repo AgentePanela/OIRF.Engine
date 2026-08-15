@@ -157,6 +157,7 @@ public class GameClient : Game
         IoCManager.Register<LightingManager>();
         IoCManager.Register<RenderManager>();
         IoCManager.Register<InputManager>();
+        IoCManager.Register<IVirtualKeyboard, NullVirtualKeyboard>(); // platform-specific mobile backends override this
         IoCManager.Register<UIManager>();
         IoCManager.Register<WindowManager>();
 

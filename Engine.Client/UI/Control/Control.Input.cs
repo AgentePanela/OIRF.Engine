@@ -46,6 +46,11 @@ public abstract partial class Control : IDisposable
     {
     }
 
+    /// <summary>
+    /// Whether this control needs an on-screen keyboard shown while it's focused (mobile/gamepad).
+    /// </summary>
+    protected internal virtual bool WantsVirtualKeyboard => false;
+
     private bool _mouseInside;
 
     /// <summary>

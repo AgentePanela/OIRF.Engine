@@ -16,6 +16,7 @@ public sealed partial class UIManager
     [Dependency] private readonly IFontManager _fontMan = default!;
     [Dependency] private readonly InputManager _input = default!;
     [Dependency] private readonly IPrototypeManager _protoMan = default!;
+    [Dependency] private readonly IVirtualKeyboard _virtualKeyboard = default!;
 
     public PanelContainer Root { get; } = new()
     {
@@ -154,6 +155,11 @@ public sealed partial class UIManager
         SetTracked(ref _focusedControl, control);
         _focusedControl?.SetFocused(true);
         ResetKeyRepeat();
+
+        if (control is { WantsVirtualKeyboard: true })
+            _virtualKeyboard.Show();
+        else
+            _virtualKeyboard.Hide();
     }
 
     public void Update(float dt)

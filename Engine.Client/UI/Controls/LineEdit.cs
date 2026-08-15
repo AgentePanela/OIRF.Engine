@@ -100,6 +100,8 @@ public partial class LineEdit : PanelContainer
     private float _caretBlink;
     private float _scrollPixels;
 
+    protected internal override bool WantsVirtualKeyboard => true;
+
     public LineEdit()
     {
         Focusable = true;
