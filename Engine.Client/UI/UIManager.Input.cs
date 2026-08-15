@@ -114,6 +114,19 @@ public sealed partial class UIManager
     }
 
     /// <summary>
+    /// Forwards mouse movement to whichever control is currently pressed - not whatever's
+    /// hovered, so a drag keeps reaching its origin even once the cursor slides off it.
+    /// </summary>
+    private void UpdateMouseMove()
+    {
+        var (changed, position) = _input.MousePositionChanged();
+        if (!changed || _pressedControl is null)
+            return;
+
+        _pressedControl.MouseMove(position);
+    }
+
+    /// <summary>
     /// Bubbles a wheel delta up from the hovered control through its ancestors, stopping at
     /// whichever one actually handles it (e.g. a ScrollContainer that still has room to scroll).
     /// </summary>

@@ -158,6 +158,7 @@ public sealed partial class UIManager
 
         UpdateHover();
         UpdateMouseButtons();
+        UpdateMouseMove();
         UpdateMouseWheel();
     }
 

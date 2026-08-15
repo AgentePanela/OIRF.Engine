@@ -123,6 +123,16 @@ public abstract partial class Control : IDisposable
     }
 
     /// <summary>
+    /// Called every frame the mouse moves while this control is the one holding it pressed -
+    /// even once the cursor has moved outside its own <see cref="Bounds"/>. Used for drag
+    /// interactions (e.g. a ScrollBar's thumb) that need to keep tracking the mouse past their
+    /// own edges once grabbed.
+    /// </summary>
+    protected internal virtual void MouseMove(Vector2 position)
+    {
+    }
+
+    /// <summary>
     /// Called when the mouse wheel moves over this control. Unlike the other mouse hooks, this
     /// one bubbles: if it returns false ("didn't handle it"), the input router calls it on
     /// <see cref="Parent"/> next, and so on up the tree - a Label inside a ScrollContainer
