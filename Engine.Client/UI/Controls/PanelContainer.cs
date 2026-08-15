@@ -14,7 +14,7 @@ namespace Engine.Client.UI;
 public partial class PanelContainer : Control
 {
     /// <summary>
-    /// Fill for this control's own Bounds.
+    /// Fill color for this control's own Bounds.
     /// </summary>
     [StyleField("background")]
     private ColorGradient? _background;

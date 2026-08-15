@@ -43,13 +43,11 @@ public enum VerticalAlignment
     Stretch
 }
 
-/// <summary>
-/// Which axis a BoxContainer lays its children out along.
-/// </summary>
 public enum Orientation
 {
     Horizontal,
-    Vertical
+    Vertical,
+    //Center
 }
 
 /// <summary>

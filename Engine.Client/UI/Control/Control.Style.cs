@@ -70,7 +70,7 @@ public abstract partial class Control
             if (!rule.StyleClass.Matches(this))
                 continue;
 
-            if (best is null || rule.StyleClass.Specificity > best.StyleClass.Specificity)
+            if (best is null || rule.StyleClass.Specificity >= best.StyleClass.Specificity)
                 best = rule;
         }
 

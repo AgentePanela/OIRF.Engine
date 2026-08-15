@@ -1,2 +1,29 @@
 - type: style
   id: EngineDefault
+  parent: [EngineDefaultButtons]
+
+- type: style
+  id: EngineDefaultButtons
+  abstract: true
+  rules:
+    - class: { styleClass: button }
+      properties:
+        background: "#1a1a1a"
+        outlineColor: "#770B0B"
+        outlineThickness: 2
+        padding: 10
+
+    - class: { styleClass: button, pseudoClass: hover }
+      properties:
+        background: "#262626"
+        outlineColor: "#891E1E"
+
+    - class: { styleClass: button, pseudoClass: pressed }
+      properties:
+        background: "#260202"
+        outlineColor: "#591919"
+
+    - class: { styleClass: button, pseudoClass: disabled }
+      properties:
+        background: "#0A0A0A"
+        outlineColor: "#4a1414"

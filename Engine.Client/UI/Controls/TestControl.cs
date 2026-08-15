@@ -33,6 +33,14 @@ public sealed partial class TestControl : PanelContainer
 
         MouseFilter = MouseFilterMode.Stop;
         Focusable = true;
+
+        AddChild(new Label
+        {
+            Text = "Test\nControl",
+            FontSize = 12,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+        });
     }
 
     protected internal override void MouseEntered()

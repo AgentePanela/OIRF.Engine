@@ -20,9 +20,8 @@ public sealed partial class UIManager
 
     public PanelContainer Root { get; } = new()
     {
-        Margin = new(15),
-        VerticalAlignment = VerticalAlignment.Top,
-        HorizontalAlignment = HorizontalAlignment.Left,
+        VerticalAlignment = VerticalAlignment.Stretch,
+        HorizontalAlignment = HorizontalAlignment.Stretch,
     };
 
     private ShapeBatch _shapeBatch = default!;
@@ -35,10 +34,17 @@ public sealed partial class UIManager
         _shapeBatch = new ShapeBatch(GameClient.GraphicsDevice);
         _defaultStyleProto = _protoMan.Index(_defaultStyleId);
 
-        var root = new BoxContainer { Orientation = Orientation.Vertical, _separation = 10 };
+        var root = new BoxContainer 
+        { 
+            Orientation = Orientation.Vertical, 
+            _separation = 10, 
+            Margin = new(15),
+            VerticalAlignment = VerticalAlignment.Top,
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
         AddChild(root);
 
-        var row = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 5 };
+        var row = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 5, Margin = new(0, -5) };
         root.AddChild(row);
 
         for (var i = 0; i < 9; i++)
@@ -56,7 +62,7 @@ public sealed partial class UIManager
         for (var i = 0; i < 4; i++)
             column.AddChild(new TestControl());
 
-        column.AddChild(new Label() { Text = "Test" });
+        column.AddChild(new Label() { Text = "BoxContainer (Vertical)" });
 
         column.AddChild(new TextureRect
         {
@@ -64,6 +70,23 @@ public sealed partial class UIManager
             NineSliceMargins = new Thickness(32),
             Width = 150,
             Height = 85,
+        });
+
+        var cc = new CenterContainer
+        {
+            Background = Color.SkyBlue,
+            Margin = new(15, 30),
+            VerticalAlignment = VerticalAlignment.Bottom,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Padding = new (30)
+        };
+        Root.AddChild(cc);
+        cc.AddChild(new TestControl());
+        cc.AddChild(new Label
+        {
+            Text = "CenterContainer",
+            Color = Color.Black,
+            FontSize = 20,
         });
     }
 
