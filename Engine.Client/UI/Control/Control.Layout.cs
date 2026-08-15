@@ -44,13 +44,13 @@ public abstract partial class Control
     /// <summary>
     /// Space reserved outside this control's own Bounds, between it and its siblings/parent.
     /// </summary>
-    [StyleField("margin", 0)]
+    [StyleField("margin", 0f)]
     private Thickness? _margin;
 
     /// <summary>
     /// Space between this control's own Bounds and its content/children.
     /// </summary>
-    [StyleField("padding", 0)]
+    [StyleField("padding", 0f)]
     private Thickness? _padding;
 
     /// <summary>
@@ -134,10 +134,10 @@ public abstract partial class Control
     public void Arrange(Rectangle finalRect)
     {
         var contentRect = new Rectangle(
-            finalRect.X + Margin.Left,
-            finalRect.Y + Margin.Top,
-            Math.Max(0, finalRect.Width - Margin.Left - Margin.Right),
-            Math.Max(0, finalRect.Height - Margin.Top - Margin.Bottom));
+            (int)(finalRect.X + Margin.Left),
+            (int)(finalRect.Y + Margin.Top),
+            (int)Math.Max(0, finalRect.Width - Margin.Left - Margin.Right),
+            (int)Math.Max(0, finalRect.Height - Margin.Top - Margin.Bottom));
 
         var contentWidth = MathHelper.Clamp(Width ?? (DesiredSize.X - Margin.Left - Margin.Right), MinWidth, MaxWidth);
         var contentHeight = MathHelper.Clamp(Height ?? (DesiredSize.Y - Margin.Top - Margin.Bottom), MinHeight, MaxHeight);
@@ -169,10 +169,10 @@ public abstract partial class Control
         Bounds = new Rectangle((int)x, (int)y, (int)width, (int)height);
 
         var innerRect = new Rectangle(
-            Bounds.X + Padding.Left,
-            Bounds.Y + Padding.Top,
-            Math.Max(0, Bounds.Width - Padding.Left - Padding.Right),
-            Math.Max(0, Bounds.Height - Padding.Top - Padding.Bottom));
+            (int)(Bounds.X + Padding.Left),
+            (int)(Bounds.Y + Padding.Top),
+            (int)Math.Max(0, Bounds.Width - Padding.Left - Padding.Right),
+            (int)Math.Max(0, Bounds.Height - Padding.Top - Padding.Bottom));
 
         ArrangeCore(innerRect);
     }

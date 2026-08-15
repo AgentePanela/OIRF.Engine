@@ -121,4 +121,14 @@ public abstract partial class Control : IDisposable
     protected internal virtual void Click(MouseButton button)
     {
     }
+
+    /// <summary>
+    /// Called when the mouse wheel moves over this control. Unlike the other mouse hooks, this
+    /// one bubbles: if it returns false ("didn't handle it"), the input router calls it on
+    /// <see cref="Parent"/> next, and so on up the tree - a Label inside a ScrollContainer
+    /// doesn't need to know or care about scrolling, the container further up does.
+    /// </summary>
+    /// <param name="delta">Raw wheel delta for this frame - positive is away from the user (scroll up).</param>
+    /// <returns>True to stop the event here; false to let an ancestor try next.</returns>
+    protected internal virtual bool MouseWheel(int delta) => false;
 }

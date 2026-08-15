@@ -1,6 +1,6 @@
 - type: style
   id: EngineDefault
-  parent: [EngineDefaultButtons]
+  parent: [EngineDefaultButtons, EngineDefaultScroll]
 
 - type: style
   id: EngineDefaultButtons
@@ -27,3 +27,22 @@
       properties:
         background: "#0A0A0A"
         outlineColor: "#4a1414"
+
+- type: style
+  id: EngineDefaultScroll
+  abstract: true
+  rules:
+    - class: { styleClass: scrollBar }
+      properties:
+        background: "#141414"
+        thumbColor: "#4a4a4a"
+        thumbCorner: 10
+        antiAnalising: 1
+
+    - class: { styleClass: scrollBar, pseudoClass: hover }
+      properties:
+        thumbColor: "#5a5a5a"
+
+    - class: { styleClass: scrollBar, pseudoClass: pressed }
+      properties:
+        thumbColor: "#636363"

@@ -28,7 +28,7 @@ public partial class PanelContainer : Control
     /// <summary>
     /// Border thickness in pixels, per side.
     /// </summary>
-    [StyleField("outlineThickness", 1)]
+    [StyleField("outlineThickness", 1f)]
     private Thickness? _outlineThickness;
 
     /// <summary>
@@ -45,7 +45,7 @@ public partial class PanelContainer : Control
     /// <summary>
     /// Cut margins (in source pixels) for the 9-slice grid.
     /// </summary>
-    [StyleField("nineSliceMargins", 4)]
+    [StyleField("nineSliceMargins", 4f)]
     private Thickness? _nineSliceMargins;
 
     /// <summary>

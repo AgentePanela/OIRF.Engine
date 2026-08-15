@@ -112,4 +112,21 @@ public sealed partial class UIManager
 
         SetTracked(ref _pressedControl, null);
     }
+
+    /// <summary>
+    /// Bubbles a wheel delta up from the hovered control through its ancestors, stopping at
+    /// whichever one actually handles it (e.g. a ScrollContainer that still has room to scroll).
+    /// </summary>
+    private void UpdateMouseWheel()
+    {
+        var (changed, delta) = _input.MouseWheelDeltaChanged();
+        if (!changed || delta == 0)
+            return;
+
+        for (var control = _hoveredControl; control is not null; control = control.Parent)
+        {
+            if (control.MouseWheel(delta))
+                return;
+        }
+    }
 }

@@ -44,7 +44,7 @@ public sealed partial class UIManager
         };
         AddChild(root);
 
-        var row = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 5, Margin = new(0, -5) };
+        var row = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 5 };
         root.AddChild(row);
 
         for (var i = 0; i < 9; i++)
@@ -106,6 +106,23 @@ public sealed partial class UIManager
             Color = Color.Black,
             FontSize = 20,
         });
+
+        var scroll = new ScrollContainer
+        {
+            Background = new Color(20, 20, 20, 200),
+            Width = 220,
+            Height = 150,
+            Margin = new(15),
+            VerticalAlignment = VerticalAlignment.Top,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        Root.AddChild(scroll);
+
+        var scrollContent = new BoxContainer { Orientation = Orientation.Vertical, _separation = 5, Margin = new(5) };
+        scroll.AddChild(scrollContent);
+
+        for (var i = 0; i < 20; i++)
+            scrollContent.AddChild(new Label { Text = $"Scroll item {i}" });
     }
 
     public void AddChild(Control control) => Root.AddChild(control);
@@ -141,6 +158,7 @@ public sealed partial class UIManager
 
         UpdateHover();
         UpdateMouseButtons();
+        UpdateMouseWheel();
     }
 
     private void UpdateHover()
@@ -157,6 +175,7 @@ public sealed partial class UIManager
 
     public void Draw(float dt)
     {
+        //GameClient.GraphicsDevice.ScissorRectangle = GameClient.GraphicsDevice.Viewport.Bounds;
         _shapeBatch.Begin(rasterizerState: ScissorRasterizer);
         Root.Draw(_shapeBatch, _fontMan, dt);
         _shapeBatch.End();

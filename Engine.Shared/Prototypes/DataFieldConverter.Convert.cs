@@ -113,7 +113,7 @@ public static partial class DataFieldConverter
         // [DataField] object path, which already knows Thickness's four fields.
         if (rawValue is not IDictionary && targetType.FullName == "Engine.Client.UI.Thickness")
         {
-            var uniform = System.Convert.ToInt32(str, CultureInfo.InvariantCulture);
+            var uniform = System.Convert.ToSingle(str, CultureInfo.InvariantCulture);
             return Activator.CreateInstance(targetType, uniform);
         }
 

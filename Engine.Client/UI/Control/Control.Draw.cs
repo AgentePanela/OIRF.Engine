@@ -3,11 +3,15 @@ using System.Collections.Generic;
 using Apos.Shapes;
 using Engine.Client.Graphics.Fonts;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace Engine.Client.UI;
 
 public abstract partial class Control : IDisposable
 {
+    // ShapeBatch queues draws and only actually submits them at End() - so heres a little hack
+    private static readonly RasterizerState ScissorRasterizer = new() { ScissorTestEnable = true };
+
     /// <summary>
     /// Draws this control and its subtree, clipped to <see cref="Bounds"/> intersected with
     /// whatever was already clipped by an ancestor.
@@ -24,14 +28,25 @@ public abstract partial class Control : IDisposable
         if (clipped.Width <= 0 || clipped.Height <= 0)
             return; // fully clipped out - this and everything under it is off-screen
 
-        device.ScissorRectangle = clipped;
-
+        
         DrawSelf(sb, fontManager, dt);
+        var scissorChanged = clipped != previousScissor;
+        if (scissorChanged)
+        {
+            sb.End(); //todo: fork apos.shapes and add Flush as public member instead of end/begin
+            device.ScissorRectangle = clipped;
+            sb.Begin(rasterizerState: ScissorRasterizer);
+        }
 
         foreach (var child in Children)
             child.Draw(sb, fontManager, dt);
 
-        device.ScissorRectangle = previousScissor;
+        if (scissorChanged)
+        {
+            sb.End();
+            device.ScissorRectangle = previousScissor;
+            sb.Begin(rasterizerState: ScissorRasterizer);
+        }
     }
 
     /// <summary>

@@ -713,6 +713,8 @@ public sealed class LightingSystem : EntityDrawSystem
             _shadowMap.Target is null ? 1f : 1f / _shadowMap.Target.Width,
             _shadowMap.Target is null ? 1f : 1f / _shadowMap.Target.Height));
 
+        var previousScissor = GameClient.GraphicsDevice.ScissorRectangle;
+
         GameClient.GraphicsDevice.BlendState = AdditivePremultiplied;
         GameClient.GraphicsDevice.DepthStencilState = DepthStencilState.None;
         GameClient.GraphicsDevice.SamplerStates[0] = SamplerState.LinearClamp;
@@ -768,6 +770,7 @@ public sealed class LightingSystem : EntityDrawSystem
                 shadowIdx++;
         }
 
+        GameClient.GraphicsDevice.ScissorRectangle = previousScissor;
         GameClient.GraphicsDevice.RasterizerState = RasterizerState.CullNone;
         GameClient.GraphicsDevice.BlendState = BlendState.AlphaBlend;
     }

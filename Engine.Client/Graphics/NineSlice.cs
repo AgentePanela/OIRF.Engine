@@ -16,10 +16,10 @@ public readonly record struct NineSlicePatch(Rectangle Source, Rectangle Dest)
     /// </summary>
     public static IEnumerable<NineSlicePatch> Compute(Rectangle source, Thickness margin, Rectangle dest)
     {
-        var srcLeft = Math.Min(margin.Left, source.Width);
-        var srcRight = Math.Min(margin.Right, source.Width - srcLeft);
-        var srcTop = Math.Min(margin.Top, source.Height);
-        var srcBottom = Math.Min(margin.Bottom, source.Height - srcTop);
+        var srcLeft = Math.Min((int)margin.Left, source.Width);
+        var srcRight = Math.Min((int)margin.Right, source.Width - srcLeft);
+        var srcTop = Math.Min((int)margin.Top, source.Height);
+        var srcBottom = Math.Min((int)margin.Bottom, source.Height - srcTop);
 
         var destLeft = Math.Min(srcLeft, dest.Width);
         var destRight = Math.Min(srcRight, dest.Width - destLeft);
