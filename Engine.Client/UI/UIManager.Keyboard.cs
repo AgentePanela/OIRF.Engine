@@ -13,9 +13,11 @@ public sealed partial class UIManager
     public Control? FocusedControl => _focusedControl;
 
     /// <summary>
-    /// True when some control currently holds keyboard focus.
+    /// True when the focused control captures text input (e.g. LineEdit), and game hotkeys should be suppressed.
+    /// Buttons/CheckBoxes etc. are Focusable too (for Enter/Space activation) but don't want typed text, so this
+    /// checks WantsVirtualKeyboard rather than just "has focus" - otherwise clicking a checkbox would block movement.
     /// </summary>
-    public bool IsKeyboardFocused => _focusedControl is not null;
+    public bool IsKeyboardFocused => _focusedControl?.WantsVirtualKeyboard ?? false;
 
     private const float KeyRepeatDelay = 0.4f; // held-before-repeat-starts
     private const float KeyRepeatInterval = 0.035f; // time between repeats once started

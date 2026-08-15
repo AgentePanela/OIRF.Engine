@@ -22,6 +22,7 @@ public sealed partial class UIManager
     {
         VerticalAlignment = VerticalAlignment.Stretch,
         HorizontalAlignment = HorizontalAlignment.Stretch,
+        Background = new Color(255, 255, 255, 0.25f)
     };
 
     private ShapeBatch _shapeBatch = default!;
@@ -84,6 +85,18 @@ public sealed partial class UIManager
         {
             Text = "Check Button"
         });
+
+        column.AddChild(new CheckBox
+        {
+            Text = "Check Box"
+        });
+
+        var progress = new ProgressBar
+        {
+            Width = 180,
+            Value = 0.4f,
+        };
+        column.AddChild(progress);
 
         column.AddChild(new Button
         {
