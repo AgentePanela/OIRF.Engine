@@ -12,7 +12,7 @@ namespace Engine.Client.UI;
 /// <summary>
 /// Displays a sprite from the game's texture atlas.
 /// </summary>
-public sealed partial class TextureRect : Control
+public partial class TextureRect : Control
 {
     /// <summary>
     /// Atlas sprite key to display.

@@ -1,6 +1,6 @@
 using Microsoft.Xna.Framework;
 
-namespace Engine.Client.UI.Controls;
+namespace Engine.Client.UI;
 
 /// <summary>
 /// Lays children out one after another along a single axis (Horizontal or Vertical), with a

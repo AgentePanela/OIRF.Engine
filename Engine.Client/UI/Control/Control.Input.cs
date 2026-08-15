@@ -1,6 +1,7 @@
 using System;
 using Engine.Client.Inputs;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 
 namespace Engine.Client.UI;
 
@@ -141,4 +142,21 @@ public abstract partial class Control : IDisposable
     /// <param name="delta">Raw wheel delta for this frame - positive is away from the user (scroll up).</param>
     /// <returns>True to stop the event here; false to let an ancestor try next.</returns>
     protected internal virtual bool MouseWheel(int delta) => false;
+
+    /// <summary>
+    /// Called for each character typed while this control holds keyboard focus - driven by the
+    /// OS's own text composition (layout/shift/dead keys already resolved), not raw key codes.
+    /// </summary>
+    protected internal virtual void TextEntered(char character)
+    {
+    }
+
+    /// <summary>
+    /// Called for each non-character key pressed while this control holds keyboard focus
+    /// (arrows, backspace, enter, ctrl-combos, ...). Doesn't bubble - keyboard focus is already
+    /// exclusive to one control, unlike <see cref="MouseWheel"/>.
+    /// </summary>
+    protected internal virtual void KeyDown(Keys key)
+    {
+    }
 }

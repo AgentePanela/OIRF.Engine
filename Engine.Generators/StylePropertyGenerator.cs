@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -194,11 +195,12 @@ public sealed class StylePropertyGenerator : IIncrementalGenerator
         float f when float.IsPositiveInfinity(f) => "float.PositiveInfinity",
         float f when float.IsNegativeInfinity(f) => "float.NegativeInfinity",
         float f when float.IsNaN(f) => "float.NaN",
-        float f => $"{f}f",
+        // invariant culture, not the ambient one - CurrentCulture renders "0.2" as "0,2" on
+        float f => $"{f.ToString(CultureInfo.InvariantCulture)}f",
         double d when double.IsPositiveInfinity(d) => "double.PositiveInfinity",
         double d when double.IsNegativeInfinity(d) => "double.NegativeInfinity",
         double d when double.IsNaN(d) => "double.NaN",
-        double d => $"{d}d",
+        double d => $"{d.ToString(CultureInfo.InvariantCulture)}d",
         uint u => $"{u}u",
         long l => $"{l}L",
         ulong ul => $"{ul}UL",

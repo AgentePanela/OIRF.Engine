@@ -29,4 +29,5 @@ public struct RectangleF
     }
 
     public static RectangleF ToRectF(Rectangle r) => new();
+    public static implicit operator Rectangle (RectangleF r) => new((int)r.X, (int)r.Y, (int)r.Width, (int)r.Height);
 }

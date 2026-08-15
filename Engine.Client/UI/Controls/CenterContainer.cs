@@ -1,6 +1,6 @@
 using Microsoft.Xna.Framework;
 
-namespace Engine.Client.UI.Controls;
+namespace Engine.Client.UI;
 
 /// <summary>
 /// Centers each child at its own measured size.

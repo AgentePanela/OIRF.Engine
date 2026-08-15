@@ -2,7 +2,7 @@ using Engine.Client.Inputs;
 using Microsoft.Xna.Framework;
 using System;
 
-namespace Engine.Client.UI.Controls;
+namespace Engine.Client.UI;
 
 public sealed partial class TestControl : PanelContainer
 {

@@ -1,6 +1,6 @@
 - type: style
   id: EngineDefault
-  parent: [EngineDefaultButtons, EngineDefaultScroll]
+  parent: [EngineDefaultButtons, EngineDefaultScroll, EngineDefaultLineEdit]
 
 - type: style
   id: EngineDefaultButtons
@@ -46,3 +46,22 @@
     - class: { styleClass: scrollBar, pseudoClass: pressed }
       properties:
         thumbColor: "#636363"
+
+- type: style
+  id: EngineDefaultLineEdit
+  abstract: true
+  rules:
+    - class: { styleClass: lineEdit }
+      properties:
+        background: "#1a1a1a"
+        outlineColor: "#770B0B"
+        outlineThickness: 1
+        padding: 6
+        color: "#FFFFFF"
+        placeholderColor: "#757575"
+        selectionColor: "#3390FF80"
+        caretColor: "#FFFFFF"
+
+    - class: { styleClass: lineEdit, pseudoClass: focus }
+      properties:
+        outlineColor: "#B02929"

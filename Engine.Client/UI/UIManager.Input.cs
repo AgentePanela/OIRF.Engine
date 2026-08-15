@@ -5,7 +5,6 @@ namespace Engine.Client.UI;
 public sealed partial class UIManager
 {
     private Control? _hoveredControl;
-    private Control? _focusedControl;
     private Control? _pressedControl;
     private MouseButton _pressedButton;
 
@@ -18,17 +17,6 @@ public sealed partial class UIManager
     /// True when the mouse cursor is over any UI control.
     /// </summary>
     public bool IsMouseOverUI => _hoveredControl is not null;
-
-    /// <summary>
-    /// The control that currently holds keyboard focus, if any.
-    /// </summary>
-    public Control? FocusedControl => _focusedControl;
-
-    /// <summary>
-    /// True when some control currently holds keyboard focus (e.g. a text box being typed
-    /// into).
-    /// </summary>
-    public bool IsKeyboardFocused => _focusedControl is not null;
 
     private static readonly MouseButton[] AllMouseButtons =
     [

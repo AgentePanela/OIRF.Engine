@@ -1,7 +1,6 @@
 using Apos.Shapes;
 using Engine.Client.Graphics.Fonts;
 using Engine.Client.Inputs;
-using Engine.Client.UI.Controls;
 using Engine.Shared.IoC;
 using Engine.Shared.Prototypes;
 using Microsoft.Xna.Framework;
@@ -33,6 +32,7 @@ public sealed partial class UIManager
         IoCManager.ResolveDependencies(this);
         _shapeBatch = new ShapeBatch(GameClient.GraphicsDevice);
         _defaultStyleProto = _protoMan.Index(_defaultStyleId);
+        GameClient.Instance.Window.TextInput += OnTextInput; //ts looks ugly
 
         var root = new BoxContainer 
         { 
@@ -90,6 +90,14 @@ public sealed partial class UIManager
             Disabled = true
         });
 
+        var lineEdit = new LineEdit
+        {
+            PlaceholderText = "Type something...",
+            Width = 180,
+        };
+        lineEdit.OnTextEntered += text => { Log.Debug($"LineEdit submitted: {text}"); lineEdit.Text = ""; };
+        column.AddChild(lineEdit);
+
         var cc = new CenterContainer
         {
             Background = Color.SkyBlue,
@@ -145,6 +153,7 @@ public sealed partial class UIManager
         _focusedControl?.SetFocused(false);
         SetTracked(ref _focusedControl, control);
         _focusedControl?.SetFocused(true);
+        ResetKeyRepeat();
     }
 
     public void Update(float dt)
@@ -160,6 +169,7 @@ public sealed partial class UIManager
         UpdateMouseButtons();
         UpdateMouseMove();
         UpdateMouseWheel();
+        UpdateKeyboard(dt);
     }
 
     private void UpdateHover()

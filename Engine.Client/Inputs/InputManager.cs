@@ -202,6 +202,24 @@ public sealed class InputManager()
 
     public bool AnyKeyDown()
         => _keyboardState.GetPressedKeyCount() > 0 && !_ui.IsKeyboardFocused;
+
+    /// <summary>
+    /// Raw, ungated key state. Unlike <see cref="KeyDown"/>, doesn't suppress while a UI
+    /// control holds keyboard focus.
+    /// </summary>
+    internal bool IsKeyDownRaw(Keys key) => _keyboardState.IsKeyDown(key);
+
+    /// <summary>
+    /// Keys that transitioned from up to down this frame.
+    /// </summary>
+    internal IEnumerable<Keys> KeysPressedThisFrame()
+    {
+        foreach (var key in _keyboardState.GetPressedKeys())
+        {
+            if (!_prevKeyboardState.IsKeyDown(key))
+                yield return key;
+        }
+    }
     #endregion
 
     #region Gamepad
