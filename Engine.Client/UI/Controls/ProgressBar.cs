@@ -56,10 +56,11 @@ public sealed partial class ProgressBar : PanelContainer
             return;
 
         var fraction = Value / MaxValue;
+        var panelRect = PanelRect(Bounds); // confine the fill to the background box
 
         var fillRect = Orientation == Orientation.Horizontal
-            ? new Rectangle(Bounds.X, Bounds.Y, (int)(Bounds.Width * fraction), Bounds.Height)
-            : new Rectangle(Bounds.X, Bounds.Bottom - (int)(Bounds.Height * fraction), Bounds.Width, (int)(Bounds.Height * fraction));
+            ? new Rectangle(panelRect.X, panelRect.Y, (int)(panelRect.Width * fraction), panelRect.Height)
+            : new Rectangle(panelRect.X, panelRect.Bottom - (int)(panelRect.Height * fraction), panelRect.Width, (int)(panelRect.Height * fraction));
 
         if (fillRect.Width <= 0 || fillRect.Height <= 0)
             return;

@@ -22,7 +22,7 @@ public sealed partial class UIManager
     {
         VerticalAlignment = VerticalAlignment.Stretch,
         HorizontalAlignment = HorizontalAlignment.Stretch,
-        Background = new Color(255, 255, 255, 0.25f)
+        Background = new Color(0, 255, 155, 0.25f)
     };
 
     private ShapeBatch _shapeBatch = default!;

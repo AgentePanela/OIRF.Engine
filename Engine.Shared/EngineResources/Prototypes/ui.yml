@@ -91,3 +91,6 @@
       properties:
         background: "#1a1a1a"
         fillColor: "#4a1414"
+        outlineColor: "#4a1414"
+        outlineMargin: -5
+        outlineThickness: 3
