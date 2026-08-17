@@ -1,6 +1,7 @@
 - type: style
   id: EngineDefault
-  parent: [EngineDefaultButtons, EngineDefaultScroll, EngineDefaultLineEdit, EngineDefaultCheckBox, EngineDefaultProgressBar]
+  parent: [EngineDefaultButtons, EngineDefaultScroll, EngineDefaultLineEdit, 
+    EngineDefaultCheckBox, EngineDefaultProgressBar, EngineDefaultSlider]
 
 - type: style
   id: EngineDefaultButtons
@@ -94,3 +95,21 @@
         outlineColor: "#4a1414"
         outlineMargin: -5
         outlineThickness: 3
+
+- type: style
+  id: EngineDefaultSlider
+  abstract: true
+  rules:
+    - class: { control: slider }
+      properties:
+        trackColor: "#4a4a4a"
+        grabberColor: "#770B0B"
+        grabberCorner: 8
+
+    - class: { control: slider, pseudoClass: hover }
+      properties:
+        grabberColor: "#891E1E"
+
+    - class: { control: slider, pseudoClass: pressed }
+      properties:
+        grabberColor: "#591919"

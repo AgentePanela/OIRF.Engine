@@ -59,17 +59,17 @@ public sealed partial class Label : Control
     /// <summary>
     /// Casing applied to Text before measuring/drawing - equivalent to CSS text-transform.
     /// </summary>
-    [StyleField("textTransform", TextTransform.None)]
-    private TextTransform? _textTransform;
+    [StyleField("textTransform", TTransform.None)]
+    private TTransform? _textTransform;
 
     private SpriteFontBase ResolveFont(IFontManager fonts)
         => FontFamily is null ? fonts.Get(FontSize, FontVariant) : fonts.Get(FontSize, FontFamily, FontVariant);
 
     private string ApplyTransform(string text) => TextTransform switch
     {
-        TextTransform.Uppercase => text.ToUpperInvariant(),
-        TextTransform.Lowercase => text.ToLowerInvariant(),
-        TextTransform.Capitalize => CapitalizeWords(text),
+        TTransform.Uppercase => text.ToUpperInvariant(),
+        TTransform.Lowercase => text.ToLowerInvariant(),
+        TTransform.Capitalize => CapitalizeWords(text),
         _ => text,
     };
 

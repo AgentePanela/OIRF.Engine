@@ -107,14 +107,25 @@ public static partial class DataFieldConverter
                 return implicitFromColor.Invoke(null, new object[] { color });
         }
 
-        // ── Engine.Client.UI.Thickness (uniform-value shorthand) ──────────
+        // ── Engine.Client.UI.Thickness ──────────
         // Same reasoning as ColorGradient above - matched by name, and only for a scalar
         // value. A dictionary ({ left: ..., top: ... }) falls through to the generic
         // [DataField] object path, which already knows Thickness's four fields.
         if (rawValue is not IDictionary && targetType.FullName == "Engine.Client.UI.Thickness")
         {
-            var uniform = System.Convert.ToSingle(str, CultureInfo.InvariantCulture);
-            return Activator.CreateInstance(targetType, uniform);
+            var values = rawValue is IEnumerable<object> seq
+                ? seq.Select(x => System.Convert.ToSingle(x, CultureInfo.InvariantCulture)).ToArray()
+                : str!.Split([' ', ','], StringSplitOptions.RemoveEmptyEntries)
+                    .Select(p => System.Convert.ToSingle(p, CultureInfo.InvariantCulture)).ToArray();
+
+            return values.Length switch
+            {
+                1 => Activator.CreateInstance(targetType, values[0]),
+                2 => Activator.CreateInstance(targetType, values[0], values[1]),
+                4 => Activator.CreateInstance(targetType, values[0], values[1], values[2], values[3]),
+                _ => throw new PrototypeLoadException(
+                    $"Thickness shorthand '{rawValue}' has {values.Length} values - expected 1 (uniform), 2 (horizontal vertical) or 4 (left top right bottom)."),
+            };
         }
 
         // ── ProtoId<T> ────────────────────────────────────────────────────
