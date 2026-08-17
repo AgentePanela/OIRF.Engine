@@ -21,29 +21,42 @@ public partial class ScrollContainer : PanelContainer
     /// </summary>
     public float ScrollSpeed { get; set; } = 50f;
 
+    private readonly ScrollViewport _viewport = new();
     private readonly ScrollBar _vScrollBar = new() { Orientation = Orientation.Vertical, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Stretch };
     private readonly ScrollBar _hScrollBar = new() { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Bottom };
 
-    private Vector2 _contentSize;
     private Vector2 _viewportSize;
 
-    /// <summary
-    /// >Current scroll position,
+    /// <summary>
+    /// Current scroll position.
     /// </summary>
     public Vector2 ScrollOffset => new(_hScrollBar.Value, _vScrollBar.Value);
 
-    public Vector2 MaxScrollOffset => Vector2.Max(_contentSize - _viewportSize, Vector2.Zero);
+    public Vector2 MaxScrollOffset => Vector2.Max(_viewport.DesiredSize - _viewportSize, Vector2.Zero);
 
     public ScrollContainer()
     {
         MouseFilter = MouseFilterMode.Pass;
 
-        AddChild(_vScrollBar);
-        AddChild(_hScrollBar);
+        base.AddChild(_viewport);
+        base.AddChild(_vScrollBar);
+        base.AddChild(_hScrollBar);
     }
+
+    /// <summary>
+    /// Adds a child to the scrollable content area (not the scrollbars).
+    /// </summary>
+    public new void AddChild(Control child) => _viewport.AddChild(child);
+
+    public new void RemoveChild(Control child, bool dispose = false) => _viewport.RemoveChild(child, dispose);
 
     protected override Vector2 MeasureCore(Vector2 availableSize)
     {
+        var overflow = OutlineOverflow;
+        availableSize = new Vector2(
+            MathHelper.Max(0, availableSize.X - overflow.Left - overflow.Right),
+            MathHelper.Max(0, availableSize.Y - overflow.Top - overflow.Bottom));
+
         if (VerticalScrollEnabled)
         {
             _vScrollBar.Measure(availableSize);
@@ -61,26 +74,19 @@ public partial class ScrollContainer : PanelContainer
             HorizontalScrollEnabled ? float.PositiveInfinity : availableSize.X,
             VerticalScrollEnabled ? float.PositiveInfinity : availableSize.Y);
 
-        var size = Vector2.Zero;
-        foreach (var child in Children)
-        {
-            if (child == _vScrollBar || child == _hScrollBar)
-                continue;
-
-            child.Measure(constraint);
-            size = Vector2.Max(size, child.DesiredSize);
-        }
-
-        _contentSize = size;
+        _viewport.Measure(constraint);
+        var overflowSize = new Vector2(overflow.Left + overflow.Right, overflow.Top + overflow.Bottom);
 
         // Report zero along whichever axis scrolls
         return new Vector2(
-            HorizontalScrollEnabled ? 0f : size.X,
-            VerticalScrollEnabled ? 0f : size.Y);
+            HorizontalScrollEnabled ? 0f : _viewport.DesiredSize.X,
+            VerticalScrollEnabled ? 0f : _viewport.DesiredSize.Y) + overflowSize;
     }
 
     protected override void ArrangeCore(Rectangle finalRect)
     {
+        finalRect = PanelRect(finalRect);
+
         var viewportWidth = finalRect.Width;
         var viewportHeight = finalRect.Height;
 
@@ -94,7 +100,7 @@ public partial class ScrollContainer : PanelContainer
 
         if (VerticalScrollEnabled)
         {
-            _vScrollBar.MaxValue = _contentSize.Y;
+            _vScrollBar.MaxValue = _viewport.DesiredSize.Y;
             _vScrollBar.Page = viewportHeight;
             _vScrollBar.Visible = MaxScrollOffset.Y > 0;
             _vScrollBar.Arrange(new Rectangle(
@@ -103,28 +109,15 @@ public partial class ScrollContainer : PanelContainer
 
         if (HorizontalScrollEnabled)
         {
-            _hScrollBar.MaxValue = _contentSize.X;
+            _hScrollBar.MaxValue = _viewport.DesiredSize.X;
             _hScrollBar.Page = viewportWidth;
             _hScrollBar.Visible = MaxScrollOffset.X > 0;
             _hScrollBar.Arrange(new Rectangle(
                 finalRect.X, finalRect.Bottom - (int)_hScrollBar.DesiredSize.Y, viewportWidth, (int)_hScrollBar.DesiredSize.Y));
         }
 
-        var contentRect = new Rectangle(
-            finalRect.X - (int)ScrollOffset.X,
-            finalRect.Y - (int)ScrollOffset.Y,
-            (int)MathHelper.Max(viewportWidth, _contentSize.X),
-            (int)MathHelper.Max(viewportHeight, _contentSize.Y));
-
-        // Content is arranged at its own full desired size, 
-        // potentially far bigger than the viewport
-        foreach (var child in Children)
-        {
-            if (child == _vScrollBar || child == _hScrollBar)
-                continue;
-
-            child.Arrange(contentRect);
-        }
+        _viewport.ScrollOffset = ScrollOffset;
+        _viewport.Arrange(new Rectangle(finalRect.X, finalRect.Y, viewportWidth, viewportHeight));
     }
 
     protected internal override bool MouseWheel(int delta)
@@ -140,5 +133,34 @@ public partial class ScrollContainer : PanelContainer
             _hScrollBar.Value -= pixels;
 
         return ScrollOffset != before;
+    }
+    
+    private sealed class ScrollViewport : Control
+    {
+        public Vector2 ScrollOffset;
+
+        protected override Vector2 MeasureCore(Vector2 availableSize)
+        {
+            var size = Vector2.Zero;
+            foreach (var child in Children)
+            {
+                child.Measure(availableSize);
+                size = Vector2.Max(size, child.DesiredSize);
+            }
+
+            return size;
+        }
+
+        protected override void ArrangeCore(Rectangle finalRect)
+        {
+            var contentRect = new Rectangle(
+                finalRect.X - (int)ScrollOffset.X,
+                finalRect.Y - (int)ScrollOffset.Y,
+                (int)MathHelper.Max(finalRect.Width, DesiredSize.X),
+                (int)MathHelper.Max(finalRect.Height, DesiredSize.Y));
+
+            foreach (var child in Children)
+                child.Arrange(contentRect);
+        }
     }
 }

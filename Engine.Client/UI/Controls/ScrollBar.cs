@@ -60,7 +60,7 @@ public partial class ScrollBar : PanelContainer
     public ScrollBar()
     {
         MouseFilter = MouseFilterMode.Stop;
-        StyleClasses.Add("scrollBar");
+        StyleAliasses.Add("scrollBar");
     }
 
     protected override Vector2 MeasureCore(Vector2 availableSize)

@@ -42,7 +42,7 @@ public sealed partial class ProgressBar : PanelContainer
 
     public ProgressBar()
     {
-        StyleClasses.Add("progressBar");
+        StyleAliasses.Add("progressBar");
     }
 
     protected override Vector2 MeasureCore(Vector2 availableSize)

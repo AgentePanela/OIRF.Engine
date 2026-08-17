@@ -26,4 +26,15 @@ public sealed partial class UIManager
         ActiveTheme = theme;
         Root.AnnounceThemeUpdate();
     }
+
+    /// <summary>
+    /// Resolves a style prototype ID to its StylePrototype, or null if not found.
+    /// </summary>
+    public StylePrototype? ResolveStyleId(string? id)
+    {
+        if (id is null)
+            return null;
+
+        return _protoMan.TryIndex<StylePrototype>(id, out var proto) ? proto : null;
+    }
 }

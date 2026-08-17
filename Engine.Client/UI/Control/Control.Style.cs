@@ -7,6 +7,7 @@ namespace Engine.Client.UI;
 public abstract partial class Control
 {
     #region Styles
+    public HashSet<string> StyleAliasses { get; } = new();
 
     public HashSet<string> StyleClasses { get; } = new();
 
@@ -17,18 +18,10 @@ public abstract partial class Control
     /// </summary>
     public string? StyleIdentifier { get; set; }
 
-    private StylePrototype? _stylesheetOverride;
-    public StylePrototype? StylesheetOverride
-    {
-        get => _stylesheetOverride;
-        set
-        {
-            if (_stylesheetOverride == value)
-                return;
-            _stylesheetOverride = value;
-            AnnounceThemeUpdate();
-        }
-    }
+    /// <summary>
+    /// ID of a style prototype to use instead of the default theme. Resolved via UIManager.
+    /// </summary>
+    public string? StylesheetOverride { get; set; }
 
     internal void AnnounceThemeUpdate()
     {
@@ -99,13 +92,19 @@ public abstract partial class Control
     /// </summary>
     private StylePrototype FindEffectiveStylesheet()
     {
+        var ui = IoCManager.Resolve<UIManager>();
+
         for (var control = this; control is not null; control = control.Parent)
         {
             if (control.StylesheetOverride is not null)
-                return control.StylesheetOverride;
+            {
+                var resolved = ui.ResolveStyleId(control.StylesheetOverride);
+                if (resolved is not null)
+                    return resolved;
+            }
         }
 
-        return IoCManager.Resolve<UIManager>().ActiveTheme;
+        return ui.ActiveTheme;
     }
 
     #endregion

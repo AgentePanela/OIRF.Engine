@@ -5,6 +5,7 @@ using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
 using HAlign = Engine.Client.UI.HorizontalAlignment;
 using VAlign = Engine.Client.UI.VerticalAlignment;
+using TTransform = Engine.Client.UI.TextTransform;
 using SpriteFontBase = FontStashSharp.SpriteFontBase;
 
 namespace Engine.Client.UI;
@@ -55,14 +56,53 @@ public sealed partial class Label : Control
     [StyleField("textVerticalAlign", VAlign.Top)]
     private VAlign? _textVerticalAlign;
 
+    /// <summary>
+    /// Casing applied to Text before measuring/drawing - equivalent to CSS text-transform.
+    /// </summary>
+    [StyleField("textTransform", TextTransform.None)]
+    private TextTransform? _textTransform;
+
     private SpriteFontBase ResolveFont(IFontManager fonts)
         => FontFamily is null ? fonts.Get(FontSize, FontVariant) : fonts.Get(FontSize, FontFamily, FontVariant);
+
+    private string ApplyTransform(string text) => TextTransform switch
+    {
+        TextTransform.Uppercase => text.ToUpperInvariant(),
+        TextTransform.Lowercase => text.ToLowerInvariant(),
+        TextTransform.Capitalize => CapitalizeWords(text),
+        _ => text,
+    };
+
+    private static string CapitalizeWords(string text)
+    {
+        if (text.Length == 0)
+            return text;
+
+        var chars = text.ToCharArray();
+        var capitalizeNext = true;
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (char.IsWhiteSpace(chars[i]))
+            {
+                capitalizeNext = true;
+                continue;
+            }
+
+            if (capitalizeNext)
+            {
+                chars[i] = char.ToUpperInvariant(chars[i]);
+                capitalizeNext = false;
+            }
+        }
+
+        return new string(chars);
+    }
 
     protected override Vector2 MeasureCore(Vector2 availableSize)
     {
         var fonts = IoCManager.Resolve<IFontManager>();
         var font = ResolveFont(fonts);
-        var text = Text ?? "";
+        var text = ApplyTransform(Text ?? "");
 
         if (AutoWrap && !float.IsInfinity(availableSize.X))
             text = new Label2D(font, text).WrapText(availableSize.X);
@@ -73,7 +113,7 @@ public sealed partial class Label : Control
     protected override void DrawSelf(ShapeBatch sb, IFontManager fontManager, float dt)
     {
         var font = ResolveFont(fontManager);
-        var text = Text ?? "";
+        var text = ApplyTransform(Text ?? "");
 
         if (AutoWrap)
             text = new Label2D(font, text).WrapText(Bounds.Width);

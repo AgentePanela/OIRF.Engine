@@ -106,7 +106,7 @@ public partial class LineEdit : PanelContainer
     {
         Focusable = true;
         MouseFilter = MouseFilterMode.Stop;
-        StyleClasses.Add("lineEdit");
+        StyleAliasses.Add("lineEdit");
     }
 
     private SpriteFontBase ResolveFont(IFontManager fonts)

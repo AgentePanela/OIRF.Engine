@@ -82,7 +82,7 @@ public abstract partial class BaseButton : PanelContainer
     {
         MouseFilter = MouseFilterMode.Stop;
         Focusable = true;
-        StyleClasses.Add("button"); // child classes can use button as style ref
+        StyleAliasses.Add("button"); // style rules can use control: button to match this type
     }
 
     private void SetPressed(bool pressed, bool invokeEvent)

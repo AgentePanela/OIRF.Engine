@@ -22,6 +22,7 @@ public sealed partial class CheckBox : BaseButton
         set
         {
             _label ??= new Label { VerticalAlignment = VAlign.Center };
+            _label.StyleAliasses.Add("checkBox");
             _label.Text = value;
 
             if (Content != _label)
@@ -53,7 +54,7 @@ public sealed partial class CheckBox : BaseButton
     public CheckBox()
     {
         ToggleMode = true;
-        StyleClasses.Add("checkBox");
+        StyleAliasses.Add("checkBox");
 
         _icon = new TextureRect { Stretch = true };
         AddChild(_icon); // separate slot from Content, which is reserved for the label

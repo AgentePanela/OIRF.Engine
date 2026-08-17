@@ -62,7 +62,7 @@ public partial class PanelContainer : Control
 
     // negative OutlineMargin pushes the outline out past Bounds - reserve that much room during
     // layout so an ancestor's scissor doesn't clip it, instead of drawing straight off the edge.
-    private Thickness OutlineOverflow => new(
+    protected Thickness OutlineOverflow => new(
         MathHelper.Max(0, -OutlineMargin.Left), MathHelper.Max(0, -OutlineMargin.Top),
         MathHelper.Max(0, -OutlineMargin.Right), MathHelper.Max(0, -OutlineMargin.Bottom));
 

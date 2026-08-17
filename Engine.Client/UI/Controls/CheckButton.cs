@@ -26,6 +26,7 @@ public sealed partial class CheckButton : BaseButton
                 TextVerticalAlign = VAlign.Center,
             };
 
+            _label.StyleAliasses.Add("button");
             _label.Text = value;
 
             if (Content != _label)

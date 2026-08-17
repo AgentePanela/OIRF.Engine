@@ -1,3 +1,4 @@
+using System.Linq;
 using Apos.Shapes;
 using Engine.Client.Graphics.Fonts;
 using Engine.Client.Inputs;
@@ -22,7 +23,7 @@ public sealed partial class UIManager
     {
         VerticalAlignment = VerticalAlignment.Stretch,
         HorizontalAlignment = HorizontalAlignment.Stretch,
-        Background = new Color(0, 255, 155, 0.25f)
+        //Background = new Color(0, 255, 155, 0.25f)
     };
 
     private ShapeBatch _shapeBatch = default!;
@@ -35,116 +36,7 @@ public sealed partial class UIManager
         _shapeBatch = new ShapeBatch(GameClient.GraphicsDevice);
         _defaultStyleProto = _protoMan.Index(_defaultStyleId);
         GameClient.Instance.Window.TextInput += OnTextInput; //ts looks ugly
-
-        var root = new BoxContainer 
-        { 
-            Orientation = Orientation.Vertical, 
-            _separation = 10, 
-            Margin = new(15),
-            VerticalAlignment = VerticalAlignment.Top,
-            HorizontalAlignment = HorizontalAlignment.Left
-        };
-        AddChild(root);
-
-        var row = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 5 };
-        root.AddChild(row);
-
-        for (var i = 0; i < 9; i++)
-        {
-            var tc = new TestControl();
-            if (i is 2 or 5)
-                tc.HorizontalExpand = true;
-
-            row.AddChild(tc);
-        }
-
-        var column = new BoxContainer { Orientation = Orientation.Vertical, _separation = 5 };
-        root.AddChild(column);
-
-        for (var i = 0; i < 4; i++)
-            column.AddChild(new TestControl());
-
-        column.AddChild(new Label() { Text = "BoxContainer (Vertical)" });
-
-        column.AddChild(new TextureRect
-        {
-            Key = "EngineInternal/9Slice",
-            NineSliceMargins = new Thickness(32),
-            Width = 150,
-            Height = 85,
-        });
-
-        var btn = new Button
-        {
-            Text = "Test Button"
-        };
-        btn.OnClick += _ => Log.Debug("I was clicked!");
-        column.AddChild(btn);
-
-        column.AddChild(new CheckButton
-        {
-            Text = "Check Button"
-        });
-
-        column.AddChild(new CheckBox
-        {
-            Text = "Check Box"
-        });
-
-        var progress = new ProgressBar
-        {
-            Width = 180,
-            Value = 0.4f,
-        };
-        column.AddChild(progress);
-
-        column.AddChild(new Button
-        {
-            Text = "Disabled Button",
-            Disabled = true
-        });
-
-        var lineEdit = new LineEdit
-        {
-            PlaceholderText = "Type something...",
-            Width = 180,
-        };
-        lineEdit.OnTextEntered += text => { Log.Debug($"LineEdit submitted: {text}"); lineEdit.Text = ""; };
-        column.AddChild(lineEdit);
-
-        var cc = new CenterContainer
-        {
-            Background = Color.SkyBlue,
-            Margin = new(15, 30),
-            VerticalAlignment = VerticalAlignment.Bottom,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Padding = new (30)
-        };
-        Root.AddChild(cc);
-        cc.AddChild(new TestControl());
-        cc.AddChild(new Label
-        {
-            Text = "CenterContainer",
-            Color = Color.Black,
-            FontSize = 20,
-        });
-
-        var scroll = new ScrollContainer
-        {
-            Background = new Color(20, 20, 20, 200),
-            Width = 220,
-            Height = 150,
-            Margin = new(15),
-            VerticalAlignment = VerticalAlignment.Top,
-            HorizontalAlignment = HorizontalAlignment.Right,
-        };
-        Root.AddChild(scroll);
-
-        var scrollContent = new BoxContainer { Orientation = Orientation.Vertical, _separation = 5, Margin = new(5) };
-        scroll.AddChild(scrollContent);
-
-        for (var i = 0; i < 20; i++)
-            scrollContent.AddChild(new Label { Text = $"Scroll item {i}" });
+        Root.StyleAliasses.Add("body"); // css lol
     }
 
     public void AddChild(Control control) => Root.AddChild(control);

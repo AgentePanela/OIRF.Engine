@@ -24,6 +24,7 @@ public sealed partial class Button : BaseButton
             };
 
             _label.Text = value;
+            _label.StyleAliasses.Add("button");
 
             if (Content != _label)
                 Content = _label;

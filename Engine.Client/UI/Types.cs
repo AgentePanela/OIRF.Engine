@@ -61,6 +61,14 @@ public enum Orientation
     //Center
 }
 
+public enum TextTransform
+{
+    None,
+    Uppercase,
+    Lowercase,
+    Capitalize,
+}
+
 /// <summary>
 /// Controls how a control participates in mouse hit-testing.
 /// </summary>
