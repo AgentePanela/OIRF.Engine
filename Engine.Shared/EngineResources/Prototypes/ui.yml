@@ -1,7 +1,7 @@
 - type: style
   id: EngineDefault
-  parent: [EngineDefaultButtons, EngineDefaultScroll, EngineDefaultLineEdit, 
-    EngineDefaultCheckBox, EngineDefaultProgressBar, EngineDefaultSlider]
+  parent: [EngineDefaultButtons, EngineDefaultScroll, EngineDefaultLineEdit,
+    EngineDefaultCheckBox, EngineDefaultProgressBar, EngineDefaultSlider, EngineDefaultTextEdit]
 
 - type: style
   id: EngineDefaultButtons
@@ -66,6 +66,37 @@
     - class: { control: lineEdit, pseudoClass: focus }
       properties:
         outlineColor: "#B02929"
+
+    - class: { control: lineEdit, pseudoClass: readonly }
+      properties:
+        background: "#0A0A0A"
+        outlineColor: "#4a1414"
+        color: "#909090"
+
+- type: style
+  id: EngineDefaultTextEdit
+  abstract: true
+  rules:
+    - class: { control: textEdit }
+      properties:
+        background: "#1a1a1a"
+        outlineColor: "#770B0B"
+        outlineThickness: 1
+        padding: 6
+        color: "#FFFFFF"
+        placeholderColor: "#757575"
+        selectionColor: "#3390FF80"
+        caretColor: "#FFFFFF"
+
+    - class: { control: textEdit, pseudoClass: focus }
+      properties:
+        outlineColor: "#B02929"
+
+    - class: { control: textEdit, pseudoClass: readonly }
+      properties:
+        background: "#0A0A0A"
+        outlineColor: "#4a1414"
+        color: "#909090"
 
 - type: style
   id: EngineDefaultCheckBox

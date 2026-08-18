@@ -13,7 +13,7 @@ namespace Engine.Client.UI;
 /// <summary>
 /// Plain text control.
 /// </summary>
-public sealed partial class Label : Control
+public partial class Label : Control
 {
     /// <summary>
     /// Text drawn by this label.

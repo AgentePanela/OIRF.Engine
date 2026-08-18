@@ -4,12 +4,10 @@ using Microsoft.Xna.Framework.Input;
 
 namespace Engine.Client.UI;
 
-public sealed partial class LineEdit
+public sealed partial class TextEdit
 {
-    protected internal override void TextEntered(char character) => HandleTypedChar(character);
-
-    protected override string TransformPastedText(string clipboardText)
-        => clipboardText.Replace("\r", "").Replace("\n", ""); // no newlines - single line
+    protected internal override void TextEntered(char character) => HandleTypedChar(character); 
+    protected override string TransformPastedText(string clipboardText) => clipboardText.Replace("\r", "");
 
     protected internal override void KeyDown(Keys key)
     {
@@ -25,21 +23,54 @@ public sealed partial class LineEdit
             case Keys.Right:
                 MoveCaret(_caret + 1, shift);
                 break;
-            case Keys.Home:
+            case Keys.Up:
+                MoveCaretVertical(-1, shift);
+                break;
+            case Keys.Down:
+                MoveCaretVertical(1, shift);
+                break;
+            case Keys.Home when ctrl:
                 MoveCaret(0, shift);
                 break;
-            case Keys.End:
+            case Keys.End when ctrl:
                 MoveCaret(Text.Length, shift);
                 break;
+            case Keys.Home:
+            {
+                // caret own VISUAL row
+                var (line, column) = IndexToLineColumn(_caret);
+                var visualLines = GetVisualLines();
+                var v = visualLines[FindVisualLineIndex(visualLines, line, column)];
+                MoveCaret(LineColumnToIndex(v.LogicalLine, v.Start), shift);
+                break;
+            }
+            case Keys.End:
+            {
+                var (line, column) = IndexToLineColumn(_caret);
+                var visualLines = GetVisualLines();
+                var v = visualLines[FindVisualLineIndex(visualLines, line, column)];
+                MoveCaret(LineColumnToIndex(v.LogicalLine, v.End), shift);
+                break;
+            }
             case Keys.Back:
                 HandleBackspace();
                 break;
             case Keys.Delete:
                 HandleDelete();
                 break;
-            case Keys.Enter:
+            // Plain Enter inserts a newline
+            case Keys.Enter when ctrl:
                 OnTextEntered?.Invoke(Text);
-                return; // doesn't move the caret
+                return;
+            case Keys.Enter:
+                if (ReadOnly)
+                    return;
+
+                PushUndo();
+                _coalescingTyping = false;
+                _coalescingDeleting = false;
+                InsertText("\n");
+                break;
             case Keys.Z when ctrl && shift:
                 Redo();
                 return;
