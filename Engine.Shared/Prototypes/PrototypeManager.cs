@@ -82,10 +82,17 @@ public interface IPrototypeManager
     string? GetSourceFile(string typeKey, string id);
 
     void IgnorePrototypes(string[] prototypesToIgnore);
+
+    /// <summary>
+    /// Fired per-prototype after a hot-reload rebuilds it.
+    /// </summary>
+    event Action<string, string>? PrototypesReloaded;
 }
 
 public sealed partial class PrototypeManager : IPrototypeManager
 {
+    public event Action<string, string>? PrototypesReloaded;
+
     [Dependency] private readonly SharedContentManager _contentMan = default!;
     public ResPath ResPath {get; private set; } = new ("Prototypes");
     public List<string> IgnoredPrototypesTypes = new();

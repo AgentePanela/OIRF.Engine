@@ -8,6 +8,13 @@ namespace Engine.Client.UI;
 /// </summary>
 public abstract partial class Control : IDisposable
 {
+    protected Control()
+    {
+        StyleAliasses = new StyleSet(this);
+        StyleClasses = new StyleSet(this);
+        PseudoClasses = new StyleSet(this);
+    }
+
     private bool _visible = true;
 
     /// <summary>

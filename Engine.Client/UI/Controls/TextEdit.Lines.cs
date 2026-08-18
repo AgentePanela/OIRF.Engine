@@ -11,36 +11,82 @@ namespace Engine.Client.UI;
 
 public sealed partial class TextEdit
 {
-    //! AI Slop code alert
+    // Text.Split allocates a new array every call
+    private string[]? _linesCache;
+    private string? _linesCacheText;
+
     /// <summary>
     /// Text split into "\n"-delimited (logical) lines.
     /// </summary>
-    private string[] Lines => Text.Split('\n');
+    private string[] Lines
+    {
+        get
+        {
+            if (_linesCache is null || !ReferenceEquals(_linesCacheText, Text))
+            {
+                _linesCache = Text.Split('\n');
+                _linesCacheText = Text;
+            }
+
+            return _linesCache;
+        }
+    }
+
     private readonly record struct VisualLine(int LogicalLine, int Start, int End);
+
+    private List<VisualLine>? _visualLinesCache;
+    private string? _visualLinesCacheText;
+    private float _visualLinesCacheWidth;
+    private bool _visualLinesCacheAutoWrap;
+    private string? _visualLinesCacheFontFamily;
+    private float _visualLinesCacheFontSize;
+    private FontVariant _visualLinesCacheFontVariant;
 
     // Visual rows for the current Text/Bounds/AutoWrap state.
     private List<VisualLine> GetVisualLines()
     {
         var lines = Lines;
+        var autoWrap = AutoWrap;
+        var maxWidth = autoWrap
+            ? MathHelper.Max(1f, PanelRect(Bounds).Width - Padding.Left - Padding.Right - _scrollBarReserve)
+            : 0f;
+
+        if (_visualLinesCache is not null
+            && ReferenceEquals(_visualLinesCacheText, Text)
+            && _visualLinesCacheAutoWrap == autoWrap
+            && (!autoWrap || _visualLinesCacheWidth == maxWidth)
+            && ReferenceEquals(_visualLinesCacheFontFamily, FontFamily)
+            && _visualLinesCacheFontSize == FontSize
+            && _visualLinesCacheFontVariant == FontVariant)
+        {
+            return _visualLinesCache;
+        }
+
         var result = new List<VisualLine>(lines.Length);
 
-        if (!AutoWrap)
+        if (!autoWrap)
         {
             for (var i = 0; i < lines.Length; i++)
                 result.Add(new VisualLine(i, 0, lines[i].Length));
-
-            return result;
         }
-
-        var font = ResolveFont(IoCManager.Resolve<IFontManager>());
-        var maxWidth = MathHelper.Max(1f, PanelRect(Bounds).Width - Padding.Left - Padding.Right - _scrollBarReserve);
-
-        for (var i = 0; i < lines.Length; i++)
+        else
         {
-            foreach (var (start, end) in WrapLine(lines[i], maxWidth, font))
-                result.Add(new VisualLine(i, start, end));
+            var font = ResolveFont(IoCManager.Resolve<IFontManager>());
+
+            for (var i = 0; i < lines.Length; i++)
+            {
+                foreach (var (start, end) in WrapLine(lines[i], maxWidth, font))
+                    result.Add(new VisualLine(i, start, end));
+            }
         }
 
+        _visualLinesCache = result;
+        _visualLinesCacheText = Text;
+        _visualLinesCacheWidth = maxWidth;
+        _visualLinesCacheAutoWrap = autoWrap;
+        _visualLinesCacheFontFamily = FontFamily;
+        _visualLinesCacheFontSize = FontSize;
+        _visualLinesCacheFontVariant = FontVariant;
         return result;
     }
 
@@ -54,11 +100,14 @@ public sealed partial class TextEdit
 
         var segStart = 0;
         var lastSpace = -1;
-
+        var width = 0f;
         for (var i = 0; i < line.Length; i++)
         {
-            if (font.MeasureString(line[segStart..(i + 1)]).X <= maxWidth)
+            var charWidth = font.MeasureString(line[i..(i + 1)]).X;
+
+            if (width + charWidth <= maxWidth)
             {
+                width += charWidth;
                 if (line[i] == ' ')
                     lastSpace = i;
 
@@ -82,6 +131,7 @@ public sealed partial class TextEdit
             }
 
             lastSpace = -1;
+            width = 0f;
             i = segStart - 1; // re-measure from the new segment start
         }
 

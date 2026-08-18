@@ -7,11 +7,11 @@ namespace Engine.Client.UI;
 public abstract partial class Control
 {
     #region Styles
-    public HashSet<string> StyleAliasses { get; } = new();
+    public StyleSet StyleAliasses { get; }
 
-    public HashSet<string> StyleClasses { get; } = new();
+    public StyleSet StyleClasses { get; }
 
-    public HashSet<string> PseudoClasses { get; private set; } = new();
+    public StyleSet PseudoClasses { get; }
 
     /// <summary>
     /// A unique style identifier, similar to #id in CSS.
@@ -23,8 +23,15 @@ public abstract partial class Control
     /// </summary>
     public string? StylesheetOverride { get; set; }
 
+    // Cached style property values for the current stylesheet/classes
+    // <property name (bool, value)>.
+    private Dictionary<string, (bool Found, object? Value)>? _styleCache;
+
+    internal void InvalidateStyleCache() => _styleCache = null;
+
     internal void AnnounceThemeUpdate()
     {
+        InvalidateStyleCache();
         OnThemeUpdated();
         foreach (var child in Children)
             child.AnnounceThemeUpdate();
@@ -44,13 +51,21 @@ public abstract partial class Control
     /// </summary>
     public T GetStyleProperty<T>(string name, T fallback)
         => TryGetStyleProperty<T>(name, out var value) && value is not null ? value : fallback;
-    
+
     /// <summary>
     /// Resolves a style property for this control and
     /// returns the value from whichever matching rule has the highest <see cref="StyleClass.Specificity"/>.
     /// </summary>
     public bool TryGetStyleProperty<T>(string name, out T? value)
     {
+        _styleCache ??= new();
+
+        if (_styleCache.TryGetValue(name, out var cached))
+        {
+            value = cached.Found ? (T?)cached.Value : default;
+            return cached.Found;
+        }
+
         var sheet = FindEffectiveStylesheet();
 
         StyleRule? best = null;
@@ -69,17 +84,21 @@ public abstract partial class Control
 
         if (best is null)
         {
+            _styleCache[name] = (false, null);
             value = default;
             return false;
         }
 
         try
         {
-            value = (T?)DataFieldConverter.Convert(typeof(T), best.Properties[name]);
+            var converted = DataFieldConverter.Convert(typeof(T), best.Properties[name]);
+            _styleCache[name] = (true, converted);
+            value = (T?)converted;
             return true;
         }
         catch
         {
+            _styleCache[name] = (false, null);
             value = default;
             return false;
         }

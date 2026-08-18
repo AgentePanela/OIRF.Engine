@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Apos.Shapes;
 using Engine.Client.Graphics.Fonts;
 using Microsoft.Xna.Framework;
@@ -9,6 +10,7 @@ namespace Engine.Client.UI;
 
 public abstract partial class Control : IDisposable
 {
+    private long _lastProfileStart;
     // ShapeBatch queues draws and only actually submits them at End() - so heres a little hack
     private static readonly RasterizerState ScissorRasterizer = new() { ScissorTestEnable = true };
 
@@ -28,8 +30,10 @@ public abstract partial class Control : IDisposable
         if (clipped.Width <= 0 || clipped.Height <= 0)
             return; // fully clipped out - this and everything under it is off-screen
 
-        
+        _lastProfileStart = Stopwatch.GetTimestamp();
         DrawSelf(sb, fontManager, dt);
+        UIProfiler.Record(GetType().Name, Stopwatch.GetTimestamp() - _lastProfileStart);
+
         var scissorChanged = clipped != previousScissor;
         if (scissorChanged)
         {

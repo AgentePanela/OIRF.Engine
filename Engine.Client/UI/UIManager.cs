@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Apos.Shapes;
 using Engine.Client.Graphics.Fonts;
@@ -37,6 +38,13 @@ public sealed partial class UIManager
         _defaultStyleProto = _protoMan.Index(_defaultStyleId);
         GameClient.Instance.Window.TextInput += OnTextInput; //ts looks ugly
         Root.StyleAliasses.Add("body"); // css lol
+
+        //clears cache
+        _protoMan.PrototypesReloaded += (typeKey, _) =>
+        {
+            if (typeKey.Equals("style", StringComparison.OrdinalIgnoreCase))
+                Root.AnnounceThemeUpdate();
+        };
     }
 
     public void AddChild(Control control) => Root.AddChild(control);
@@ -98,8 +106,10 @@ public sealed partial class UIManager
     public void Draw(float dt)
     {
         //GameClient.GraphicsDevice.ScissorRectangle = GameClient.GraphicsDevice.Viewport.Bounds;
+        UIProfiler.BeginFrame();
         _shapeBatch.Begin(rasterizerState: ScissorRasterizer);
         Root.Draw(_shapeBatch, _fontMan, dt);
         _shapeBatch.End();
+        UIProfiler.EndFrame();
     }
 }
