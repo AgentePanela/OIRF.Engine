@@ -92,7 +92,42 @@ public static partial class DataFieldConverter
  
         if (targetType == typeof(Microsoft.Xna.Framework.Color))
             return ParseColor(rawValue, str);
- 
+
+        if (rawValue is not IDictionary && targetType.FullName == "Engine.Client.UI.ColorGradient")
+        {
+            var color = ParseColor(rawValue, str);
+            var implicitFromColor = targetType.GetMethod(
+                "op_Implicit",
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                new[] { typeof(Microsoft.Xna.Framework.Color) },
+                null);
+
+            if (implicitFromColor is not null)
+                return implicitFromColor.Invoke(null, new object[] { color });
+        }
+
+        // ── Engine.Client.UI.Thickness ──────────
+        // Same reasoning as ColorGradient above - matched by name, and only for a scalar
+        // value. A dictionary ({ left: ..., top: ... }) falls through to the generic
+        // [DataField] object path, which already knows Thickness's four fields.
+        if (rawValue is not IDictionary && targetType.FullName == "Engine.Client.UI.Thickness")
+        {
+            var values = rawValue is IEnumerable<object> seq
+                ? seq.Select(x => System.Convert.ToSingle(x, CultureInfo.InvariantCulture)).ToArray()
+                : str!.Split([' ', ','], StringSplitOptions.RemoveEmptyEntries)
+                    .Select(p => System.Convert.ToSingle(p, CultureInfo.InvariantCulture)).ToArray();
+
+            return values.Length switch
+            {
+                1 => Activator.CreateInstance(targetType, values[0]),
+                2 => Activator.CreateInstance(targetType, values[0], values[1]),
+                4 => Activator.CreateInstance(targetType, values[0], values[1], values[2], values[3]),
+                _ => throw new PrototypeLoadException(
+                    $"Thickness shorthand '{rawValue}' has {values.Length} values - expected 1 (uniform), 2 (horizontal vertical) or 4 (left top right bottom)."),
+            };
+        }
+
         // ── ProtoId<T> ────────────────────────────────────────────────────
         if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(ProtoId<>))
             return Activator.CreateInstance(targetType, str);

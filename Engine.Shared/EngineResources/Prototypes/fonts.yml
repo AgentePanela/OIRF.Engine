@@ -1,0 +1,6 @@
+- type: fontFamily
+  id: Arial
+  regular: Arial
+  bold: Arial-Bold
+  italic: Arial-Italic
+  boldItalic: Arial-BoldItalic

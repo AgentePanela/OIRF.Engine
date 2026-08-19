@@ -8,7 +8,7 @@ using Engine.Client.Graphics.Fonts;
 using Engine.Client.Graphics.Shaders;
 using Engine.Client.Inputs;
 using Engine.Client.UI;
-using Engine.Client.UI.Fonts;
+//using Engine.Client.UI.Fonts;
 using Engine.Client.Scenes;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
@@ -148,10 +148,8 @@ public class GameClient : Game
         IoCManager.Register<IParallelManager, ParallelManager>();
 
         // Text/font services
-        IoCManager.Register<TextStyleLibrary>();
         IoCManager.Register<IFontManager, FontManager>();
-        IoCManager.Register<TextLayoutService>();
-        IoCManager.Register<MyraFontBridge>();
+        //!REMOVE IoCManager.Register<MyraFontBridge>();
 
         IoCManager.Register(new SceneManager(this));
         IoCManager.Register<ViewportAdapter>();
@@ -159,6 +157,7 @@ public class GameClient : Game
         IoCManager.Register<LightingManager>();
         IoCManager.Register<RenderManager>();
         IoCManager.Register<InputManager>();
+        IoCManager.Register<IVirtualKeyboard, NullVirtualKeyboard>(); // platform-specific mobile backends override this
         IoCManager.Register<UIManager>();
         IoCManager.Register<WindowManager>();
 
@@ -255,9 +254,6 @@ public class GameClient : Game
         if (Viewport != null)
             Viewport.UpdateScaleMatrix();
 
-        InterfaceManager.Resize();
-        WindowManager.Resize();
-
         SuppressDraw();
     }
 
@@ -320,7 +316,7 @@ public class GameClient : Game
         float uiScreenDeltaTime = _paused ? 0f : GameTime.DeltaTime;
 
         InterfaceManager.Update(uiScreenDeltaTime);
-        WindowManager.Update(GameTime.DeltaTime);
+        //todo WindowManager.Update(GameTime.DeltaTime);
 
         // why do we even use this
         if (GameState == GameState.Booting)
@@ -415,7 +411,7 @@ public class GameClient : Game
         if (Renderer.FinalTarget is null)
         {
             InterfaceManager.Draw(GameTime.DeltaTime);
-            WindowManager.Draw(GameTime.DeltaTime);
+            //todo WindowManager.Draw(GameTime.DeltaTime);
         }
 
         //base.Draw(gameTime);

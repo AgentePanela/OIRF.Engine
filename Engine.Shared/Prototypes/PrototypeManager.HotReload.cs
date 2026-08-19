@@ -170,6 +170,8 @@ public sealed partial class PrototypeManager
                 existingDict?.Remove(id);
             else
                 AddToIndex(instance);
+
+            PrototypesReloaded?.Invoke(typeKey, id);
         }
     }
 }

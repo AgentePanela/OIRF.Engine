@@ -82,10 +82,17 @@ public interface IPrototypeManager
     string? GetSourceFile(string typeKey, string id);
 
     void IgnorePrototypes(string[] prototypesToIgnore);
+
+    /// <summary>
+    /// Fired per-prototype after a hot-reload rebuilds it.
+    /// </summary>
+    event Action<string, string>? PrototypesReloaded;
 }
 
 public sealed partial class PrototypeManager : IPrototypeManager
 {
+    public event Action<string, string>? PrototypesReloaded;
+
     [Dependency] private readonly SharedContentManager _contentMan = default!;
     public ResPath ResPath {get; private set; } = new ("Prototypes");
     public List<string> IgnoredPrototypesTypes = new();
@@ -104,6 +111,7 @@ public sealed partial class PrototypeManager : IPrototypeManager
 
     // Cache: typeKey -> set of field names that have [ComponentsDataField].
     private readonly Dictionary<string, HashSet<string>> _componentFields = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, HashSet<string>> _appendCollectionFields = new(StringComparer.OrdinalIgnoreCase);
 
     void IPrototypeManager.Load()
     {
@@ -114,6 +122,7 @@ public sealed partial class PrototypeManager : IPrototypeManager
         _index.Clear();
         _mergedCache.Clear();
         _componentFields.Clear();
+        _appendCollectionFields.Clear();
 
         ScanPrototypeTypes();
         foreach (var dir in ResPath.GetFolders())
@@ -155,16 +164,23 @@ public sealed partial class PrototypeManager : IPrototypeManager
 
                 _typeMapping[attr.Type] = type;
 
-                // Discover which DataField names have [ComponentsDataField] for this type.
+                // Discover which DataField names have [ComponentsDataField]/[AppendCollectionDataField] for this type.
                 var compFieldNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var appendCollectionFieldNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var (member, dfAttr) in DataFieldConverter.GetDataFieldMembers(type))
                 {
                     if (member.GetCustomAttribute<ComponentsDataFieldAttribute>() is not null)
                         compFieldNames.Add(dfAttr.Name ?? member.Name);
+
+                    if (member.GetCustomAttribute<AppendCollectionDataFieldAttribute>() is not null)
+                        appendCollectionFieldNames.Add(dfAttr.Name ?? member.Name);
                 }
 
                 if (compFieldNames.Count > 0)
                     _componentFields[attr.Type] = compFieldNames;
+
+                if (appendCollectionFieldNames.Count > 0)
+                    _appendCollectionFields[attr.Type] = appendCollectionFieldNames;
             }
         }
 
@@ -280,10 +296,14 @@ public sealed partial class PrototypeManager : IPrototypeManager
     /// <summary>
     /// Shallow merge source into target.
     /// Fields marked with [ComponentsDataField] get special merge-by-type-name treatment.
+    /// Fields marked with [AppendCollectionDataField] get merged with whatever target already
+    /// has (list: source appended after; dictionary: source's keys win on collision) instead
+    /// of replacing it outright.
     /// </summary>
     private void MergeInto(string typeKey, Dictionary<string, object> target, Dictionary<string, object> source)
     {
         _componentFields.TryGetValue(typeKey, out var compFields);
+        _appendCollectionFields.TryGetValue(typeKey, out var appendFields);
 
         foreach (var (key, value) in source)
         {
@@ -299,6 +319,38 @@ public sealed partial class PrototypeManager : IPrototypeManager
 
                 MergeComponentLists(targetComps, sourceComps);
                 continue;
+            }
+
+            if (appendFields is not null && appendFields.Contains(key))
+            {
+                if (value is List<object> sourceList)
+                {
+                    // Copy rather than reuse targetList/sourceList by reference - both are
+                    // shared (cached merged fields, raw parsed YAML), mutating either in place
+                    // would corrupt whatever else is still holding onto them.
+                    var mergedList = target.TryGetValue(key, out var existingList) && existingList is List<object> targetList
+                        ? new List<object>(targetList)
+                        : new List<object>();
+
+                    mergedList.AddRange(sourceList);
+                    target[key] = mergedList;
+                    continue;
+                }
+
+                if (value is Dictionary<string, object> sourceDict)
+                {
+                    // Same copy-not-reuse reasoning as the list case. Child's keys win on
+                    // collision - same "more specific/later wins" spirit as everything else here.
+                    var mergedDict = target.TryGetValue(key, out var existingDict) && existingDict is Dictionary<string, object> targetDict
+                        ? new Dictionary<string, object>(targetDict, StringComparer.OrdinalIgnoreCase)
+                        : new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var (k, v) in sourceDict)
+                        mergedDict[k] = v;
+
+                    target[key] = mergedDict;
+                    continue;
+                }
             }
 
             target[key] = value;

@@ -1,7 +1,6 @@
 using Engine.Client.Assets;
 using Engine.Client.Scenes.Factories;
 using Engine.Client.Graphics;
-using Engine.Client.Graphics.Fonts;
 using Engine.Shared.IoC;
 using Engine.Client.UI;
 using Microsoft.Xna.Framework;
@@ -21,6 +20,7 @@ namespace Engine.Client.Scenes;
 /// </summary>
 public class DefaultLoadingScene : LoadingScene
 {
+    [Dependency] private Camera2D _cam = default!;
     private Label2D _label;
     private Vector2 _labelPos;
     private string _loadingFlavour = string.Empty;
@@ -33,9 +33,8 @@ public class DefaultLoadingScene : LoadingScene
         _loadingFlavour = Loc.GetString("engine-loading-flavour-default");
 
         _labelPos = new Vector2(GameClient.Options.Width / 2, GameClient.Options.Height / 2);
-
         _label = new Label2D(
-            TextStyle.Loading,
+            _fonts.Get(16f),
             _loadingFlavour,
             Vector2.Zero,
             0f,
@@ -55,7 +54,8 @@ public class DefaultLoadingScene : LoadingScene
             _loadingFlavour = Loc.GetString("engine-loading-flavour-done");
 
         _label.String = _loadingFlavour;
-        _label.Origin = _textLayout.GetCenteredOrigin(_label);
+        _label.Origin = _label.GetCenteredOrigin();
+        _labelPos = _cam.ViewportCenter;
     }
 
     protected override void TexturesPhase(float dt)

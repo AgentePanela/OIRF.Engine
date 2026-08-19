@@ -533,35 +533,37 @@ public sealed partial class RenderManager
             layerDepth);
     }
 
-    public void DrawSprite(Sprite2D sprite, Vector2 position)
+    // Shared by anything drawing a Sprite2D by key: cached atlas data if SpriteSystem already
+    // resolved it once, otherwise a fresh asset manager lookup. False means the key doesn't
+    // exist (yet) - callers should just skip drawing for that frame.
+    private bool TryResolveSprite(Sprite2D sprite, out Texture2D texture, out Rectangle region)
     {
-        Texture2D texture;
-        Rectangle region;
-
-        // use cached atlas data if available (resolved once by SpriteSystem)
         if (sprite.CachedTexture is not null)
         {
             texture = sprite.CachedTexture;
             region = sprite.CachedRegion;
+            return true;
         }
-        else
-        {
-            // resolve from asset manager (for sprites not cached by SpriteSystem)
-            if (!_asset.GetTexture(sprite.Key, out var atlasSpr, out var atlasPage))
-                return;
 
-            texture = atlasPage.Texture;
-            region = atlasSpr.Region;
+        if (!_asset.GetTexture(sprite.Key, out var atlasSpr, out var atlasPage))
+        {
+            texture = null!;
+            region = default;
+            return false;
         }
+
+        texture = atlasPage.Texture;
+        region = atlasSpr.Region;
+        return true;
+    }
+
+    public void DrawSprite(Sprite2D sprite, Vector2 position)
+    {
+        if (!TryResolveSprite(sprite, out var texture, out var region))
+            return;
 
         region.X += (int)sprite.Offset.X;
         region.Y += (int)sprite.Offset.Y;
-
-        // Depth is only a sort key for the render queue (see DepthComparison) -
-        // draw order is already final by the time we get here. MonoGame's Draw
-        // overload requires a layerDepth argument, but it's meaningless under
-        // SpriteSortMode.Deferred (no per-call depth stencil test either), so
-        // it's always 0f rather than sprite.Depth.
         _spriteBatch.Draw(
             texture,
             position,
@@ -574,7 +576,7 @@ public sealed partial class RenderManager
             0f);
     }
 
-    public void DrawTexture(TextureRect texture, Vector2 position)
+    public void DrawTexture(RawTexture texture, Vector2 position)
     {
         _spriteBatch.Draw(
             texture.Texture,
@@ -588,35 +590,14 @@ public sealed partial class RenderManager
             0f);
     }
 
-    public void DrawString(Label2D label, Vector2 position)
+    public void DrawNineSlice(NineSlice2D slice, Vector2 position)
     {
-        var font = ResolveFont(label);
-        var styleDef = ResolveStyleDefinition(label);
+        if (!TryResolveSprite(slice.Sprite, out var texture, out var region))
+            return;
 
-        var drawColor = ResolveColor(label, styleDef);
-        var drawScale = ResolveScale(label, styleDef);
+        var dest = new Rectangle((int)position.X, (int)position.Y, (int)slice.Size.X, (int)slice.Size.Y);
 
-        var shadowEnabled = ResolveShadowEnabled(label, styleDef);
-        var shadowColor = ResolveShadowColor(label, styleDef);
-        var shadowOffset = ResolveShadowOffset(label, styleDef);
-
-        var outlineEnabled = ResolveOutlineEnabled(label, styleDef);
-        var outlineColor = ResolveOutlineColor(label, styleDef);
-        var outlineThickness = ResolveOutlineThickness(label, styleDef);
-
-        if (outlineEnabled)
-            DrawOutline(font, label.String ?? string.Empty, position, label, drawScale, outlineColor, outlineThickness);
-
-        if (shadowEnabled)
-            DrawShadow(font, label.String ?? string.Empty, position, label, drawScale, shadowColor, shadowOffset);
-
-        _spriteBatch.DrawString(
-            font,
-            label.String ?? string.Empty,
-            position,
-            drawColor,
-            label.Rotation,
-            label.Origin,
-            drawScale);
+        foreach (var patch in NineSlicePatch.Compute(region, slice.Margin, dest))
+            _spriteBatch.Draw(texture, patch.Dest, patch.Source, slice.Tint);
     }
 }

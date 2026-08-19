@@ -39,7 +39,7 @@ public interface IAssetManager
     /// <summary>
     /// Add a texture rect to the texture atlas, usefull when u have to dynamic add sprites to the atlas.
     /// </summary>
-    public Sprite2D AddSprite(TextureRect texture, string key);
+    public Sprite2D AddSprite(RawTexture texture, string key);
 
     /// <summary>
     /// Remove a sprite reference from the texture atlas, the real sprite continues in the atlas until it a new sprite covers its old place.

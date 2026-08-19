@@ -1,0 +1,146 @@
+- type: style
+  id: EngineDefault
+  parent: [EngineDefaultButtons, EngineDefaultScroll, EngineDefaultLineEdit,
+    EngineDefaultCheckBox, EngineDefaultProgressBar, EngineDefaultSlider, EngineDefaultTextEdit]
+
+- type: style
+  id: EngineDefaultButtons
+  abstract: true
+  rules:
+    - class: { control: button }
+      properties:
+        background: "#1a1a1a"
+        outlineColor: "#770B0B"
+        outlineThickness: 2
+        padding: 10
+
+    - class: { control: button, pseudoClass: hover }
+      properties:
+        background: "#262626"
+        outlineColor: "#891E1E"
+
+    - class: { control: button, pseudoClass: pressed }
+      properties:
+        background: "#260202"
+        outlineColor: "#591919"
+
+    - class: { control: button, pseudoClass: disabled }
+      properties:
+        background: "#0A0A0A"
+        outlineColor: "#4a1414"
+
+- type: style
+  id: EngineDefaultScroll
+  abstract: true
+  rules:
+    - class: { control: scrollBar }
+      properties:
+        background: "#141414"
+        thumbColor: "#4a4a4a"
+        thumbCorner: 10
+        antiAnalising: 1
+
+    - class: { control: scrollBar, pseudoClass: hover }
+      properties:
+        thumbColor: "#5a5a5a"
+
+    - class: { control: scrollBar, pseudoClass: pressed }
+      properties:
+        thumbColor: "#636363"
+
+- type: style
+  id: EngineDefaultLineEdit
+  abstract: true
+  rules:
+    - class: { control: lineEdit }
+      properties:
+        background: "#1a1a1a"
+        outlineColor: "#770B0B"
+        outlineThickness: 1
+        padding: 6
+        color: "#FFFFFF"
+        placeholderColor: "#757575"
+        selectionColor: "#3390FF80"
+        caretColor: "#FFFFFF"
+
+    - class: { control: lineEdit, pseudoClass: focus }
+      properties:
+        outlineColor: "#B02929"
+
+    - class: { control: lineEdit, pseudoClass: readonly }
+      properties:
+        background: "#0A0A0A"
+        outlineColor: "#4a1414"
+        color: "#909090"
+
+- type: style
+  id: EngineDefaultTextEdit
+  abstract: true
+  rules:
+    - class: { control: textEdit }
+      properties:
+        background: "#1a1a1a"
+        outlineColor: "#770B0B"
+        outlineThickness: 1
+        padding: 6
+        color: "#FFFFFF"
+        placeholderColor: "#757575"
+        selectionColor: "#3390FF80"
+        caretColor: "#FFFFFF"
+
+    - class: { control: textEdit, pseudoClass: focus }
+      properties:
+        outlineColor: "#B02929"
+
+    - class: { control: textEdit, pseudoClass: readonly }
+      properties:
+        background: "#0A0A0A"
+        outlineColor: "#4a1414"
+        color: "#909090"
+
+- type: style
+  id: EngineDefaultCheckBox
+  abstract: true
+  rules:
+    - class: { control: checkBox }
+      properties:
+        padding: 0
+        tint: "#FFFFFF"
+
+    - class: { control: checkBox, pseudoClass: hover }
+      properties:
+        tint: "#DDDDDD"
+
+    - class: { control: checkBox, pseudoClass: disabled }
+      properties:
+        tint: "#80FFFFFF"
+
+- type: style
+  id: EngineDefaultProgressBar
+  abstract: true
+  rules:
+    - class: { control: progressBar }
+      properties:
+        background: "#1a1a1a"
+        fillColor: "#4a1414"
+        outlineColor: "#4a1414"
+        outlineMargin: -5
+        outlineThickness: 3
+
+- type: style
+  id: EngineDefaultSlider
+  abstract: true
+  rules:
+    - class: { control: slider }
+      properties:
+        trackColor: "#4a4a4a"
+        grabberColor: "#770B0B"
+        grabberCorner: 8
+
+    - class: { control: slider, pseudoClass: hover }
+      properties:
+        grabberColor: "#891E1E"
+
+    - class: { control: slider, pseudoClass: pressed }
+      properties:
+        grabberColor: "#591919"
