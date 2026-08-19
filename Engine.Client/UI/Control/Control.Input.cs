@@ -73,9 +73,10 @@ public abstract partial class Control : IDisposable
         if (!EffectivelyVisible)
             return null;
 
-        for (int i = Children.Count - 1; i >= 0; i--)
+        var ordered = OrderedChildren;
+        for (var i = ordered.Count - 1; i >= 0; i--)
         {
-            if (Children[i].HitTest(point) is { } hit)
+            if (ordered[i].HitTest(point) is { } hit)
                 return hit;
         }
 
@@ -107,6 +108,13 @@ public abstract partial class Control : IDisposable
             MouseExited();
         }
     }
+
+    /// <summary>
+    /// Cursor this control wants while the pointer is over it at <paramref name="point"/>.
+    /// Position-dependent so a single control can vary it across its own area (a window asking
+    /// for resize arrows near its edges, say). Applied by the UIManager.
+    /// </summary>
+    protected internal virtual CursorShape GetCursorShape(Vector2 point) => CursorShape.Arrow;
 
     protected internal virtual void MouseEntered()
     {

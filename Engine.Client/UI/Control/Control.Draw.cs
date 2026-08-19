@@ -50,8 +50,9 @@ public abstract partial class Control : IDisposable
             sb.Begin(rasterizerState: ScissorRasterizer);
         }
 
-        foreach (var child in Children)
-            child.Draw(sb, fontManager, dt);
+        var ordered = OrderedChildren;
+        for (var i = 0; i < ordered.Count; i++)
+            ordered[i].Draw(sb, fontManager, dt);
 
         if (scissorChanged)
         {

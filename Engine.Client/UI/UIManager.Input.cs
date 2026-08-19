@@ -1,3 +1,4 @@
+using Microsoft.Xna.Framework.Input;
 using Engine.Client.Inputs;
 
 namespace Engine.Client.UI;
@@ -17,6 +18,31 @@ public sealed partial class UIManager
     /// True when the mouse cursor is over any UI control.
     /// </summary>
     public bool IsMouseOverUI => _hoveredControl is not null;
+
+    private CursorShape _cursorShape = CursorShape.Arrow;
+
+    private void UpdateCursor()
+    {
+        var target = _pressedControl ?? _hoveredControl;
+        var shape = target?.GetCursorShape(_input.MouseScreenPosition) ?? CursorShape.Arrow;
+
+        if (shape == _cursorShape)
+            return;
+
+        _cursorShape = shape;
+        Mouse.SetCursor(shape switch
+        {
+            CursorShape.IBeam => MouseCursor.IBeam,
+            CursorShape.Hand => MouseCursor.Hand,
+            CursorShape.Crosshair => MouseCursor.Crosshair,
+            CursorShape.SizeWE => MouseCursor.SizeWE,
+            CursorShape.SizeNS => MouseCursor.SizeNS,
+            CursorShape.SizeNWSE => MouseCursor.SizeNWSE,
+            CursorShape.SizeNESW => MouseCursor.SizeNESW,
+            CursorShape.SizeAll => MouseCursor.SizeAll,
+            _ => MouseCursor.Arrow,
+        });
+    }
 
     private static readonly MouseButton[] AllMouseButtons =
     [
