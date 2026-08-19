@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 
 namespace Engine.Client.UI;
@@ -89,10 +90,16 @@ public abstract partial class Control
     /// </summary>
     public Rectangle Bounds { get; private set; }
 
+    private bool _reservesSpace;
+
     /// <summary>
     /// If true, this control keeps its layout space even while invisible.
     /// </summary>
-    public bool ReservesSpace { get; set; } = false;
+    public bool ReservesSpace
+    {
+        get => _reservesSpace;
+        set => SetLayoutField(ref _reservesSpace, value);
+    }
 
     /// <summary>
     /// Computes <see cref="DesiredSize"/> for this control given the space its parent can offer.
@@ -183,5 +190,19 @@ public abstract partial class Control
     /// </summary>
     protected virtual void ArrangeCore(Rectangle finalRect)
     {
+    }
+
+    /// <summary>
+    /// Marks the whole UI layout dirty.
+    /// </summary>
+    protected void InvalidateLayout() => UIManager.InvalidateLayout();
+
+    protected void SetLayoutField<T>(ref T field, T value)
+    {
+        if (EqualityComparer<T>.Default.Equals(field, value))
+            return;
+
+        field = value;
+        InvalidateLayout();
     }
 }

@@ -12,7 +12,16 @@ namespace Engine.Client.UI;
 /// </summary>
 public sealed partial class TextEdit : BaseTextInput
 {
-    public int Rows { get; set; } = 4;
+    private int _rows = 4;
+
+    /// <summary>
+    /// How many lines tall this box measures, regardless of how much text it holds.
+    /// </summary>
+    public int Rows
+    {
+        get => _rows;
+        set => SetLayoutField(ref _rows, value);
+    }
 
     /// <summary>
     /// Fired when Ctrl+Enter is pressed while focused

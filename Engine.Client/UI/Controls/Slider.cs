@@ -9,15 +9,39 @@ namespace Engine.Client.UI;
 
 public partial class Slider : PanelContainer
 {
-    public Orientation Orientation { get; set; } = Orientation.Horizontal;
+    private Orientation _orientation = Orientation.Horizontal;
+
+    public Orientation Orientation
+    {
+        get => _orientation;
+        set => SetLayoutField(ref _orientation, value);
+    }
+
+    private float _barThickness = 20f;
 
     /// <summary>
     /// Thickness on the cross axis reported to layout.
     /// </summary>
-    public float BarThickness { get; set; } = 20f;
+    public float BarThickness
+    {
+        get => _barThickness;
+        set => SetLayoutField(ref _barThickness, value);
+    }
 
-    public float MinValue { get; set; } = 0f;
-    public float MaxValue { get; set; } = 1f;
+    private float _minValue;
+    private float _maxValue = 1f;
+
+    public float MinValue
+    {
+        get => _minValue;
+        set => SetLayoutField(ref _minValue, value);
+    }
+
+    public float MaxValue
+    {
+        get => _maxValue;
+        set => SetLayoutField(ref _maxValue, value);
+    }
 
     /// <summary>
     /// Snaps Value to multiples of this when set. 0 disables snapping.
@@ -36,6 +60,7 @@ public partial class Slider : PanelContainer
                 return;
 
             _value = clamped;
+            InvalidateLayout();
             OnValueChanged?.Invoke(_value);
         }
     }

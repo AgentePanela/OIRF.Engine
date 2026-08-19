@@ -15,6 +15,11 @@ public abstract partial class Control : IDisposable
     private static readonly RasterizerState ScissorRasterizer = new() { ScissorTestEnable = true };
 
     /// <summary>
+    /// Whether this control clips its children to its own <see cref="Bounds"/>. 
+    /// </summary>
+    protected internal virtual bool ClipsContent => false;
+
+    /// <summary>
     /// Draws this control and its subtree, clipped to <see cref="Bounds"/> intersected with
     /// whatever was already clipped by an ancestor.
     /// </summary>
@@ -34,7 +39,10 @@ public abstract partial class Control : IDisposable
         DrawSelf(sb, fontManager, dt);
         UIProfiler.Record(GetType().Name, Stopwatch.GetTimestamp() - _lastProfileStart);
 
-        var scissorChanged = clipped != previousScissor;
+        if (Children.Count == 0)
+            return;
+
+        var scissorChanged = ClipsContent && clipped != previousScissor;
         if (scissorChanged)
         {
             sb.End(); //todo: fork apos.shapes and add Flush as public member instead of end/begin

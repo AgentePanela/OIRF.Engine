@@ -28,8 +28,9 @@ public sealed partial class UIManager
     };
 
     private ShapeBatch _shapeBatch = default!;
-
+    private Vector2 _lastScreenSize;
     private static readonly RasterizerState ScissorRasterizer = new() { ScissorTestEnable = true };
+    private static bool _layoutDirty = true;
 
     public void Init()
     {
@@ -81,15 +82,28 @@ public sealed partial class UIManager
             GameClient.Graphics.PreferredBackBufferWidth,
             GameClient.Graphics.PreferredBackBufferHeight);
 
-        Root.Measure(screenSize);
-        Root.Arrange(new Rectangle(0, 0, (int)screenSize.X, (int)screenSize.Y));
+        if (screenSize != _lastScreenSize)
+        {
+            _lastScreenSize = screenSize;
+            _layoutDirty = true;
+        }
+
+        if (_layoutDirty)
+        {
+            Root.Measure(screenSize);
+            Root.Arrange(new Rectangle(0, 0, (int)screenSize.X, (int)screenSize.Y));
+            _layoutDirty = false;
+        }
 
         UpdateHover();
         UpdateMouseButtons();
         UpdateMouseMove();
         UpdateMouseWheel();
         UpdateKeyboard(dt);
+        Root.UpdateAll(dt);
     }
+
+    internal static void InvalidateLayout() => _layoutDirty = true;
 
     private void UpdateHover()
     {

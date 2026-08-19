@@ -14,15 +14,27 @@ namespace Engine.Client.UI;
 /// </summary>
 public partial class TextureRect : Control
 {
+    private string? _key;
+
     /// <summary>
     /// Atlas sprite key to display.
     /// </summary>
-    public string? Key { get; set; }
+    public string? Key
+    {
+        get => _key;
+        set => SetLayoutField(ref _key, value);
+    }
+
+    private Rectangle? _sourceRect;
 
     /// <summary>
     /// Crops with local cordinates the sprite to this sub-rect instead of showing it whole.
     /// </summary>
-    public Rectangle? SourceRect { get; set; }
+    public Rectangle? SourceRect
+    {
+        get => _sourceRect;
+        set => SetLayoutField(ref _sourceRect, value);
+    }
 
     [StyleField("tint", 0xFFFFFFFFu)]
     private Color? _tint;

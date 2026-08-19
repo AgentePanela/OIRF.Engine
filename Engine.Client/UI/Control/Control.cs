@@ -30,6 +30,7 @@ public abstract partial class Control : IDisposable
                 return;
 
             _visible = value;
+            InvalidateLayout();
             NotifyEffectiveVisibilityChanged();
         }
     }
@@ -96,6 +97,7 @@ public abstract partial class Control : IDisposable
 
         _children.Add(child);
         child.Parent = this;
+        InvalidateLayout();
 
         if (!child.EffectivelyVisible || !EffectivelyVisible)
             child.NotifyEffectiveVisibilityChanged();
@@ -111,6 +113,7 @@ public abstract partial class Control : IDisposable
 
         _children.Remove(child);
         child.Parent = null;
+        InvalidateLayout();
         child.NotifyEffectiveVisibilityChanged();
         if (dispose)
             child.Dispose();
@@ -163,5 +166,17 @@ public abstract partial class Control : IDisposable
 
         foreach (var child in _children)
             child.NotifyEffectiveVisibilityChanged();
+    }
+
+    internal void UpdateAll(float dt)
+    {
+        Update(dt);
+        foreach (var child in Children)
+            child.UpdateAll(dt);
+    }
+
+    protected virtual void Update(float dt)
+    {
+        
     }
 }

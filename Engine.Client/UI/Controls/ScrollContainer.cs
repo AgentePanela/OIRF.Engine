@@ -138,6 +138,7 @@ public partial class ScrollContainer : PanelContainer
     private sealed class ScrollViewport : Control
     {
         public Vector2 ScrollOffset;
+        protected internal override bool ClipsContent => true;
 
         protected override Vector2 MeasureCore(Vector2 availableSize)
         {

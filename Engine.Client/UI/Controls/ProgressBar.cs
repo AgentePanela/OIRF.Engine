@@ -10,12 +10,24 @@ namespace Engine.Client.UI;
 /// </summary>
 public sealed partial class ProgressBar : PanelContainer
 {
-    public Orientation Orientation { get; set; } = Orientation.Horizontal;
+    private Orientation _orientation = Orientation.Horizontal;
+
+    public Orientation Orientation
+    {
+        get => _orientation;
+        set => SetLayoutField(ref _orientation, value);
+    }
+
+    private float _barThickness = 20f;
 
     /// <summary>
     /// Thickness on the cross axis (height if horizontal, width if vertical) reported to layout.
     /// </summary>
-    public float BarThickness { get; set; } = 20f;
+    public float BarThickness
+    {
+        get => _barThickness;
+        set => SetLayoutField(ref _barThickness, value);
+    }
 
     private float _value;
 

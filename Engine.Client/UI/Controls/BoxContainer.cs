@@ -8,7 +8,13 @@ namespace Engine.Client.UI;
 /// </summary>
 public partial class BoxContainer : PanelContainer
 {
-    public Orientation Orientation { get; set; } = Orientation.Vertical;
+    private Orientation _orientation = Orientation.Vertical;
+
+    public Orientation Orientation
+    {
+        get => _orientation;
+        set => SetLayoutField(ref _orientation, value);
+    }
 
     /// <summary>
     /// Gap in pixels between consecutive children. Not applied before the first or after the last.

@@ -240,7 +240,11 @@ public sealed class StylePropertyGenerator : IIncrementalGenerator
                 {{doc}}    public {{propertyType}} {{field.PropertyName}}
                 {
                     get => {{body}};
-                    set => {{field.FieldName}} = value;
+                    set
+                    {
+                        {{field.FieldName}} = value;
+                        InvalidateLayout();
+                    }
                 }
             """;
     }

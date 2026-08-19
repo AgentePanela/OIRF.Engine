@@ -30,6 +30,7 @@ public abstract partial class BaseTextInput : PanelContainer
             _text = value;
             _caret = Math.Clamp(_caret, 0, _text.Length);
             _selectionAnchor = Math.Clamp(_selectionAnchor, 0, _text.Length);
+            InvalidateLayout(); // TextEdit's ArrangeCore re-measures scrollbar range off the new text
             OnTextChanged?.Invoke(_text);
         }
     }
@@ -268,14 +269,14 @@ public abstract partial class BaseTextInput : PanelContainer
         if (localX <= 0)
             return 0;
 
-        var previousWidth = 0f;
-        for (var i = 1; i <= line.Length; i++)
+        var width = 0f;
+        for (var i = 0; i < line.Length; i++)
         {
-            var width = font.MeasureString(line[..i]).X;
-            if (width >= localX)
-                return localX - previousWidth < width - localX ? i - 1 : i;
+            var newWidth = width + font.MeasureString(line[i..(i + 1)]).X;
+            if (newWidth >= localX)
+                return localX - width < newWidth - localX ? i : i + 1;
 
-            previousWidth = width;
+            width = newWidth;
         }
 
         return line.Length;

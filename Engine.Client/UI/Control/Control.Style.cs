@@ -13,21 +13,51 @@ public abstract partial class Control
 
     public StyleSet PseudoClasses { get; }
 
+    private string? _styleIdentifier;
+
     /// <summary>
     /// A unique style identifier, similar to #id in CSS.
     /// </summary>
-    public string? StyleIdentifier { get; set; }
+    public string? StyleIdentifier
+    {
+        get => _styleIdentifier;
+        set
+        {
+            if (_styleIdentifier == value)
+                return;
+
+            _styleIdentifier = value;
+            InvalidateStyleCache();
+        }
+    }
+
+    private string? _stylesheetOverride;
 
     /// <summary>
     /// ID of a style prototype to use instead of the default theme. Resolved via UIManager.
     /// </summary>
-    public string? StylesheetOverride { get; set; }
+    public string? StylesheetOverride
+    {
+        get => _stylesheetOverride;
+        set
+        {
+            if (_stylesheetOverride == value)
+                return;
+
+            _stylesheetOverride = value;
+            AnnounceThemeUpdate();
+        }
+    }
 
     // Cached style property values for the current stylesheet/classes
     // <property name (bool, value)>.
     private Dictionary<string, (bool Found, object? Value)>? _styleCache;
 
-    internal void InvalidateStyleCache() => _styleCache = null;
+    internal void InvalidateStyleCache()
+    {
+        _styleCache = null;
+        UIManager.InvalidateLayout();
+    }
 
     internal void AnnounceThemeUpdate()
     {

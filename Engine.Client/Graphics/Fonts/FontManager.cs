@@ -21,6 +21,8 @@ public sealed class FontManager : IFontManager
     private static readonly Dictionary<string, ResFile> _ttfFilesByName = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<(string Family, FontVariant Variant), FontSystem> _fontSystems = new();
     private static bool _indexed;
+    private string? _defaultFamilyCache;
+    private bool _defaultFamilyCached;
 
     public readonly ResPath resPath = new("Fonts");
 
@@ -43,6 +45,12 @@ public sealed class FontManager : IFontManager
             _ttfFiles[file.Relative] = file;
             _ttfFilesByName[Path.GetFileNameWithoutExtension(file.Relative)] = file;
         }
+
+        _protoMan.PrototypesReloaded += (typeKey, _) =>
+        {
+            if (typeKey.Equals("fontFamily", StringComparison.OrdinalIgnoreCase))
+                _defaultFamilyCached = false;
+        };
     }
 
     public IReadOnlyCollection<string> Families
@@ -79,7 +87,15 @@ public sealed class FontManager : IFontManager
         => Get(size, font, variant).MeasureString(text ?? string.Empty);
 
     private string? DefaultFamily()
-        => _protoMan.EnumerateAll<FontFamilyPrototype>().FirstOrDefault()?.ID;
+    {
+        if (!_defaultFamilyCached)
+        {
+            _defaultFamilyCache = _protoMan.EnumerateAll<FontFamilyPrototype>().FirstOrDefault()?.ID;
+            _defaultFamilyCached = true;
+        }
+
+        return _defaultFamilyCache;
+    }
 
     private bool TryGetSystem(string font, FontVariant variant, [NotNullWhen(true)] out FontSystem? system)
     {

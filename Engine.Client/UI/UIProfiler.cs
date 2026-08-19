@@ -36,21 +36,20 @@ public static class UIProfiler
             : (ticks, 1);
     }
 
-    /// <summary>
-    /// Logs the last completed frame's per-control-type DrawSelf cost (own time, not children),
-    /// worst first, plus the total UI Draw wall-clock time - hook this up to a debug hotkey.
-    /// </summary>
-    public static void LogSnapshot()
+    public static string LogSnapshot(bool shortVersion = false)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"[UI Profiler] {_controlCount} controls drawn, {_frameMs:0.000}ms total UI draw");
+        sb.AppendLine($"{GameClient.GameTime.Fps}FPS - {_controlCount} controls drawn, {_frameMs:0.000}ms total UI draw");
+
+        if (shortVersion)
+            return sb.ToString();
 
         foreach (var (type, sample) in _samples.OrderByDescending(kv => kv.Value.Ticks))
         {
             var ms = sample.Ticks * 1000.0 / Stopwatch.Frequency;
-            sb.AppendLine($"  {type,-20} {ms,8:0.000}ms total  ({sample.Count} instance{(sample.Count == 1 ? "" : "s")}, {ms / sample.Count:0.0000}ms avg)");
+            sb.AppendLine($"  {type,-20} {ms,8:0.000}ms total  ({sample.Count} instance{(sample.Count == 1 ? "" : "s")}, {ms / sample.Count:0.0000}ms avg);");
         }
 
-        Log.Debug(sb.ToString());
+        return sb.ToString();
     }
 }

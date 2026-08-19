@@ -15,10 +15,24 @@ namespace Engine.Client.UI;
 /// </summary>
 public partial class Label : Control
 {
+    private string _text = "";
+
     /// <summary>
     /// Text drawn by this label.
     /// </summary>
-    public string Text { get; set; } = "";
+    public string Text
+    {
+        get => _text;
+        set
+        {
+            value ??= "";
+            if (_text == value)
+                return;
+
+            _text = value;
+            InvalidateLayout();
+        }
+    }
 
     /// <summary>
     /// Text color.
@@ -65,6 +79,44 @@ public partial class Label : Control
     private SpriteFontBase ResolveFont(IFontManager fonts)
         => FontFamily is null ? fonts.Get(FontSize, FontVariant) : fonts.Get(FontSize, FontFamily, FontVariant);
 
+    private string? _displayCacheSourceText;
+    private TTransform _displayCacheTransform;
+    private bool _displayCacheWrap;
+    private float _displayCacheWidth;
+    private string? _displayCacheFontFamily;
+    private float _displayCacheFontSize;
+    private FontVariant _displayCacheFontVariant;
+    private string? _displayCacheResult;
+
+    private string GetDisplayText(SpriteFontBase font, float maxWidth, bool wrap)
+    {
+        if (_displayCacheResult is not null
+            && ReferenceEquals(_displayCacheSourceText, Text)
+            && _displayCacheTransform == TextTransform
+            && _displayCacheWrap == wrap
+            && (!wrap || _displayCacheWidth == maxWidth)
+            && ReferenceEquals(_displayCacheFontFamily, FontFamily)
+            && _displayCacheFontSize == FontSize
+            && _displayCacheFontVariant == FontVariant)
+        {
+            return _displayCacheResult;
+        }
+
+        var text = ApplyTransform(Text);
+        if (wrap)
+            text = new Label2D(font, text).WrapText(maxWidth);
+
+        _displayCacheSourceText = Text;
+        _displayCacheTransform = TextTransform;
+        _displayCacheWrap = wrap;
+        _displayCacheWidth = maxWidth;
+        _displayCacheFontFamily = FontFamily;
+        _displayCacheFontSize = FontSize;
+        _displayCacheFontVariant = FontVariant;
+        _displayCacheResult = text;
+        return text;
+    }
+
     private string ApplyTransform(string text) => TextTransform switch
     {
         TTransform.Uppercase => text.ToUpperInvariant(),
@@ -102,23 +154,17 @@ public partial class Label : Control
     {
         var fonts = IoCManager.Resolve<IFontManager>();
         var font = ResolveFont(fonts);
-        var text = ApplyTransform(Text ?? "");
+        var wrap = AutoWrap && !float.IsInfinity(availableSize.X);
+        var text = GetDisplayText(font, availableSize.X, wrap);
 
-        if (AutoWrap && !float.IsInfinity(availableSize.X))
-            text = new Label2D(font, text).WrapText(availableSize.X);
-
-        return font.MeasureString(text);
+        return MeasureString(font, text);
     }
 
     protected override void DrawSelf(ShapeBatch sb, IFontManager fontManager, float dt)
     {
         var font = ResolveFont(fontManager);
-        var text = ApplyTransform(Text ?? "");
-
-        if (AutoWrap)
-            text = new Label2D(font, text).WrapText(Bounds.Width);
-
-        var textSize = font.MeasureString(text);
+        var text = GetDisplayText(font, Bounds.Width, AutoWrap);
+        var textSize = MeasureString(font, text);
 
         var x = TextAlign switch
         {
@@ -135,5 +181,14 @@ public partial class Label : Control
         };
 
         sb.DrawString(font, text, new Vector2(x, y), Color);
+    }
+
+    protected Vector2 MeasureString(SpriteFontBase font, string text)
+    {
+        var size = font.MeasureString(text);
+        if (size == Vector2.Zero)
+            return Vector2.One;
+        
+        return size;
     }
 }

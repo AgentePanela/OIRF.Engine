@@ -12,12 +12,24 @@ namespace Engine.Client.UI;
 /// </summary>
 public partial class ScrollBar : PanelContainer
 {
-    public Orientation Orientation { get; set; } = Orientation.Vertical;
+    private Orientation _orientation = Orientation.Vertical;
+
+    public Orientation Orientation
+    {
+        get => _orientation;
+        set => SetLayoutField(ref _orientation, value);
+    }
+
+    private float _barThickness = 10f;
 
     /// <summary>
     /// Thickness of the bar itself.
     /// </summary>
-    public float BarThickness { get; set; } = 10f;
+    public float BarThickness
+    {
+        get => _barThickness;
+        set => SetLayoutField(ref _barThickness, value);
+    }
 
     /// <summary>
     /// Smallest the thumb is ever drawn, regardless of how small MaxValue implies.
@@ -41,6 +53,7 @@ public partial class ScrollBar : PanelContainer
                 return;
 
             _value = clamped;
+            InvalidateLayout();
             OnValueChanged?.Invoke(_value);
         }
     }
