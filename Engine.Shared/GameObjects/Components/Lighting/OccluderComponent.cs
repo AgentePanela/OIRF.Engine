@@ -13,7 +13,7 @@ public sealed class OccluderComponent : Component
     /// <summary>
     /// Shape of the occluder used for shadow casting.
     /// </summary>
-    public OccluderShape Shape { get; set; } = OccluderShape.Sprite;
+    public OccluderShape Shape { get; set; } = OccluderShape.Rectangle;
 
     /// <summary>
     /// Local offset relative to the entity transform. Lets the mask sit off
@@ -33,6 +33,15 @@ public sealed class OccluderComponent : Component
     /// <see cref="Shape"/> is <see cref="OccluderShape.Rectangle"/>.
     /// </summary>
     public Microsoft.Xna.Framework.Vector2 Size { get; set; } = new(64, 64);
+
+    /// <summary>
+    /// Half-extent last resolved for a <see cref="OccluderShape.Sprite"/>
+    /// occluder, so the lighting broad-phase can reject far-away occluders
+    /// without touching their sprite or the atlas. Runtime only - a field so
+    /// prototype loading and map saving (both property-based) never see it.
+    /// 0 means "never resolved", which forces the slow path.
+    /// </summary>
+    internal float CachedSpriteHalfExtent;
 }
 
 public enum OccluderShape

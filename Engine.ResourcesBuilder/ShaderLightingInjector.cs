@@ -71,6 +71,12 @@ public static class ShaderLightingInjector
         ("LightingEnabled", @"\bbool\s+LightingEnabled\b", "bool LightingEnabled = false;"),
         ("LightMap", @"\bTexture2D\s+LightMap\b", "Texture2D LightMap;"),
         ("ViewportSize", @"\bfloat2\s+ViewportSize\b", "float2 ViewportSize = float2(1280.0, 720.0);"),
+        // Pixel position is framebuffer relative, so a viewport that doesn't
+        // start at the origin has to be subtracted before the divide.
+        ("ViewportOffset", @"\bfloat2\s+ViewportOffset\b", "float2 ViewportOffset = float2(0.0, 0.0);"),
+        // The lightmap is always a render target, which GL renders Y-flipped.
+        // Drawing the world straight to the backbuffer, V has to be flipped back.
+        ("LightMapFlipY", @"\bbool\s+LightMapFlipY\b", "bool LightMapFlipY = false;"),
         ("PixelatedLighting", @"\bbool\s+PixelatedLighting\b", "bool PixelatedLighting = false;"),
         ("LightSampler", @"\bsampler2D\s+LightSampler\b", "sampler2D LightSampler = sampler_state\n{\n    Texture = <LightMap>;\n    MinFilter = Linear;\n    MagFilter = Linear;\n};"),
         ("LightSamplerPoint", @"\bsampler2D\s+LightSamplerPoint\b", "sampler2D LightSamplerPoint = sampler_state\n{\n    Texture = <LightMap>;\n    MinFilter = Point;\n    MagFilter = Point;\n};"),
@@ -237,7 +243,8 @@ float4 {name}(VertexShaderOutput input, float2 vpos : VPOS) : COLOR
     float4 color = {openglCall};
     // Ternary, not an if() - texture samples inside a real branch are
     // unreliable under ps_3_0/OpenGL. Always sample, then select.
-    float2 uv = vpos / ViewportSize;
+    float2 uv = (vpos - ViewportOffset) / ViewportSize;
+    uv.y = LightMapFlipY ? 1.0 - uv.y : uv.y;
     float3 sampledLight = PixelatedLighting ? tex2D(LightSamplerPoint, uv).rgb : tex2D(LightSampler, uv).rgb;
     float3 light = LightingEnabled ? sampledLight : float3(1.0, 1.0, 1.0);
     return float4(color.rgb * light, color.a);
@@ -246,7 +253,8 @@ float4 {name}(VertexShaderOutput input, float2 vpos : VPOS) : COLOR
 float4 {name}(VertexShaderOutput input) : COLOR
 {{
     float4 color = {name}_User(input);
-    float2 uv = input.Position.xy / ViewportSize;
+    float2 uv = (input.Position.xy - ViewportOffset) / ViewportSize;
+    uv.y = LightMapFlipY ? 1.0 - uv.y : uv.y;
     float3 sampledLight = PixelatedLighting ? tex2D(LightSamplerPoint, uv).rgb : tex2D(LightSampler, uv).rgb;
     float3 light = LightingEnabled ? sampledLight : float3(1.0, 1.0, 1.0);
     return float4(color.rgb * light, color.a);

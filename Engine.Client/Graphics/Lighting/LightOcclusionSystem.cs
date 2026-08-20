@@ -1,3 +1,4 @@
+using System;
 using Engine.Client.Assets;
 using Engine.Shared.GameObjects;
 using Engine.Shared.GameObjects.Components.Lighting;
@@ -16,6 +17,48 @@ public sealed class LightOcclusionSystem : EntitySystem
     public LightOcclusionSystem()
     {
         IoCManager.ResolveDependencies(this);
+    }
+
+    /// <summary>
+    /// Conservative broad-phase test: can this occluder possibly overlap
+    /// <paramref name="bounds"/>? Rectangle and Circle answer straight from the
+    /// component; a Sprite occluder reuses the extent resolved on an earlier
+    /// frame, and returns true when it has none yet so
+    /// <see cref="GetOccluderBounds"/> can resolve it properly. Never rejects
+    /// an occluder that would have passed the exact test.
+    /// </summary>
+    public bool MayOverlap(OccluderComponent occluder, TransformComponent transform, Rectangle bounds)
+    {
+        var center = transform.Position + occluder.Offset;
+
+        float halfW, halfH;
+        switch (occluder.Shape)
+        {
+            case OccluderShape.Rectangle:
+                halfW = occluder.Size.X * 0.5f;
+                halfH = occluder.Size.Y * 0.5f;
+                break;
+
+            case OccluderShape.Circle:
+                halfW = halfH = occluder.Radius;
+                break;
+
+            default:
+                if (occluder.CachedSpriteHalfExtent <= 0f)
+                    return true;
+                halfW = halfH = occluder.CachedSpriteHalfExtent;
+                break;
+        }
+
+        // 1px slack: the exact bounds truncate to int, which can nudge the box
+        // outward by up to a pixel. Cheaper to be slightly generous here than
+        // to have a wall flicker at the edge of the padded view
+        const float Slack = 1f;
+
+        return center.X + halfW + Slack > bounds.Left
+            && center.X - halfW - Slack < bounds.Right
+            && center.Y + halfH + Slack > bounds.Top
+            && center.Y - halfH - Slack < bounds.Bottom;
     }
 
     /// <summary>
@@ -68,16 +111,30 @@ public sealed class LightOcclusionSystem : EntitySystem
         if (entMan.TryComp<SpriteComponent>(uid, out var spriteComp))
         {
             if (spriteComp.Spr is { CachedRegion: var region } && region.Width > 0 && region.Height > 0)
-                return SizedBox(center, region.Width, region.Height);
+                return CacheExtent(occluder, center, region.Width, region.Height);
 
             if (!string.IsNullOrEmpty(spriteComp.Key) &&
                 _assetMan.GetTexture(spriteComp.Key, out var atlasSpr, out _))
             {
-                return SizedBox(center, atlasSpr.Region.Width, atlasSpr.Region.Height);
+                return CacheExtent(occluder, center, atlasSpr.Region.Width, atlasSpr.Region.Height);
             }
         }
 
+        // the fallback isn't a real measurement (assets may still be loading),
+        // so don't cache it - a too-small extent would reject the occluder
+        // forever and it'd never get resolved again
         return SizedBox(center, Fallback, Fallback);
+    }
+
+    // grow-only, so a sprite that shrinks leaves an over-estimate behind
+    // rather than a broad-phase reject it shouldn't have made
+    private static Rectangle CacheExtent(OccluderComponent occluder, Vector2 center, int w, int h)
+    {
+        float half = MathF.Max(w, h) * 0.5f;
+        if (half > occluder.CachedSpriteHalfExtent)
+            occluder.CachedSpriteHalfExtent = half;
+
+        return SizedBox(center, w, h);
     }
 
     private static Rectangle SizedBox(Vector2 center, int w, int h) =>

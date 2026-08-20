@@ -28,6 +28,13 @@ sampler2D SpriteTextureSampler = sampler_state
 bool LightingEnabled = false;
 Texture2D LightMap;
 float2 ViewportSize = float2(1280.0, 720.0);
+// Pixel position is framebuffer relative, so a viewport that doesn't start at
+// the origin (letterboxed backbuffer) has to be subtracted before the divide.
+float2 ViewportOffset = float2(0.0, 0.0);
+// The lightmap is always a render target, which GL renders Y-flipped. When the
+// world goes to a render target too the two agree; drawing straight to the
+// backbuffer they don't, and V has to be flipped back.
+bool LightMapFlipY = false;
 bool PixelatedLighting = false;
 
 sampler2D LightSampler = sampler_state
@@ -63,7 +70,8 @@ float4 Lit(VertexShaderOutput input, float2 screenPos)
     // unreliable under ps_3_0/OpenGL. Always sample (cheap, unconditional),
     // then select the result - mirrors the PixelatedLighting ternary below,
     // which already proved this pattern compiles fine on this profile.
-    float2 uv = screenPos / ViewportSize;
+    float2 uv = (screenPos - ViewportOffset) / ViewportSize;
+    uv.y = LightMapFlipY ? 1.0 - uv.y : uv.y;
     float3 sampledLight = PixelatedLighting
         ? tex2D(LightSamplerPoint, uv).rgb
         : tex2D(LightSampler, uv).rgb;

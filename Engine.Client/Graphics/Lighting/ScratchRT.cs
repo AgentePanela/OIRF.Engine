@@ -3,7 +3,9 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
-/// Full-res scratch target for the lightmap blur ping-pong.
+/// Scratch target for the lightmap blur ping-pong. Allocated at half the
+/// lightmap size - the horizontal pass writes here, the vertical one reads
+/// it back into the full-res lightmap.
 /// </summary>
 internal sealed class ScratchRT
 {

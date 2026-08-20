@@ -142,6 +142,7 @@ _lighting.MaxLights = 64;                     // hard cap, sorted by distance to
 _lighting.MaxShadowcastingLights = 16;        // shadow-map row budget
 _lighting.HardShadows = true;                 // cheap single-sample shadows
 _lighting.WallBleedEnabled = true;            // walls pick up the glow of nearby lights
+_lighting.WallBleedIterations = 1;            // blur iterations behind the wall glow
 _lighting.LightBlurEnabled = true;            // blur final lightmap
 ```
 
@@ -156,6 +157,8 @@ When `Enabled` is `false`, the lighting system does no work in Update or Draw an
 | `lighting.lightmap-scale` | `1.0` | Fraction of viewport resolution used for the lightmap (lower = cheaper, blurrier) |
 | `lighting.pixelated` | `false` | Snap the lightmap to a low-res pixel grid |
 | `lighting.pixel-size` | `8` | Screen pixels per lightmap texel when pixelated mode is on |
+
+`WallBleedEnabled` and `LightBlurEnabled` are the two to reach for first when the lighting pipeline is costing frames — each is a handful of full-screen passes that runs every frame regardless of how many lights are on screen. Both have a checkbox in the debug window's **Lighting** tab.
 
 ---
 
@@ -179,7 +182,7 @@ Anything using the `Unshaded` technique draws at full brightness, bypassing the 
 Each frame, `LightingSystem`:
 
 1. Collects visible `PointLight`/`SpotLight` entities and all `Occluder` entities near the view (padded by the largest light radius, so off-screen walls still cast shadows into view).
-2. Builds the occluder edge geometry once and renders a 1D cylindrical shadow map (one row per shadow-casting light — point and spot share the same map and row budget).
+2. Builds occluder edge geometry per shadow-casting light, keeping only the occluders inside that light's radius, and renders a 1D cylindrical shadow map (one row per light — point and spot share the same map and row budget). A light with no occluder in reach skips the shadow lookup entirely.
 3. Draws every light additively into a lightmap render target, sampling the shadow map for occlusion. Spotlights additionally discard pixels outside their cone. Texture lights are drawn on top with plain additive sprites.
 4. Wall bleed (optional): blurs the lightmap at half resolution, then draws the occluder quads over the lightmap so each wall pixel shows the blurred glow of nearby lights.
 5. Light blur (optional): a final 2-pass separable Gaussian over the lightmap, smoothing shadow banding.

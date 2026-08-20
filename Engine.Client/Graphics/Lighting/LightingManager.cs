@@ -28,19 +28,34 @@ public sealed class LightingManager
     /// <summary>
     /// Max lights processed per frame, sorted by distance to the camera.
     /// </summary>
-    public int MaxLights { get; set; } = 64;
+    public int MaxLights
+    {
+        get => _maxLights;
+        set => _maxLights = Math.Clamp(value, 1, 256);
+    }
+    private int _maxLights = 64;
 
     /// <summary>
-    /// Shadow-casting light budget. Also the height of the shadow map (one
+    /// Shadow-casting light budget. Caps the height of the shadow map (one
     /// row per light). Lights over the cap still render, just without shadows.
     /// </summary>
-    public int MaxShadowcastingLights { get; set; } = 16;
+    public int MaxShadowcastingLights
+    {
+        get => _maxShadowcastingLights;
+        set => _maxShadowcastingLights = Math.Clamp(value, 1, 64);
+    }
+    private int _maxShadowcastingLights = 16;
 
     /// <summary>
     /// Shadow map width in texels. Each row is a full 360° unwrap around one
     /// light, so too few texels makes shadows look like ray slices.
     /// </summary>
-    public int ShadowMapSize { get; set; } = 1024;
+    public int ShadowMapSize
+    {
+        get => _shadowMapSize;
+        set => _shadowMapSize = Math.Clamp(value, 128, 4096);
+    }
+    private int _shadowMapSize = 1024;
 
     /// <summary>
     /// Extra shadow bias in world pixels, so filtered light doesn't leave a
@@ -69,6 +84,34 @@ public sealed class LightingManager
         set => _wallBleedStrength = Math.Clamp(value, 0f, 4f);
     }
     private float _wallBleedStrength = 1.0f;
+
+    /// <summary>
+    /// How wide the wall bleed blur reaches, as a multiplier on the tap
+    /// spacing. This is the knob for how long the fade to black is at the
+    /// edge of the glow - <see cref="WallBleedIterations"/> deliberately holds
+    /// the width constant, so raising that one does nothing here. Push this
+    /// far enough and the 9-tap kernel starts to band; add an iteration to
+    /// smooth it back out.
+    /// </summary>
+    public float WallBleedRadius
+    {
+        get => _wallBleedRadius;
+        set => _wallBleedRadius = Math.Clamp(value, 0.25f, 6f);
+    }
+    private float _wallBleedRadius = 1f;
+
+    /// <summary>
+    /// Separable blur iterations for the wall bleed, each a horizontal plus a
+    /// vertical pass. The tap spacing narrows as iterations rise to keep the
+    /// same total sigma, so this trades fill for a smoother, more gaussian
+    /// falloff - not a wider one. Use <see cref="WallBleedRadius"/> for width.
+    /// </summary>
+    public int WallBleedIterations
+    {
+        get => _wallBleedIterations;
+        set => _wallBleedIterations = Math.Clamp(value, 1, 4);
+    }
+    private int _wallBleedIterations = 2;
 
     /// <summary>
     /// Gaussian blur over the finished lightmap, smooths shadow banding.
@@ -128,6 +171,16 @@ public sealed class LightingManager
     public int LastShadowMapHeight { get; private set; }
     public double LastLightingTotalMs { get; private set; }
     public double LastShadowPassMs { get; private set; }
+
+    /// <summary>
+    /// Slices of <see cref="LastShadowPassMs"/>: building occluder edge
+    /// geometry, binding and clearing the shadow map, and submitting the
+    /// per-light draws.
+    /// </summary>
+    public double LastShadowBuildMs { get; private set; }
+    public double LastShadowSetupMs { get; private set; }
+    public double LastShadowDrawMs { get; private set; }
+
     public double LastLightPassMs { get; private set; }
     public double LastWallBleedMs { get; private set; }
     public double LastLightBlurMs { get; private set; }
@@ -140,6 +193,9 @@ public sealed class LightingManager
         int shadowMapHeight,
         double totalMs,
         double shadowPassMs,
+        double shadowBuildMs,
+        double shadowSetupMs,
+        double shadowDrawMs,
         double lightPassMs,
         double wallBleedMs,
         double lightBlurMs)
@@ -151,9 +207,34 @@ public sealed class LightingManager
         LastShadowMapHeight = shadowMapHeight;
         LastLightingTotalMs = totalMs;
         LastShadowPassMs = shadowPassMs;
+        LastShadowBuildMs = shadowBuildMs;
+        LastShadowSetupMs = shadowSetupMs;
+        LastShadowDrawMs = shadowDrawMs;
         LastLightPassMs = lightPassMs;
         LastWallBleedMs = wallBleedMs;
         LastLightBlurMs = lightBlurMs;
+    }
+
+    /// <summary>
+    /// Zeroes the per-frame stats. Called on frames where the lighting system
+    /// bails out before doing any work, so the debug readouts don't keep
+    /// showing the last frame that did run.
+    /// </summary>
+    internal void ClearFrameStats()
+    {
+        LastVisibleLights = 0;
+        LastShadowLights = 0;
+        LastOccluders = 0;
+        LastShadowMapWidth = 0;
+        LastShadowMapHeight = 0;
+        LastLightingTotalMs = 0;
+        LastShadowPassMs = 0;
+        LastShadowBuildMs = 0;
+        LastShadowSetupMs = 0;
+        LastShadowDrawMs = 0;
+        LastLightPassMs = 0;
+        LastWallBleedMs = 0;
+        LastLightBlurMs = 0;
     }
 
     /// <summary>

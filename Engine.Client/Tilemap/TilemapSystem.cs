@@ -113,6 +113,7 @@ public sealed class TilemapSystem : EntityDrawSystem
 
         effect.Parameters["Time"]?.SetValue(_totalTime);
         effect.Parameters["ViewportSize"]?.SetValue(new Vector2(vp.Width, vp.Height));
+        effect.Parameters["ViewportOffset"]?.SetValue(new Vector2(vp.X, vp.Y));
     }
 
     private void DrawChunk(TilemapComponent comp, TransformComponent trans,
@@ -215,6 +216,7 @@ public sealed class TilemapSystem : EntityDrawSystem
         int localY = worldTileY - cy * comp.ChunkSize;
         chunk.Tiles[localX, localY] = tile;
         chunk.Dirty = true;
+        chunk.SolidTileCount = null;
     }
 
     public ProtoId<TilePrototype>? GetTile(TilemapComponent comp, int worldTileX, int worldTileY)
@@ -327,7 +329,11 @@ public sealed class TilemapSystem : EntityDrawSystem
         results.Clear();
         tileCoords?.Clear();
 
+        if (comp.Chunks.Count == 0)
+            return;
+
         int tileSize = comp.TileSize;
+        int chunkSize = comp.ChunkSize;
         float originX = tilemapTransform.Position.X;
         float originY = tilemapTransform.Position.Y;
 
@@ -337,20 +343,73 @@ public sealed class TilemapSystem : EntityDrawSystem
         int tileMaxX = (int)Math.Floor((area.Right - originX) / (float)tileSize);
         int tileMaxY = (int)Math.Floor((area.Bottom - originY) / (float)tileSize);
 
-        for (int ty = tileMinY; ty <= tileMaxY; ty++)
+        int chunkMinX = (int)Math.Floor(tileMinX / (float)chunkSize);
+        int chunkMinY = (int)Math.Floor(tileMinY / (float)chunkSize);
+        int chunkMaxX = (int)Math.Floor(tileMaxX / (float)chunkSize);
+        int chunkMaxY = (int)Math.Floor(tileMaxY / (float)chunkSize);
+
+        // walk chunks instead of cells: empty regions cost one dictionary miss
+        // instead of a lookup per tile, and a chunk with no solid tile at all
+        // is skipped without touching its grid
+        for (int cy = chunkMinY; cy <= chunkMaxY; cy++)
         {
-            for (int tx = tileMinX; tx <= tileMaxX; tx++)
+            for (int cx = chunkMinX; cx <= chunkMaxX; cx++)
             {
-                if (!IsTileSolid(comp, tx, ty))
+                if (!comp.Chunks.TryGetValue((cx, cy), out var chunk))
+                    continue;
+                if (GetSolidTileCount(chunk) == 0)
                     continue;
 
-                results.Add(new Rectangle(
-                    (int)(originX + tx * tileSize),
-                    (int)(originY + ty * tileSize),
-                    tileSize,
-                    tileSize));
-                tileCoords?.Add(new Point(tx, ty));
+                int baseX = cx * chunkSize;
+                int baseY = cy * chunkSize;
+                int last = chunk.Size - 1;
+
+                int loX = Math.Max(0, tileMinX - baseX);
+                int hiX = Math.Min(last, tileMaxX - baseX);
+                int loY = Math.Max(0, tileMinY - baseY);
+                int hiY = Math.Min(last, tileMaxY - baseY);
+
+                for (int ly = loY; ly <= hiY; ly++)
+                {
+                    for (int lx = loX; lx <= hiX; lx++)
+                    {
+                        var tileId = chunk.Tiles[lx, ly];
+                        if (tileId is null)
+                            continue;
+                        if (!_proto.TryIndex(tileId.Value, out var proto) || !proto.Solid)
+                            continue;
+
+                        results.Add(new Rectangle(
+                            (int)(originX + (baseX + lx) * tileSize),
+                            (int)(originY + (baseY + ly) * tileSize),
+                            tileSize,
+                            tileSize));
+                        tileCoords?.Add(new Point(baseX + lx, baseY + ly));
+                    }
+                }
             }
         }
+    }
+
+    private int GetSolidTileCount(TilemapChunk chunk)
+    {
+        if (chunk.SolidTileCount is { } cached)
+            return cached;
+
+        int size = chunk.Size;
+        int count = 0;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                var tileId = chunk.Tiles[x, y];
+                if (tileId is null) continue;
+                if (_proto.TryIndex(tileId.Value, out var proto) && proto.Solid)
+                    count++;
+            }
+        }
+
+        chunk.SolidTileCount = count;
+        return count;
     }
 }
