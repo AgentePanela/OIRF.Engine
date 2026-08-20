@@ -125,7 +125,7 @@ public partial class Window
             ResizeEdge.Top or ResizeEdge.Bottom => CursorShape.SizeNS,
             ResizeEdge.Left | ResizeEdge.Top or ResizeEdge.Right | ResizeEdge.Bottom => CursorShape.SizeNWSE,
             ResizeEdge.Right | ResizeEdge.Top or ResizeEdge.Left | ResizeEdge.Bottom => CursorShape.SizeNESW,
-            _ => _mode == DragMode.Move ? CursorShape.SizeAll : CursorShape.Arrow,
+            _ => CursorShape.Arrow,
         };
     }
 

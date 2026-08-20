@@ -110,9 +110,7 @@ public abstract partial class Control : IDisposable
     }
 
     /// <summary>
-    /// Cursor this control wants while the pointer is over it at <paramref name="point"/>.
-    /// Position-dependent so a single control can vary it across its own area (a window asking
-    /// for resize arrows near its edges, say). Applied by the UIManager.
+    /// Cursor this control wants while the pointer is over it at <paramref name="point"/>
     /// </summary>
     protected internal virtual CursorShape GetCursorShape(Vector2 point) => CursorShape.Arrow;
 
@@ -138,27 +136,16 @@ public abstract partial class Control : IDisposable
 
     /// <summary>
     /// Called every frame the mouse moves while this control is the one holding it pressed -
-    /// even once the cursor has moved outside its own <see cref="Bounds"/>. Used for drag
-    /// interactions (e.g. a ScrollBar's thumb) that need to keep tracking the mouse past their
-    /// own edges once grabbed.
+    /// even once the cursor has moved outside its own <see cref="Bounds"/>.
     /// </summary>
     protected internal virtual void MouseMove(Vector2 position)
     {
     }
 
-    /// <summary>
-    /// Called when the mouse wheel moves over this control. Unlike the other mouse hooks, this
-    /// one bubbles: if it returns false ("didn't handle it"), the input router calls it on
-    /// <see cref="Parent"/> next, and so on up the tree - a Label inside a ScrollContainer
-    /// doesn't need to know or care about scrolling, the container further up does.
-    /// </summary>
-    /// <param name="delta">Raw wheel delta for this frame - positive is away from the user (scroll up).</param>
-    /// <returns>True to stop the event here; false to let an ancestor try next.</returns>
     protected internal virtual bool MouseWheel(int delta) => false;
 
     /// <summary>
-    /// Called for each character typed while this control holds keyboard focus - driven by the
-    /// OS's own text composition (layout/shift/dead keys already resolved), not raw key codes.
+    /// Called for each character typed while this control holds keyboard focus
     /// </summary>
     protected internal virtual void TextEntered(char character)
     {
@@ -166,8 +153,6 @@ public abstract partial class Control : IDisposable
 
     /// <summary>
     /// Called for each non-character key pressed while this control holds keyboard focus
-    /// (arrows, backspace, enter, ctrl-combos, ...). Doesn't bubble - keyboard focus is already
-    /// exclusive to one control, unlike <see cref="MouseWheel"/>.
     /// </summary>
     protected internal virtual void KeyDown(Keys key)
     {
