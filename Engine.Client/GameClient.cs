@@ -204,8 +204,8 @@ public class GameClient : Game
         Graphics.PreferredBackBufferHeight = options.Height;
         Graphics.IsFullScreen = options.FullScreen;
         Graphics.GraphicsProfile = options.GraphicsProfile;
-        Graphics.SynchronizeWithVerticalRetrace = false;
-        IsFixedTimeStep = false;
+        // Graphics.SynchronizeWithVerticalRetrace = false;
+        // IsFixedTimeStep = false;
 
         // Apply the graphic presentation changes.
         Graphics.ApplyChanges();
