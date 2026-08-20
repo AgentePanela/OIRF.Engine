@@ -33,7 +33,7 @@ public sealed class FontManager : IFontManager
         if (_indexed)
             return;
 
-        FontSystemDefaults.TextShaper = new HarfBuzzTextShaper();
+        //FontSystemDefaults.TextShaper = new HarfBuzzTextShaper();
         //! not supported rn
         //FontSystemDefaults.FontLoader = new FreeTypeLoader(); 
         _indexed = true;

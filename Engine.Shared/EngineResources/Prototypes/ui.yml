@@ -165,7 +165,7 @@
       properties:
         background: "#0A0A0A"
         outlineColor: "#770B0B"
-        outlineThickness: [2, 0, 2, 2]
+        outlineThickness: 2
         padding: 6
 
     - class: { control: windowTitle }
@@ -187,5 +187,5 @@
       properties:
         background: "#1a1a1a"
         outlineColor: "#770B0B"
-        outlineThickness: 2
+        outlineThickness: [2, 0, 2, 2]
         padding: 10

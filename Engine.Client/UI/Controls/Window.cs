@@ -35,6 +35,12 @@ public partial class Window : BoxContainer
     /// </summary>
     public bool Resizable { get; set; } = true;
 
+    public bool ShowCloseButton
+    {
+        get => _closeButton.Visible;
+        set => _closeButton.Visible = value;
+    }
+
     /// <summary>
     /// How wide the grab zone along each edge is, in pixels.
     /// </summary>
@@ -60,22 +66,29 @@ public partial class Window : BoxContainer
             TextVerticalAlign = VAlign.Center,
         };
         _titleLabel.StyleAliasses.Add("windowTitle");
+        _titleLabel.StyleAliasses.Add("window");
 
         _titleBar = new PanelContainer { HorizontalExpand = true };
         _titleBar.StyleAliasses.Add("windowTitleBar");
+        _titleBar.StyleAliasses.Add("window");
         _titleBar.AddChild(_titleLabel);
 
         _closeButton = new Button("X") { VerticalAlignment = VAlign.Stretch };
         _closeButton.StyleAliasses.Add("windowCloseButton");
+        _closeButton.Content?.StyleAliasses.Add("windowCloseButton");
+        _closeButton.StyleAliasses.Add("window");
+        _closeButton.Content?.StyleAliasses.Add("window");
         _closeButton.OnClick += _ => Close();
 
         _titleRow = new BoxContainer { Orientation = Orientation.Horizontal };
         _titleRow.StyleAliasses.Add("windowTitleRow");
+        _titleRow.StyleAliasses.Add("window");
         _titleRow.AddChild(_titleBar);
         _titleRow.AddChild(_closeButton);
 
         Contents = new PanelContainer { VerticalExpand = true };
         Contents.StyleAliasses.Add("windowContents");
+        Contents.StyleAliasses.Add("window");
 
         base.AddChild(_titleRow);
         base.AddChild(Contents);

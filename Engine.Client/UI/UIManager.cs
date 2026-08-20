@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System;
 using System.Linq;
 using Apos.Shapes;
@@ -97,11 +98,15 @@ public sealed partial class UIManager
             _layoutDirty = true;
         }
 
+        UIProfiler.BeginUpdate();
+
         if (_layoutDirty)
         {
+            var layoutStart = Stopwatch.GetTimestamp();
             Root.Measure(screenSize);
             Root.Arrange(new Rectangle(0, 0, (int)screenSize.X, (int)screenSize.Y));
             _layoutDirty = false;
+            UIProfiler.RecordLayout(Stopwatch.GetTimestamp() - layoutStart);
         }
 
         UpdateHover();
@@ -111,6 +116,8 @@ public sealed partial class UIManager
         UpdateCursor();
         UpdateKeyboard(dt);
         Root.UpdateAll(dt);
+
+        UIProfiler.EndUpdate();
     }
 
     internal static void InvalidateLayout() => _layoutDirty = true;
