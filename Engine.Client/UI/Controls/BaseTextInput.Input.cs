@@ -28,6 +28,8 @@ public abstract partial class BaseTextInput
     /// </summary>
     protected abstract void ClampScroll();
 
+    protected internal override CursorShape GetCursorShape(Vector2 point) => CursorShape.IBeam;
+
     protected internal override void MouseButtonDown(MouseButton button)
     {
         base.MouseButtonDown(button);

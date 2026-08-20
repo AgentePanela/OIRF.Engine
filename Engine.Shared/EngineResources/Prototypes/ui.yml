@@ -1,7 +1,8 @@
 - type: style
   id: EngineDefault
   parent: [EngineDefaultButtons, EngineDefaultScroll, EngineDefaultLineEdit,
-    EngineDefaultCheckBox, EngineDefaultProgressBar, EngineDefaultSlider, EngineDefaultTextEdit]
+    EngineDefaultCheckBox, EngineDefaultProgressBar, EngineDefaultSlider, EngineDefaultTextEdit,
+    EngineDefaultWindow]
 
 - type: style
   id: EngineDefaultButtons
@@ -144,3 +145,47 @@
     - class: { control: slider, pseudoClass: pressed }
       properties:
         grabberColor: "#591919"
+
+- type: style
+  id: EngineDefaultWindow
+  abstract: true
+  rules:
+    - class: { control: windowRoot }
+      properties:
+        zIndex: 999
+    - class: { control: window }
+      properties:
+        separation: 0
+
+    - class: { control: windowTitleRow }
+      properties:
+        separation: 0
+
+    - class: { control: windowTitleBar }
+      properties:
+        background: "#0A0A0A"
+        outlineColor: "#770B0B"
+        outlineThickness: 2
+        padding: 6
+
+    - class: { control: windowTitle }
+      properties:
+        color: "#E0E0E0"
+
+    - class: { control: windowCloseButton }
+      properties:
+        background: "#0A0A0A"
+        outlineColor: "#770B0B"
+        outlineThickness: 2
+        padding: 6
+
+    - class: { control: windowCloseButton, pseudoClass: hover }
+      properties:
+        background: "#891E1E"
+
+    - class: { control: windowContents }
+      properties:
+        background: "#1a1a1a"
+        outlineColor: "#770B0B"
+        outlineThickness: [2, 0, 2, 2]
+        padding: 10

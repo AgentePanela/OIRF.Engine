@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System;
 using System.Linq;
 using Apos.Shapes;
@@ -27,6 +28,12 @@ public sealed partial class UIManager
         //Background = new Color(0, 255, 155, 0.25f)
     };
 
+    /// <summary>
+    /// Layer every Window lives in. Its zIndex (set from the stylesheet) keeps it above regular
+    /// UI no matter what order things were added to Root in.
+    /// </summary>
+    public LayoutContainer WindowRoot { get; } = new();
+
     private ShapeBatch _shapeBatch = default!;
     private Vector2 _lastScreenSize;
     private static readonly RasterizerState ScissorRasterizer = new() { ScissorTestEnable = true };
@@ -39,6 +46,9 @@ public sealed partial class UIManager
         _defaultStyleProto = _protoMan.Index(_defaultStyleId);
         GameClient.Instance.Window.TextInput += OnTextInput; //ts looks ugly
         Root.StyleAliasses.Add("body"); // css lol
+
+        WindowRoot.StyleAliasses.Add("windowRoot");
+        Root.AddChild(WindowRoot);
 
         //clears cache
         _protoMan.PrototypesReloaded += (typeKey, _) =>
@@ -88,19 +98,26 @@ public sealed partial class UIManager
             _layoutDirty = true;
         }
 
+        UIProfiler.BeginUpdate();
+
         if (_layoutDirty)
         {
+            var layoutStart = Stopwatch.GetTimestamp();
             Root.Measure(screenSize);
             Root.Arrange(new Rectangle(0, 0, (int)screenSize.X, (int)screenSize.Y));
             _layoutDirty = false;
+            UIProfiler.RecordLayout(Stopwatch.GetTimestamp() - layoutStart);
         }
 
         UpdateHover();
         UpdateMouseButtons();
         UpdateMouseMove();
         UpdateMouseWheel();
+        UpdateCursor();
         UpdateKeyboard(dt);
         Root.UpdateAll(dt);
+
+        UIProfiler.EndUpdate();
     }
 
     internal static void InvalidateLayout() => _layoutDirty = true;

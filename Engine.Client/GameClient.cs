@@ -316,7 +316,7 @@ public class GameClient : Game
         float uiScreenDeltaTime = _paused ? 0f : GameTime.DeltaTime;
 
         InterfaceManager.Update(uiScreenDeltaTime);
-        //todo WindowManager.Update(GameTime.DeltaTime);
+        WindowManager.Update(GameTime.DeltaTime);
 
         // why do we even use this
         if (GameState == GameState.Booting)
@@ -411,7 +411,6 @@ public class GameClient : Game
         if (Renderer.FinalTarget is null)
         {
             InterfaceManager.Draw(GameTime.DeltaTime);
-            //todo WindowManager.Draw(GameTime.DeltaTime);
         }
 
         //base.Draw(gameTime);

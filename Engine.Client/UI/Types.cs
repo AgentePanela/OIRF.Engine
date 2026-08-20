@@ -91,3 +91,30 @@ public enum MouseFilterMode
     /// </summary>
     Pass
 }
+
+/// <summary>
+/// Mouse cursor a control asks for while it's under the pointer. Mapped to the platform
+/// cursor by the UIManager - see Control.GetCursorShape.
+/// </summary>
+public enum CursorShape
+{
+    Arrow,
+    IBeam,
+    Hand,
+    Crosshair,
+
+    /// <summary>Horizontal resize, for a left or right edge.</summary>
+    SizeWE,
+
+    /// <summary>Vertical resize, for a top or bottom edge.</summary>
+    SizeNS,
+
+    /// <summary>Diagonal resize, for a top-left or bottom-right corner.</summary>
+    SizeNWSE,
+
+    /// <summary>Diagonal resize, for a top-right or bottom-left corner.</summary>
+    SizeNESW,
+
+    /// <summary>Move in any direction.</summary>
+    SizeAll,
+}

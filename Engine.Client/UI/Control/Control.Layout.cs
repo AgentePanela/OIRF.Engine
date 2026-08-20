@@ -174,6 +174,7 @@ public abstract partial class Control
         };
 
         Bounds = new Rectangle((int)x, (int)y, (int)width, (int)height);
+        RefreshChildOrder();
 
         var innerRect = new Rectangle(
             (int)(Bounds.X + Padding.Left),

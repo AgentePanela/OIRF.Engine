@@ -55,7 +55,7 @@ public partial class Label : Control
     /// <summary>
     /// Wraps Text onto multiple lines instead of overflowing the available width.
     /// </summary>
-    [StyleField("autoWrap", false)]
+    [StyleField("autoWrap", true)]
     private bool? _autoWrap;
 
     /// <summary>

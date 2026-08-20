@@ -1,194 +1,112 @@
-using Engine.Shared.IoC;
-using Engine.Client.Inputs;
-//using Engine.Client.UI.Debug;
-using Microsoft.Xna.Framework.Input;
-using Myra.Graphics2D.UI;
-using System;
 using System.Collections.Generic;
 using System.Linq;
-
+using Engine.Client.Inputs;
+using Engine.Shared.IoC;
+using Microsoft.Xna.Framework.Input;
 
 namespace Engine.Client.UI;
 
+/// <summary>
+/// Opens, stacks and closes <see cref="Window"/>s. Owns the LayoutContainer layer they live in,
+/// which the UIManager keeps above regular UI via its zIndex.
+/// </summary>
 public sealed class WindowManager
 {
-    //[Dependency] private readonly InputManager _input = default!;
-    //[Dependency] private readonly UIManager _ui = default!;
-    /*
+    [Dependency] private readonly InputManager _input = default!;
+    [Dependency] private readonly UIManager _ui = default!;
 
-    private readonly Panel _rootWidget = new() { Id = "_WindowsDefault" };
-    private readonly List<DefaultWindow> _windows = new();
-    private readonly Dictionary<DefaultWindow, EventHandler> _closedHandlers = new();
+    private readonly List<Window> _windows = new();
 
-    private DebugOverlayScreen? _debugOverlay;
-    */
+    /// <summary>
+    /// Windows currently open, bottom of the stack first.
+    /// </summary>
+    public IReadOnlyList<Window> Windows => _windows;
 
     public WindowManager()
     {
         IoCManager.ResolveDependencies(this);
-        //_ui.AddRootWidget(_rootWidget);
-        //_rootWidget.ZIndex = 999;
     }
 
-    /*public DefaultWindow OpenWindow(DefaultWindow window)
+    /// <summary>
+    /// Opens a window, or brings the already-open one of this type to the front.
+    /// </summary>
+    public T Open<T>() where T : Window, new()
+        => GetWindow<T>() is { } existing ? (T)BringToFront(existing) : (T)Open(new T());
+
+    public Window Open(Window window)
     {
         if (_windows.Contains(window))
-            return window;
+            return BringToFront(window);
 
-        window.Id = window.GetType().Name;
-
+        // windows ported from the old system lean on [Dependency] fields heavily
         IoCManager.ResolveDependencies(window);
-        window.BuildElements();
-        window.Initialize();
 
-        _rootWidget.Widgets.Add(window);
+        window.Manager = this;
         _windows.Add(window);
-
-        // sstore handlers
-        EventHandler handler = (_, __) => RemoveWindowInternally(window);
-        _closedHandlers[window] = handler;
-        window.Closed += handler;
-
-        window.OnOpen();
-        window.CenterOnDesktop();
+        _ui.WindowRoot.AddChild(window);
+        LayoutContainer.SetAnchorPreset(window, LayoutPreset.Center);
 
         return window;
     }
 
-    public T OpenWindow<T>() where T : DefaultWindow, new()
-    {
-        var existing = GetWindow<T>();
-        if (existing is not null)
-            return existing;
+    public T? GetWindow<T>() where T : Window => _windows.OfType<T>().FirstOrDefault();
 
-        var window = new T();
-        return (T)OpenWindow(window);
+    public Window BringToFront(Window window)
+    {
+        if (_windows.Remove(window))
+            _windows.Add(window);
+
+        _ui.WindowRoot.MoveChildToFront(window);
+        return window;
     }
 
-    public T? GetWindow<T>() where T : DefaultWindow 
-        => _windows.OfType<T>().FirstOrDefault();
-
-    public DefaultWindow? GetWindow(int index)
+    public void Close(Window window)
     {
-        if (index < 0 || index >= _windows.Count)
-            return null;
+        if (!_windows.Remove(window))
+            return;
 
-        return _windows[index];
-    }
-
-    public int GetWindowCount()
-        => _windows.Count();
-
-    public bool TryClose(int index, bool tryNext = false)
-    {
-        if (index < 0 || index >= _windows.Count)
-            return false;
-
-        var window = _windows[index];
-        if (window.CloseOnEscape)
-        {
-            Close(window);
-            return true;
-        }
-
-        if (!tryNext)
-            return false;
-
-        return TryClose(index - 1, true);
+        window.Manager = null;
+        _ui.WindowRoot.RemoveChild(window);
+        window.NotifyClosed();
+        window.Dispose();
     }
 
     public void CloseAll()
-    {        
+    {
         foreach (var window in _windows.ToArray())
             Close(window);
     }
 
-    public void Close(DefaultWindow window)
+    /// <summary>
+    /// Closes the topmost window that allows it, walking down the stack past the ones that don't.
+    /// </summary>
+    public bool TryCloseTopmost()
     {
-        var found = _windows.FirstOrDefault(w => w == window);
-        if (found is null)
-            return;
-
-        RemoveWindowInternally(found);
-        found.Close();
-    }
-
-    private void RemoveWindowInternally(DefaultWindow window)
-    {
-        // unsubscribe handler
-        if (_closedHandlers.TryGetValue(window, out var handler))
+        for (var i = _windows.Count - 1; i >= 0; i--)
         {
-            window.Closed -= handler;
-            _closedHandlers.Remove(window);
+            if (!_windows[i].CloseOnEscape)
+                continue;
+
+            Close(_windows[i]);
+            return true;
         }
 
-        _rootWidget.Widgets.Remove(window);
-        _windows.Remove(window);
-        if (!window.Disposed)
-            window.Dispose(); //ensure disposing
+        return false;
     }
-
-    internal void Resize() 
-        => _windows.ForEach(window => window.CenterOnDesktop());
 
     internal void Update(float dt)
     {
-        for (int i = _windows.Count - 1; i >= 0; i--)
-        {
-            var window = _windows[i];
+        // Control.KeyDown only reaches whoever holds keyboard focus, so a global shortcut like
+        // this has to poll the InputManager - same as the old Myra WindowManager did.
+        if (!_input.KeyPressed(Keys.Escape))
+            return;
 
-            float windowDt =
-                GameClient.GameState != GameState.Running &&
-                !window.UpdatesWhileGameplayPaused ? 0f : dt;
-
-            window.Update(windowDt);
-        }
-
-        if (_input.KeyPressed(Keys.OemQuotes))
-            OpenWindow<DebugWindow>();
-
-        if (_input.KeyPressed(Keys.F3))
-            ToggleDebugOverlay();
-
-        if (_input.KeyDown(Keys.LeftShift) && _input.KeyPressed(Keys.Escape))
+        if (_input.KeyDown(Keys.LeftShift) || _input.KeyDown(Keys.RightShift))
         {
             CloseAll();
             return;
         }
 
-        if (_input.KeyPressed(Keys.Escape))
-        {
-            if (_windows.Count < 1)
-                return;
-
-            TryClose(_windows.Count - 1, true);
-        }
-
-        float debugDt = GameClient.GameState != GameState.Running ? 0f : dt;
-        _debugOverlay?.Update(debugDt);
+        TryCloseTopmost();
     }
-
-    internal void Draw(float dt)
-    {
-        foreach (var window in _windows.ToArray())
-            window.Draw(dt);
-
-        _debugOverlay?.Draw(dt);
-    }
-
-    private void ToggleDebugOverlay()
-    {
-        if (_debugOverlay is not null)
-        {
-            _ui.RemoveRootWidget(_debugOverlay.Root);
-            _debugOverlay.Dispose();
-            _debugOverlay = null;
-            return;
-        }
-
-        _debugOverlay = new DebugOverlayScreen();
-        _debugOverlay.BuildElements();
-        _debugOverlay.Initialize();
-        _ui.AddRootWidget(_debugOverlay.Root);
-    }*/
 }
