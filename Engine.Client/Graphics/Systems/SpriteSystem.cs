@@ -110,7 +110,12 @@ public sealed class SpriteSystem : EntityDrawSystem
 
         var spr = sprite.Value;
         UpdateLayerFields(layer, trans, comp, ref spr);
-        _renderMan.Submit(spr, trans.Position, layer.Shader.Effect);
+
+        var pos = trans.Position;
+        if (layer.Offset != Vector2.Zero)
+            pos += Vector2.Transform(layer.Offset, Matrix.CreateRotationZ(trans.Angle));
+
+        _renderMan.Submit(spr, pos, layer.Shader.Effect);
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ using Engine.Shared.IoC;
 using Engine.Client.UI;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
+using Microsoft.Xna.Framework.Input.Touch;
 
 namespace Engine.Client.Inputs;
 
@@ -49,9 +50,19 @@ public sealed class InputManager()
     private Vector2 _prevMousePosition, _mousePosition;
     private int _prevMouseWheelDelta, _mouseWheelDelta;
 
+    private bool _prevLeftMouseDown, _leftMouseDown;
+
     private GamePadState _prevGamePadState;
     private GamePadState _gamePadState = GamePad.GetState(PlayerIndex.One);
+
+    private TouchCollection _touchState;
     private Dictionary<string, ResolvedAction>? _actions = new();
+
+    /// <summary>
+    /// If true (default), an active touch is also reported as <see cref="MouseButton.Left"/> being
+    /// down and drives <see cref="MouseScreenPosition"/>/<see cref="MouseWorldPosition"/>
+    /// </summary>
+    public bool EmulateMouseFromTouch { get; set; } = true;
 
     internal void Init()
     {
@@ -66,6 +77,7 @@ public sealed class InputManager()
         _prevMouseState = _mouseState;
         _prevMousePosition = _mousePosition;
         _prevMouseWheelDelta = _mouseWheelDelta;
+        _prevLeftMouseDown = _leftMouseDown;
 
         _prevGamePadState = _gamePadState;
 
@@ -73,16 +85,30 @@ public sealed class InputManager()
         {
             _keyboardState = new KeyboardState();
             _mouseState = new MouseState();
+            _touchState = default;
+            _leftMouseDown = false;
             return;
         }
 
         _keyboardState = Keyboard.GetState();
 
         _mouseState = Mouse.GetState();
-        _mousePosition = _mouseState.Position.ToVector2();
         _mouseWheelDelta = _mouseState.ScrollWheelValue;
 
         _gamePadState = GamePad.GetState(PlayerIndex.One);
+
+        _touchState = TouchPanel.GetState();
+
+        if (EmulateMouseFromTouch && AnyTouchDown())
+        {
+            _mousePosition = TouchScreenPosition!.Value;
+            _leftMouseDown = true;
+        }
+        else
+        {
+            _mousePosition = _mouseState.Position.ToVector2();
+            _leftMouseDown = _mouseState.LeftButton == ButtonState.Pressed;
+        }
     }
 
     #region Mouse
@@ -100,8 +126,7 @@ public sealed class InputManager()
 
     public bool MouseClicked(MouseButton button) => button switch
     {
-        MouseButton.Left => _mouseState.LeftButton == ButtonState.Pressed &&
-                            _prevMouseState.LeftButton == ButtonState.Released,
+        MouseButton.Left => _leftMouseDown && !_prevLeftMouseDown,
         MouseButton.Middle => _mouseState.MiddleButton == ButtonState.Pressed &&
                             _prevMouseState.MiddleButton == ButtonState.Released,
         MouseButton.Right => _mouseState.RightButton == ButtonState.Pressed &&
@@ -111,7 +136,7 @@ public sealed class InputManager()
 
     public bool MouseDown(MouseButton button) => button switch
     {
-        MouseButton.Left => _mouseState.LeftButton == ButtonState.Pressed,
+        MouseButton.Left => _leftMouseDown,
         MouseButton.Middle => _mouseState.MiddleButton == ButtonState.Pressed,
         MouseButton.Right => _mouseState.RightButton == ButtonState.Pressed,
         _ => false,
@@ -119,8 +144,7 @@ public sealed class InputManager()
 
     public bool MouseReleased(MouseButton button) => button switch
     {
-        MouseButton.Left => _mouseState.LeftButton == ButtonState.Released &&
-                            _prevMouseState.LeftButton == ButtonState.Pressed,
+        MouseButton.Left => !_leftMouseDown && _prevLeftMouseDown,
         MouseButton.Middle => _mouseState.MiddleButton == ButtonState.Released &&
                             _prevMouseState.MiddleButton == ButtonState.Pressed,
         MouseButton.Right => _mouseState.RightButton == ButtonState.Released &&
@@ -131,8 +155,7 @@ public sealed class InputManager()
     public bool AnyMouseButtonClicked()
     {
         return
-            (_mouseState.LeftButton == ButtonState.Pressed &&
-            _prevMouseState.LeftButton == ButtonState.Released) ||
+            (_leftMouseDown && !_prevLeftMouseDown) ||
             (_mouseState.MiddleButton == ButtonState.Pressed &&
             _prevMouseState.MiddleButton == ButtonState.Released) ||
             (_mouseState.RightButton == ButtonState.Pressed &&
@@ -142,7 +165,7 @@ public sealed class InputManager()
     public bool AnyMouseButtonDown()
     {
         return
-            _mouseState.LeftButton == ButtonState.Pressed ||
+            _leftMouseDown ||
             _mouseState.MiddleButton == ButtonState.Pressed ||
             _mouseState.RightButton == ButtonState.Pressed;
     }
@@ -179,6 +202,24 @@ public sealed class InputManager()
 
     public bool AnyKeyDown()
         => _keyboardState.GetPressedKeyCount() > 0 && !_ui.IsKeyboardFocused;
+
+    /// <summary>
+    /// Raw, ungated key state. Unlike <see cref="KeyDown"/>, doesn't suppress while a UI
+    /// control holds keyboard focus.
+    /// </summary>
+    internal bool IsKeyDownRaw(Keys key) => _keyboardState.IsKeyDown(key);
+
+    /// <summary>
+    /// Keys that transitioned from up to down this frame.
+    /// </summary>
+    internal IEnumerable<Keys> KeysPressedThisFrame()
+    {
+        foreach (var key in _keyboardState.GetPressedKeys())
+        {
+            if (!_prevKeyboardState.IsKeyDown(key))
+                yield return key;
+        }
+    }
     #endregion
 
     #region Gamepad
@@ -193,6 +234,62 @@ public sealed class InputManager()
 
     public bool ButtonReleased(Buttons button)
         => !_gamePadState.IsButtonDown(button) && _prevGamePadState.IsButtonDown(button);
+    #endregion
+
+    #region Touch
+    /// <summary>
+    /// Screen-space position of the first active touch, or null if there's none right now.
+    /// </summary>
+    public Vector2? TouchScreenPosition
+    {
+        get
+        {
+            foreach (var touch in _touchState)
+                if (touch.State != TouchLocationState.Released)
+                    return touch.Position;
+
+            return null;
+        }
+    }
+
+    public Vector2? TouchWorldPosition
+        => TouchScreenPosition is { } pos ? GameClient.Renderer.ScreenToWorld(pos) : null;
+
+    /// <summary>
+    /// True if any touch just started this frame.
+    /// </summary>
+    public bool AnyTouchTapped()
+    {
+        foreach (var touch in _touchState)
+            if (touch.State == TouchLocationState.Pressed)
+                return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// True if any touch is currently active (down or held).
+    /// </summary>
+    public bool AnyTouchDown()
+    {
+        foreach (var touch in _touchState)
+            if (touch.State is TouchLocationState.Pressed or TouchLocationState.Moved)
+                return true;
+
+        return false;
+    }
+
+    /// <summary>
+    /// True if any touch was just lifted this frame.
+    /// </summary>
+    public bool AnyTouchReleased()
+    {
+        foreach (var touch in _touchState)
+            if (touch.State == TouchLocationState.Released)
+                return true;
+
+        return false;
+    }
     #endregion
 
     #region Actions (InputMap)
@@ -211,6 +308,8 @@ public sealed class InputManager()
             if (MouseClicked(mb)) return true;
         foreach (var btn in resolved.GamepadButtons)
             if (ButtonPressed(btn)) return true;
+        if (resolved.Touch && AnyTouchTapped())
+            return true;
 
         return false;
     }
@@ -229,6 +328,8 @@ public sealed class InputManager()
             if (MouseDown(mb)) return true;
         foreach (var btn in resolved.GamepadButtons)
             if (ButtonDown(btn)) return true;
+        if (resolved.Touch && AnyTouchDown())
+            return true;
 
         return false;
     }
@@ -247,6 +348,8 @@ public sealed class InputManager()
             if (MouseReleased(mb)) return true;
         foreach (var btn in resolved.GamepadButtons)
             if (ButtonReleased(btn)) return true;
+        if (resolved.Touch && AnyTouchReleased())
+            return true;
 
         return false;
     }
@@ -288,6 +391,8 @@ public sealed class InputManager()
                         Log.Warn($"InputMap '{proto.ID}': unknown gamepad button '{btnName}' in action '{name}'.");
                 }
 
+                resolved.Touch = action.Touch;
+
                 _actions[name] = resolved;
             }
         }
@@ -308,12 +413,14 @@ public sealed class InputManager()
         public List<Keys> Keys;
         public List<MouseButton> MouseButtons;
         public List<Buttons> GamepadButtons;
+        public bool Touch;
 
         public ResolvedAction()
         {
             Keys = new List<Keys>();
             MouseButtons = new List<MouseButton>();
             GamepadButtons = new List<Buttons>();
+            Touch = false;
         }
     }
 

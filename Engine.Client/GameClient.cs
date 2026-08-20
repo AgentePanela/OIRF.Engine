@@ -8,7 +8,7 @@ using Engine.Client.Graphics.Fonts;
 using Engine.Client.Graphics.Shaders;
 using Engine.Client.Inputs;
 using Engine.Client.UI;
-using Engine.Client.UI.Fonts;
+//using Engine.Client.UI.Fonts;
 using Engine.Client.Scenes;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
@@ -25,6 +25,7 @@ using Engine.Shared.Prototypes;
 using Engine.Shared.GameObjects;
 using Engine.Client.Graphics.Lighting;
 using Engine.Shared.Locale;
+using Engine.Shared.Threading;
 using System.IO;
 
 namespace Engine.Client;
@@ -144,12 +145,11 @@ public class GameClient : Game
         IoCManager.Register<IAssetManager, AssetManager>();
         IoCManager.Register<IAudioManager, AudioManager>();
         IoCManager.Register<ShaderManager>();
+        IoCManager.Register<IParallelManager, ParallelManager>();
 
         // Text/font services
-        IoCManager.Register<TextStyleLibrary>();
         IoCManager.Register<IFontManager, FontManager>();
-        IoCManager.Register<TextLayoutService>();
-        IoCManager.Register<MyraFontBridge>();
+        //!REMOVE IoCManager.Register<MyraFontBridge>();
 
         IoCManager.Register(new SceneManager(this));
         IoCManager.Register<ViewportAdapter>();
@@ -157,6 +157,7 @@ public class GameClient : Game
         IoCManager.Register<LightingManager>();
         IoCManager.Register<RenderManager>();
         IoCManager.Register<InputManager>();
+        IoCManager.Register<IVirtualKeyboard, NullVirtualKeyboard>(); // platform-specific mobile backends override this
         IoCManager.Register<UIManager>();
         IoCManager.Register<WindowManager>();
 
@@ -202,7 +203,7 @@ public class GameClient : Game
         Graphics.PreferredBackBufferWidth = options.Width;
         Graphics.PreferredBackBufferHeight = options.Height;
         Graphics.IsFullScreen = options.FullScreen;
-        Graphics.GraphicsProfile = GraphicsProfile.HiDef; // required by Apos.Shapes
+        Graphics.GraphicsProfile = options.GraphicsProfile;
         Graphics.SynchronizeWithVerticalRetrace = false;
         IsFixedTimeStep = false;
 
@@ -255,9 +256,6 @@ public class GameClient : Game
         if (Viewport != null)
             Viewport.UpdateScaleMatrix();
 
-        InterfaceManager.Resize();
-        WindowManager.Resize();
-
         SuppressDraw();
     }
 
@@ -271,6 +269,8 @@ public class GameClient : Game
 
     protected override void Initialize()
     {
+        MainThread.Capture();
+
         // Set the core's graphics device to a reference of the base Game
         // graphics device.
         GraphicsDevice = base.GraphicsDevice;
@@ -311,7 +311,6 @@ public class GameClient : Game
 
         GameTime.UpdateDelta(gameTime);
         InputManager.Update(IsActive);
-        Audio.Update(GameTime.DeltaTime);
         base.Update(gameTime);
         Assets.Update(gameTime);
         Prototypes.Update();
@@ -330,6 +329,7 @@ public class GameClient : Game
 
         float simulationDeltaTime = _paused ? 0f : GameTime.DeltaTime;
         EntityManager.Update(simulationDeltaTime);
+        Audio.Update(GameTime.DeltaTime); // after ECS so AudioSystem sees FinishedStreaming before packages get disposed here
 
         _gen0 = GC.CollectionCount(0);
         _gen1 = GC.CollectionCount(1);
@@ -373,8 +373,18 @@ public class GameClient : Game
 
             // Allocate (or resize) the offscreen scene target. The world is
             // drawn into this target first so the lighting pass can sample it
-            // and blend the lightmap on top in Renderer.DrawQueue().
-            Renderer.EnsureSceneTarget(Viewport.VirtualWidth, Viewport.VirtualHeight);
+            // and blend the lightmap on top in Renderer.DrawQueue(). Sized to
+            // FinalTarget when one's active (editor viewport panel) rather than
+            // the virtual viewport - otherwise this target's aspect ratio locks
+            // to the OS window while the final blit's destination rect is
+            // whatever the docked panel happens to be, and LightingSystem's
+            // ApplyAfterWorld fullscreen-quads one onto the other, stretching
+            // the whole scene to match. Matching the aspect here up front means
+            // that blit is always a same-shape copy.
+            var (sceneTargetWidth, sceneTargetHeight) = Renderer.FinalTarget is { } finalTarget
+                ? (finalTarget.Width, finalTarget.Height)
+                : (Viewport.VirtualWidth, Viewport.VirtualHeight);
+            Renderer.EnsureSceneTarget(sceneTargetWidth, sceneTargetHeight);
 
             EntityManager.Draw(GameTime.DeltaTime);
         }
@@ -403,7 +413,6 @@ public class GameClient : Game
         if (Renderer.FinalTarget is null)
         {
             InterfaceManager.Draw(GameTime.DeltaTime);
-            WindowManager.Draw(GameTime.DeltaTime);
         }
 
         //base.Draw(gameTime);

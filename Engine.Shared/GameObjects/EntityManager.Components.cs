@@ -1,14 +1,16 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Engine.Shared.Prototypes;
+using Engine.Shared.Threading;
 
 namespace Engine.Shared.GameObjects;
 
 public sealed partial class EntityManager
 {
-    private Dictionary<EntityUid, Component>? TryGetPool(Type type)
+    private ConcurrentDictionary<EntityUid, Component>? TryGetPool(Type type)
     {
         if (_scene.Components.TryGetValue(type, out var pool))
             return pool;
@@ -42,6 +44,8 @@ public sealed partial class EntityManager
 
     private void AddComponentInstance(EntityUid uid, Component comp)
     {
+        MainThread.AssertMainThread();
+
         var type = comp.GetType();
         var pool = GetPool(type);
 

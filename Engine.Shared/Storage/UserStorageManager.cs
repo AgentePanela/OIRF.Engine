@@ -1,6 +1,6 @@
 using System;
 using System.IO;
-using Engine.Shared.IoC;
+using Engine.Shared.Storage;
 
 namespace Engine.Shared.Storage;
 
@@ -43,20 +43,20 @@ public sealed class UserStorageManager
         var full = GetFullPath(relativePath);
 
         var dir = Path.GetDirectoryName(full);
-        if (!Directory.Exists(dir))
-            Directory.CreateDirectory(dir ?? throw new NullReferenceException("No directory found."));
+        if (!FileSystem.DirectoryExists(dir))
+            FileSystem.CreateDirectory(dir ?? throw new NullReferenceException("No directory found."));
 
-        File.WriteAllText(full, content);
+        FileSystem.WriteAllText(full, content);
     }
 
     public string? ReadText(string relativePath)
     {
         var full = GetFullPath(relativePath);
 
-        if (!File.Exists(full))
+        if (!FileSystem.FileExists(full))
             return null;
 
-        return File.ReadAllText(full);
+        return FileSystem.ReadAllText(full);
     }
 
     public void WriteBinary(string relativePath, byte[] data)
@@ -64,32 +64,32 @@ public sealed class UserStorageManager
         var full = GetFullPath(relativePath);
 
         var dir = Path.GetDirectoryName(full);
-        if (!Directory.Exists(dir))
-            Directory.CreateDirectory(dir ?? throw new NullReferenceException("No directory found."));
+        if (!FileSystem.DirectoryExists(dir))
+            FileSystem.CreateDirectory(dir ?? throw new NullReferenceException("No directory found."));
 
-        File.WriteAllBytes(full, data);
+        FileSystem.WriteAllBytes(full, data);
     }
 
     public byte[]? ReadBinary(string relativePath)
     {
         var full = GetFullPath(relativePath);
 
-        if (!File.Exists(full))
+        if (!FileSystem.FileExists(full))
             return null;
 
-        return File.ReadAllBytes(full);
+        return FileSystem.ReadAllBytes(full);
     }
 
     public bool FileExists(string relativePath)
     {
-        return File.Exists(GetFullPath(relativePath));
+        return FileSystem.FileExists(GetFullPath(relativePath));
     }
 
     public void DeleteFile(string relativePath)
     {
         var full = GetFullPath(relativePath);
 
-        if (File.Exists(full))
-            File.Delete(full);
+        if (FileSystem.FileExists(full))
+            FileSystem.DeleteFile(full);
     }
 }

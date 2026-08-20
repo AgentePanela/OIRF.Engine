@@ -18,6 +18,7 @@ public sealed class OccluderDebugDrawSystem : EntityDrawSystem
     [Dependency] private readonly Camera2D _camera = default!;
     [Dependency] private readonly IConfigurationManager _cfg = default!;
     [Dependency] private readonly LightOcclusionSystem _occlusionSys = default!;
+    [Dependency] private readonly IFontManager _fonts = default!;
 
     private bool _showMask;
 
@@ -51,7 +52,7 @@ public sealed class OccluderDebugDrawSystem : EntityDrawSystem
 
                 case OccluderShape.Sprite:
                     // no fixed mask to outline - it's a bounding-box guess off the sprite region
-                    _renderer.DrawString(new Label2D(TextStyle.Debug, "sprite mask") { Color = Color.Aqua }, transform.Position + occluder.Offset);
+                    _renderer.DrawString(new Label2D(_fonts.Get(13f), "sprite mask") { Color = Color.Aqua }, transform.Position + occluder.Offset);
                     break;
             }
         }

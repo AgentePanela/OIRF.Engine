@@ -1,4 +1,3 @@
-using System;
 using System.IO;
 using System.Threading.Tasks;
 using Engine.Client.Extensions;
@@ -11,6 +10,7 @@ using Engine.Shared.GameObjects;
 using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.IoC;
 using Engine.Shared.Storage;
+using Engine.Shared.Threading;
 using Microsoft.Xna.Framework.Content.Pipeline;
 using MonoGame.Framework.Utilities;
 using static System.Environment;
@@ -26,7 +26,6 @@ public abstract class LoadingScene : Scene
     [Dependency] protected readonly ComponentFactory _compFac = default!;
     [Dependency] protected readonly EntityManager _entMan = default!;
     [Dependency] protected readonly IFontManager _fonts = default!;
-    [Dependency] protected readonly TextLayoutService _textLayout = default!;
     [Dependency] protected readonly UserStorageManager _storage = default!;
     [Dependency] protected readonly SharedResourceManager _resMan = default!;
     protected Task? _registryTask;
@@ -77,7 +76,7 @@ public abstract class LoadingScene : Scene
     protected virtual void StartLoading()
     {
         _asset.Init(GameClient.GraphicsDevice, GameClient.SpriteBatch);
-        _fonts.BootstrapDefaults();
+        _audio.Init();
         Log.Debug("LoadingState = TextureLoading.");
         _state = LoadingState.TextureLoading;
     }
@@ -96,14 +95,26 @@ public abstract class LoadingScene : Scene
         Log.Debug("LoadingState = Shaders.");
         _shaderTask = Task.Run(() =>
         {
-            var cachePath = _storage.GetFullPath("shaders");
             var platform = PlatformInfo.MonoGamePlatform.ToTargetPlatform();
-            var profile = GameClient.Graphics.GraphicsProfile;
-            var resources = _resMan.GetResourcesFolders();
-            GameClient.Content.RootDirectory = cachePath;
 
-            Log.Debug($"Caching shaders in {cachePath}");
-            ShaderBuilder.Build(platform, profile, resources, cachePath);
+            // skip running the content-pipeline compiler on-device entirely.
+            if (ShaderBuilder.HasPrecompiled(platform))
+            {
+                var precompiledDir = ShaderBuilder.GetPrecompiledDirectory(platform);
+                Log.Debug($"Using precompiled shaders from {precompiledDir}");
+                GameClient.Content.RootDirectory = precompiledDir;
+            }
+            else
+            {
+                var cachePath = _storage.GetFullPath("shaders");
+                var profile = GameClient.Graphics.GraphicsProfile;
+                var resources = _resMan.GetResourcesFolders();
+                GameClient.Content.RootDirectory = cachePath;
+
+                Log.Debug($"Caching shaders in {cachePath}");
+                ShaderBuilder.Build(platform, profile, resources, cachePath);
+            }
+
             IoCManager.Resolve<ShaderManager>().Init();
         });
     }
@@ -123,11 +134,21 @@ public abstract class LoadingScene : Scene
         Log.Debug("LoadingState = Registry.");
         _registryTask = Task.Run(() =>
         {
-            _sceneFac.LoadScenes();
-            _compFac.LoadComponents();
-                
-            _entMan.Init();
-            _entMan.RegisterSystems();
+            //required to run safe with threading.
+            var threadId = CurrentManagedThreadId;
+            MainThread.SafeThreads.Add(threadId);
+            try
+            {
+                _sceneFac.LoadScenes();
+                _compFac.LoadComponents();
+
+                _entMan.Init();
+                _entMan.RegisterSystems();
+            }
+            finally
+            {
+                MainThread.SafeThreads.Remove(threadId);
+            }
         });
     }
 

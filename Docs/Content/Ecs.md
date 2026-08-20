@@ -179,6 +179,56 @@ foreach (var (uid, hp, transform, physics) in
 }
 ```
 
+### Parallel Queries
+
+For CPU-heavy per-entity work (AI decisions across thousands of NPCs, procedural
+computation), `ParallelQuery` runs a job once per queried entity across multiple CPU cores,
+via `IParallelManager`. Only use it for count-heavy or per-entity-expensive workloads - small
+queries already fall back to running inline, but there's still dispatch overhead below that
+threshold that isn't worth paying for cheap work; plain `Query<T>()` wins there.
+
+Two ways to call it, both going through the same `IParallelManager` underneath:
+
+```csharp
+// zero-alloc path: implement the job as a struct
+public readonly struct AiDecisionJob : IEntityJob<AiComponent>
+{
+    public void Execute(EntityUid uid, AiComponent ai)
+    {
+        ai.NextDecision = ComputeExpensiveDecision(ai);
+    }
+}
+
+_entManager.ParallelQuery<AiComponent, AiDecisionJob>(new AiDecisionJob());
+
+// convenience path: a lambda — allocates a closure if it captures locals
+_entManager.ParallelQuery<AiComponent>((uid, ai) => ai.NextDecision = ComputeExpensiveDecision(ai));
+```
+
+`ParallelQuery<T1,T2,TJob>`/`ParallelQuery<T1,T2,T3,TJob>` (and their `Action<>` overloads)
+mirror `Query<T1,T2>()`/`Query<T1,T2,T3>()`. Also available as `EntitySystem` shorthands.
+
+**Safety contract — read before using:**
+- Safe: read/write the component(s) passed in for the *current* entity.
+- Safe: read (not write) other entities' components via `GetComp`/`TryComp`/`HasComp`.
+- **Not safe**: calling `AddComp`, `RemComp`, `DeleteEntity`, `CreateEntity`, or any
+  `EventBus` method from inside `Execute`. Throws in Debug builds (`InvalidOperationException`
+  via `MainThread.AssertMainThread()`) but is silently allowed in Release — don't rely on the
+  exception as your only line of defense.
+- **Not safe**: any GPU/rendering call (`SpriteBatch`, `GraphicsDevice`) — not enforced,
+  documented rule only.
+- If your job captures and mutates shared state of its own (an accumulator, a list), you're
+  responsible for synchronizing it (`Interlocked`, `lock`, etc.).
+
+If a background thread is provably the *only* thread touching ECS state for a bounded
+stretch of work (e.g. the engine's own boot sequence registering systems before the game
+loop starts ticking), it can opt into passing these checks via
+`MainThread.SafeThreads.Add(Environment.CurrentManagedThreadId)` — call it from inside that
+thread, and always pair it with `SafeThreads.Remove(...)` in a `finally` block. This is not a
+general-purpose way to make a `ParallelQuery` job "safe" — registering more than one thread
+at a time defeats the whole point, since two threads racing on the ECS is exactly what these
+checks catch.
+
 ---
 
 ## EntitySystem
@@ -252,6 +302,10 @@ GetEntityComps(uid)     // All components on entity
 GetEntitiesWithComp<T>()
 GetEntitiesWithComp<T1, T2>()
 GetEntitiesWithComp<T1, T2, T3>()
+
+ParallelQuery<T, TJob>(job)              // and Action<EntityUid, T> overload
+ParallelQuery<T1, T2, TJob>(job)         // and Action<EntityUid, T1, T2> overload
+ParallelQuery<T1, T2, T3, TJob>(job)     // and Action<EntityUid, T1, T2, T3> overload
 ```
 
 **Entities:**

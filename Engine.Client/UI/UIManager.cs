@@ -1,150 +1,146 @@
-using AssetManagementBase;
-using Engine.Client.Scenes;
-using Engine.Shared.IoC;
-using Microsoft.Xna.Framework;
-using Myra;
-using Myra.Graphics2D.UI;
+using System.Diagnostics;
 using System;
+using System.Linq;
+using Apos.Shapes;
+using Engine.Client.Graphics.Fonts;
+using Engine.Client.Inputs;
+using Engine.Shared.IoC;
+using Engine.Shared.Prototypes;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace Engine.Client.UI;
 
 /// <summary>
 /// Manages the game interface, adding windows, UI screens, etc...
 /// </summary>
-public sealed class UIManager
+public sealed partial class UIManager
 {
-    [Dependency] private readonly SceneManager _sceneManager = default!;
+    [Dependency] private readonly IFontManager _fontMan = default!;
+    [Dependency] private readonly InputManager _input = default!;
+    [Dependency] private readonly IPrototypeManager _protoMan = default!;
+    [Dependency] private readonly IVirtualKeyboard _virtualKeyboard = default!;
 
-    private readonly Panel _root = new();
-
-    public Desktop Desktop { get; private set; } = default!;
+    public PanelContainer Root { get; } = new()
+    {
+        VerticalAlignment = VerticalAlignment.Stretch,
+        HorizontalAlignment = HorizontalAlignment.Stretch,
+        //Background = new Color(0, 255, 155, 0.25f)
+    };
 
     /// <summary>
-    /// True when the mouse cursor is over any UI widget (window, scrollbar, button, etc... )
+    /// Layer every Window lives in. Its zIndex (set from the stylesheet) keeps it above regular
+    /// UI no matter what order things were added to Root in.
     /// </summary>
-    public bool IsMouseOverUI => Desktop?.IsMouseOverGUI ?? false;
+    public LayoutContainer WindowRoot { get; } = new();
 
-    /// <summary>
-    /// True when the user is with the keyboard focused in a widget.
-    /// </summary>
-    public bool IsKeyboardFocused = false;
-
-    public UICanvas? CurrentScreen { get; private set; }
-
-    private UICanvas? _destScreen;
+    private ShapeBatch _shapeBatch = default!;
+    private Vector2 _lastScreenSize;
+    private static readonly RasterizerState ScissorRasterizer = new() { ScissorTestEnable = true };
+    private static bool _layoutDirty = true;
 
     public void Init()
     {
         IoCManager.ResolveDependencies(this);
+        _shapeBatch = new ShapeBatch(GameClient.GraphicsDevice);
+        _defaultStyleProto = _protoMan.Index(_defaultStyleId);
+        GameClient.Instance.Window.TextInput += OnTextInput; //ts looks ugly
+        Root.StyleAliasses.Add("body"); // css lol
 
-        MyraEnvironment.Game = GameClient.Instance;
+        WindowRoot.StyleAliasses.Add("windowRoot");
+        Root.AddChild(WindowRoot);
 
-        Desktop = new Desktop
+        //clears cache
+        _protoMan.PrototypesReloaded += (typeKey, _) =>
         {
-            Root = _root
+            if (typeKey.Equals("style", StringComparison.OrdinalIgnoreCase))
+                Root.AnnounceThemeUpdate();
         };
-
-        Resize();
-        _sceneManager.OnBeforeSceneInit += SceneChanged;
-
-        Desktop.WidgetGotKeyboardFocus += (_, _) => IsKeyboardFocused = true;
-        Desktop.WidgetLosingKeyboardFocus += (_, _) => IsKeyboardFocused = false;
     }
 
-    internal void Resize()
-    {
-        var width = GameClient.Graphics.PreferredBackBufferWidth;
-        var height = GameClient.Graphics.PreferredBackBufferHeight;
+    public void AddChild(Control control) => Root.AddChild(control);
 
-        _root.InvalidateMeasure();
-        Desktop.BoundsFetcher = () => new Rectangle(0, 0, width, height);
-    }
+    public void RemoveChild(Control control) => Root.RemoveChild(control);
 
-    private void SceneChanged(Scene scene)
+    public T? FindControl<T>(string name) where T : Control => Root.FindControl<T>(name);
+
+    /// <summary>
+    /// Moves keyboard focus to the given control, or clears it if null.
+    /// </summary>
+    public void SetFocus(Control? control)
     {
-        if (scene.DefaultCanvas is null)
-        {
-            RemoveCurrentScreen(true);
+        if (control is not null && !control.Focusable)
             return;
-        }
 
-        SetDestinationScreen(scene.DefaultCanvas);
-        PerformScreenTransition();
+        if (_focusedControl == control)
+            return;
+
+        _focusedControl?.SetFocused(false);
+        SetTracked(ref _focusedControl, control);
+        _focusedControl?.SetFocused(true);
+        ResetKeyRepeat();
+
+        if (control is { WantsVirtualKeyboard: true })
+            _virtualKeyboard.Show();
+        else
+            _virtualKeyboard.Hide();
     }
-
-    /// <summary>
-    /// Remove all the widgets from the current screen.
-    /// </summary>
-    public void ClearCurrentScreen()
-    {
-        var screenRoot = _root.FindChildById("_CanvasUI");
-        if (screenRoot is not null)
-            _root.Widgets.Remove(screenRoot);
-    }
-
-    /// <summary>
-    /// Clears all UI widgets.
-    /// </summary>
-    public void ClearUi() 
-        => _root.Widgets.Clear();
-
-    /// <summary>
-    /// Set the next screen to be shown in the next frame.
-    /// </summary>
-    public void SetDestinationScreen(UICanvas destination) 
-        => _destScreen = destination;
-
-    public void AddRootWidget(Widget widget)
-    {
-        if (!_root.Widgets.Contains(widget))
-            _root.Widgets.Add(widget);
-    }
-
-    public void RemoveRootWidget(Widget widget) 
-        => _root.Widgets.Remove(widget);
-
-    public T? GetRootWidget<T>(string id) where T : Widget 
-        => _root.FindChildById<T>(id);
 
     public void Update(float dt)
     {
-        if (_destScreen is not null)
-            PerformScreenTransition();
+        var screenSize = new Vector2(
+            GameClient.Graphics.PreferredBackBufferWidth,
+            GameClient.Graphics.PreferredBackBufferHeight);
 
-        CurrentScreen?.Update(dt);
+        if (screenSize != _lastScreenSize)
+        {
+            _lastScreenSize = screenSize;
+            _layoutDirty = true;
+        }
+
+        UIProfiler.BeginUpdate();
+
+        if (_layoutDirty)
+        {
+            var layoutStart = Stopwatch.GetTimestamp();
+            Root.Measure(screenSize);
+            Root.Arrange(new Rectangle(0, 0, (int)screenSize.X, (int)screenSize.Y));
+            _layoutDirty = false;
+            UIProfiler.RecordLayout(Stopwatch.GetTimestamp() - layoutStart);
+        }
+
+        UpdateHover();
+        UpdateMouseButtons();
+        UpdateMouseMove();
+        UpdateMouseWheel();
+        UpdateCursor();
+        UpdateKeyboard(dt);
+        Root.UpdateAll(dt);
+
+        UIProfiler.EndUpdate();
+    }
+
+    internal static void InvalidateLayout() => _layoutDirty = true;
+
+    private void UpdateHover()
+    {
+        var hit = Root.HitTest(_input.MouseScreenPosition);
+
+        if (hit == _hoveredControl)
+            return;
+
+        _hoveredControl?.UpdateMouseInside(false);
+        SetTracked(ref _hoveredControl, hit);
+        _hoveredControl?.UpdateMouseInside(true);
     }
 
     public void Draw(float dt)
     {
-        CurrentScreen?.Draw(dt);
-        Desktop.Render();
-    }
-
-    public void RemoveCurrentScreen(bool clearInstance = false)
-    {
-        if (CurrentScreen is not null)
-        {
-            CurrentScreen.Dispose();
-            ClearCurrentScreen();
-        }
-
-        if (clearInstance)
-            CurrentScreen = null;
-    }
-
-    private void PerformScreenTransition()
-    {
-        RemoveCurrentScreen(true);
-
-        CurrentScreen = _destScreen;
-        _destScreen = null;
-
-        if (CurrentScreen is null)
-            throw new NullReferenceException("Current screen is null during a screen transition!");
-
-        IoCManager.ResolveDependencies(CurrentScreen);
-        CurrentScreen.BuildElements();
-        _root.Widgets.Add(CurrentScreen.Root);
-        CurrentScreen.Initialize();
+        //GameClient.GraphicsDevice.ScissorRectangle = GameClient.GraphicsDevice.Viewport.Bounds;
+        UIProfiler.BeginFrame();
+        _shapeBatch.Begin(rasterizerState: ScissorRasterizer);
+        Root.Draw(_shapeBatch, _fontMan, dt);
+        _shapeBatch.End();
+        UIProfiler.EndFrame();
     }
 }

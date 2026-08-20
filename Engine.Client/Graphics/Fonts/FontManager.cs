@@ -1,122 +1,133 @@
+using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
+using System.Linq;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using Engine.Shared.IoC;
 using Engine.Shared.Assets;
+using Engine.Shared.IoC;
+using Engine.Shared.Prototypes;
+using Engine.Shared.Storage;
 
 namespace Engine.Client.Graphics.Fonts;
 
-/// <summary>
-/// Default engine font manager. Fonts are rasterized on demand from the TTF
-/// family loaded into <see cref="MyraFontSystem"/> - no content-pipeline .xnb needed.
-/// </summary>
 public sealed class FontManager : IFontManager
 {
-    private readonly Dictionary<FontKey, SpriteFontBase> _fonts = new();
-    private bool _bootstrapped = false;
+    public const float DefaultSize = 16f;
+    [Dependency] private readonly IPrototypeManager _protoMan = default!;
 
-    [Dependency] private readonly TextStyleLibrary Styles = default!;
+    private static readonly Dictionary<string, ResFile> _ttfFiles = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, ResFile> _ttfFilesByName = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<(string Family, FontVariant Variant), FontSystem> _fontSystems = new();
+    private static bool _indexed;
+    private string? _defaultFamilyCache;
+    private bool _defaultFamilyCached;
 
-    /// <summary>
-    /// Global font system containing font files added as game content. Files read directly.
-    /// </summary>
-    /// <remarks>All hail Myra!</remarks>
-    public static readonly FontSystem MyraFontSystem = new();
-    private readonly bool loadedGameFonts = false;
     public readonly ResPath resPath = new("Fonts");
 
     public FontManager()
     {
         IoCManager.ResolveDependencies(this);
 
-        if (loadedGameFonts) return; // Prevent excessive file loading.
-        loadedGameFonts = true;
+        if (_indexed)
+            return;
+
+        //FontSystemDefaults.TextShaper = new HarfBuzzTextShaper();
+        //! not supported rn
+        //FontSystemDefaults.FontLoader = new FreeTypeLoader(); 
+        _indexed = true;
 
         var ttfFiles = resPath.GetFiles("ttf");
         for (var index = 0; index < ttfFiles.Length; index++)
         {
             ref readonly var file = ref ttfFiles[index];
-            MyraFontSystem.AddFont(File.ReadAllBytes(file.FilePath));
+            _ttfFiles[file.Relative] = file;
+            _ttfFilesByName[Path.GetFileNameWithoutExtension(file.Relative)] = file;
         }
+
+        _protoMan.PrototypesReloaded += (typeKey, _) =>
+        {
+            if (typeKey.Equals("fontFamily", StringComparison.OrdinalIgnoreCase))
+                _defaultFamilyCached = false;
+        };
     }
 
-    public void BootstrapDefaults()
+    public IReadOnlyCollection<string> Families
+        => _protoMan.EnumerateAll<FontFamilyPrototype>().Select(p => p.ID).ToArray();
+
+    public SpriteFontBase Get(float size = DefaultSize, FontVariant variant = FontVariant.Regular)
+        => Get(size, DefaultFamily() ?? string.Empty, variant);
+
+    public SpriteFontBase Get(float size, string family, FontVariant variant = FontVariant.Regular)
     {
-        if (_bootstrapped)
-            return;
+        if (TryGetSystem(family, variant, out var system))
+            return system.GetFont(size);
 
-        Register(FontKey.Default, MyraFontSystem.GetFont(DefaultFontSizes.Get(FontKey.Default)));
-        Register(FontKey.UiBody, MyraFontSystem.GetFont(DefaultFontSizes.Get(FontKey.UiBody)));
-        Register(FontKey.UiTitle, MyraFontSystem.GetFont(DefaultFontSizes.Get(FontKey.UiTitle)));
-        Register(FontKey.Debug, MyraFontSystem.GetFont(DefaultFontSizes.Get(FontKey.Debug)));
-        Register(FontKey.Loading, MyraFontSystem.GetFont(DefaultFontSizes.Get(FontKey.Loading)));
-        Register(FontKey.Tooltip, MyraFontSystem.GetFont(DefaultFontSizes.Get(FontKey.Tooltip)));
-        Register(FontKey.Button, MyraFontSystem.GetFont(DefaultFontSizes.Get(FontKey.Button)));
-        Register(FontKey.UiSmall, MyraFontSystem.GetFont(DefaultFontSizes.Get(FontKey.UiSmall)));
-        Register(FontKey.Notification, MyraFontSystem.GetFont(DefaultFontSizes.Get(FontKey.Notification)));
+        // variant not configured for this family - fall back to Regular
+        if (variant != FontVariant.Regular && TryGetSystem(family, FontVariant.Regular, out system))
+            return system.GetFont(size);
 
-        _bootstrapped = true;
+        // family itself does not exist - fall back to the default family
+        var defaultFamily = DefaultFamily();
+        if (defaultFamily is not null && defaultFamily != family && TryGetSystem(defaultFamily, FontVariant.Regular, out system))
+            return system.GetFont(size);
+
+        throw new InvalidOperationException(
+            $"No font family '{family}' (variant {variant}) loaded, and no fallback available. " +
+            $"Known families: {(Families.Count == 0 ? "(none)" : string.Join(", ", Families))}");
     }
 
-    public void Register(FontKey key, SpriteFontBase font)
-    {
-        if (key == FontKey.None)
-            return;
+    public SpriteFontBase GetFallback() => Get(DefaultSize);
 
-        _fonts[key] = font;
+    public Vector2 Measure(string text, float size)
+        => Get(size).MeasureString(text ?? string.Empty);
+
+    public Vector2 Measure(string text, string font, float size, FontVariant variant = FontVariant.Regular)
+        => Get(size, font, variant).MeasureString(text ?? string.Empty);
+
+    private string? DefaultFamily()
+    {
+        if (!_defaultFamilyCached)
+        {
+            _defaultFamilyCache = _protoMan.EnumerateAll<FontFamilyPrototype>().FirstOrDefault()?.ID;
+            _defaultFamilyCached = true;
+        }
+
+        return _defaultFamilyCache;
     }
 
-    public bool Has(FontKey key)
-        => key != FontKey.None && _fonts.ContainsKey(key);
-
-    public SpriteFontBase Get(FontKey key)
+    private bool TryGetSystem(string font, FontVariant variant, [NotNullWhen(true)] out FontSystem? system)
     {
-        if (key != FontKey.None && _fonts.TryGetValue(key, out var font))
-            return font;
+        if (_fontSystems.TryGetValue((font, variant), out system))
+            return true;
 
-        return GetFallback();
-    }
+        system = null;
+        ResFile file;
 
-    public bool TryGet(FontKey key, [NotNullWhen(true)] out SpriteFontBase? font)
-    {
-        if (key != FontKey.None)
-            return _fonts.TryGetValue(key, out font);
+        if (_protoMan.TryIndex<FontFamilyPrototype>(font, out var proto))
+        {
+            var fileName = proto.GetFile(variant);
+            if (fileName is null || !_ttfFiles.TryGetValue(fileName, out file))
+                return false;
+        }
+        // no fontFamily prototype registered under this name - last resort: a loose .ttf
+        // whose file name (without extension) matches exactly. Only stands in for Regular;
+        // a loose file has no bold/italic pairing to speak of.
+        else if (variant == FontVariant.Regular && _ttfFilesByName.TryGetValue(font, out file))
+        {
+        }
+        else
+        {
+            return false;
+        }
 
-        font = null;
-        return false;
-    }
+        var created = new FontSystem();
+        created.CurrentAtlasFull += (_, _) => created.Reset();
+        created.AddFont(FileSystem.ReadAllBytes(file.FilePath));
 
-    public SpriteFontBase GetForStyle(TextStyle style)
-    {
-        if (style == TextStyle.None)
-            return GetFallback();
-
-        var def = Styles.Get(style);
-        return MyraFontSystem.GetFont(def.Size);
-    }
-
-    public SpriteFontBase GetFallback()
-    {
-        if (_fonts.TryGetValue(FontKey.Default, out var fallback))
-            return fallback;
-
-        foreach (var kv in _fonts)
-            return kv.Value;
-
-        return MyraFontSystem.GetFont(DefaultFontSizes.Get(FontKey.Default));
-    }
-
-    public Vector2 Measure(FontKey key, string text)
-    {
-        text ??= string.Empty;
-        return Get(key).MeasureString(text);
-    }
-
-    public Vector2 Measure(TextStyle style, string text)
-    {
-        text ??= string.Empty;
-        return GetForStyle(style).MeasureString(text);
+        _fontSystems[(font, variant)] = created;
+        system = created;
+        return true;
     }
 }

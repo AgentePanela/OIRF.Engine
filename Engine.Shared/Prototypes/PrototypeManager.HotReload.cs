@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Engine.Shared.Storage;
 
 namespace Engine.Shared.Prototypes;
 
@@ -20,7 +21,7 @@ public sealed partial class PrototypeManager
 
         foreach (var dir in ResPath.GetFolders())
         {
-            if (!Directory.Exists(dir))
+            if (!FileSystem.DirectoryExists(dir))
                 continue;
 
             var watcher = new FileSystemWatcher(dir)
@@ -59,7 +60,7 @@ public sealed partial class PrototypeManager
 
     private void ReloadFile(string filePath)
     {
-        if (!File.Exists(filePath))
+        if (!FileSystem.FileExists(filePath))
             return;
 
         var oldKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -169,6 +170,8 @@ public sealed partial class PrototypeManager
                 existingDict?.Remove(id);
             else
                 AddToIndex(instance);
+
+            PrototypesReloaded?.Invoke(typeKey, id);
         }
     }
 }

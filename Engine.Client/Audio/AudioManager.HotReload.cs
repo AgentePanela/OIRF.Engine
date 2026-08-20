@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using Engine.Shared.Assets;
+using Engine.Shared.Storage;
 
 namespace Engine.Client.Audio;
 
@@ -12,9 +13,9 @@ internal sealed partial class AudioManager
 
     private void InitHotReload()
     {
-        foreach (var dir in resPath.GetFolders())
+        foreach (var dir in _registry.ResPath.GetFolders())
         {
-            if (!Directory.Exists(dir))
+            if (!FileSystem.DirectoryExists(dir))
                 continue;
 
             var watcher = new FileSystemWatcher(dir)
@@ -41,20 +42,20 @@ internal sealed partial class AudioManager
             if (oldFullPath is not null)
             {
                 var oldKey = SharedResourceManager.NormalizeKey(dir, oldFullPath);
-                AudiosPath.Remove(oldKey);
+                _registry.Remove(oldKey);
             }
 
             var key = SharedResourceManager.NormalizeKey(dir, fullPath);
 
-            if (File.Exists(fullPath))
+            if (FileSystem.FileExists(fullPath))
             {
-                if (AudiosPath.TryGetValue(key, out var existing) && existing != fullPath)
+                if (_registry.TryGetPath(key, out var existing) && existing != fullPath)
                     Log.Warn($"Audio '{key}' now maps to a different file ({existing} > {fullPath}).");
 
-                AudiosPath[key] = fullPath;
+                _registry.Upsert(key, fullPath);
                 Log.Debug($"Hot-reloaded audio '{key}'.");
             }
-            else if (AudiosPath.Remove(key))
+            else if (_registry.Remove(key))
             {
                 Log.Debug($"Audio '{key}' deleted.");
             }

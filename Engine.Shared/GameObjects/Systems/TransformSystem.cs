@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 
@@ -5,6 +6,80 @@ namespace Engine.Shared.GameObjects;
 
 public sealed class TransformSystem : EntitySystem
 {
+    // Last Position/Angle seen per entity, last tick
+    private readonly Dictionary<EntityUid, (Vector2 Pos, float Angle)> _lastTransform = new();
+
+    public override void Init()
+    {
+        base.Init();
+        SubscribeEvent<TransformComponent, CompRemovedEvent>(OnCompRemoved);
+    }
+
+    public override void Update(float dt)
+    {
+        base.Update(dt);
+
+        foreach (var (uid, t) in GetEntitiesWithComp<TransformComponent>())
+        {
+            if (!_lastTransform.TryGetValue(uid, out var last))
+            {
+                _lastTransform[uid] = (t.Position, t.Angle);
+                continue;
+            }
+
+            var posDelta = t.Position - last.Pos;
+            var angleDelta = t.Angle - last.Angle;
+            _lastTransform[uid] = (t.Position, t.Angle);
+
+            if (posDelta == Vector2.Zero && angleDelta == 0f)
+                continue;
+
+            MoveChildren(uid, posDelta, angleDelta);
+        }
+    }
+
+    private void MoveChildren(EntityUid parentUid, Vector2 posDelta, float angleDelta)
+    {
+        foreach (var (uid, t) in GetEntitiesWithComp<TransformComponent>())
+        {
+            if (t.Parent != parentUid)
+                continue;
+
+            t.Position += posDelta;
+            t.Angle += angleDelta;
+            _lastTransform[uid] = (t.Position, t.Angle);
+
+            MoveChildren(uid, posDelta, angleDelta);
+        }
+    }
+
+    private void OnCompRemoved(EntityUid uid, TransformComponent comp, CompRemovedEvent args)
+    {
+        _lastTransform.Remove(uid);
+
+        if (GetEntity(uid)?.Deleting is false)
+            return;
+
+        var ents = GetChildren(comp);
+        foreach (var puid in ents)
+            DeleteEntity(puid);
+    }
+
+    private List<EntityUid> GetChildren(TransformComponent comp)
+    {
+        List<EntityUid> children = new();
+        var query = GetEntitiesWithComp<TransformComponent>();
+        foreach (var ent in query)
+        {
+            if (ent.comp.Parent == comp.Owner)
+                children.Add(ent.uid);
+        }
+
+        return children;
+    }
+
+    #region API
+
     /// <summary>
     /// Returns the closest entity from position within <paramref name="hitRadius"/> units.
     /// </summary>
@@ -71,4 +146,6 @@ public sealed class TransformSystem : EntitySystem
 
         return results;
     }
+
+    #endregion
 }

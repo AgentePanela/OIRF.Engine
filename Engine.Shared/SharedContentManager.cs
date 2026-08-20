@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using Engine.Shared.Assets;
+using Engine.Shared.Audio;
 using Engine.Shared.Configuration;
 using Engine.Shared.GameObjects;
 using Engine.Shared.IoC;
@@ -42,6 +43,7 @@ public sealed class SharedContentManager
     {
         _assemblies.Add(Assembly.GetExecutingAssembly());
         IoCManager.Register<SharedResourceManager>();
+        IoCManager.Register<SharedAudioManifest>();
         IoCManager.Register<IConfigurationManager, ConfigurationManager>();
         IoCManager.Register<ILocalizationManager, LocalizationManager>();
         IoCManager.Register<IPrototypeManager, PrototypeManager>();
@@ -56,7 +58,7 @@ public sealed class SharedContentManager
     {
         IoCManager.Resolve<IConfigurationManager>().Init();
         IoCManager.Resolve<IPrototypeManager>().Load();
-
+        IoCManager.Resolve<SharedAudioManifest>().Load();
     }
 
     public bool IsServer()

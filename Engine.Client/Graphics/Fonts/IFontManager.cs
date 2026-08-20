@@ -1,57 +1,43 @@
+using System.Collections.Generic;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
-using System.Diagnostics.CodeAnalysis;
 
 namespace Engine.Client.Graphics.Fonts;
 
 /// <summary>
-/// Central font registry and lookup service.
+/// Rasterizes and measures text from the engine's loaded font families
+/// (<see cref="FontFamilyPrototype"/>).
 /// </summary>
 public interface IFontManager
 {
     /// <summary>
-    /// Loads the engine's default font set if it was not loaded yet.
-    /// This is safe to call multiple times.
+    /// Every font family ID made via <see cref="FontFamilyPrototype"/>.
     /// </summary>
-    void BootstrapDefaults();
+    IReadOnlyCollection<string> Families { get; }
 
     /// <summary>
-    /// Registers a font instance under a key.
+    /// Gets a font from the default family (the first one loaded), rasterized at the given pixel size.
     /// </summary>
-    void Register(FontKey key, SpriteFontBase font);
+    SpriteFontBase Get(float size = FontManager.DefaultSize, FontVariant variant = FontVariant.Regular);
 
     /// <summary>
-    /// Checks whether the font key exists.
+    /// Gets a font from a specific family, rasterized at the given pixel size. Falls back to
+    /// that family's Regular if the requested variant isn't configured.
     /// </summary>
-    bool Has(FontKey key);
+    SpriteFontBase Get(float size, string family, FontVariant variant = FontVariant.Regular);
 
     /// <summary>
-    /// Gets a font by key. Returns fallback if not found.
-    /// </summary>
-    SpriteFontBase Get(FontKey key);
-
-    /// <summary>
-    /// Attempts to get a font by key.
-    /// </summary>
-    bool TryGet(FontKey key, [NotNullWhen(true)] out SpriteFontBase? font);
-
-    /// <summary>
-    /// Resolves the font used by a high-level text style.
-    /// </summary>
-    SpriteFontBase GetForStyle(TextStyle style);
-
-    /// <summary>
-    /// Gets the fallback/default engine font.
+    /// Font used when no size/family was specified.
     /// </summary>
     SpriteFontBase GetFallback();
 
     /// <summary>
-    /// Measures text using a specific registered font.
+    /// Measures text as it would be drawn with the default family at the given pixel size.
     /// </summary>
-    Vector2 Measure(FontKey key, string text);
+    Vector2 Measure(string text, float size);
 
     /// <summary>
-    /// Measures text using a specific style.
+    /// Measures text as it would be drawn with a specific family at the given pixel size.
     /// </summary>
-    Vector2 Measure(TextStyle style, string text);
+    Vector2 Measure(string text, string family, float size, FontVariant variant = FontVariant.Regular);
 }

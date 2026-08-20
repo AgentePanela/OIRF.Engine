@@ -126,7 +126,7 @@ public static class ShaderLightingInjector
             ? JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(manifestPath)) ?? []
             : [];
 
-        var buildDir = Path.Combine(Path.GetTempPath(), "EptusShaderBuild", SafeFolderName(sourceRoot));
+        var buildDir = Path.Combine(Path.GetTempPath(), "ShaderBuild", SafeFolderName(sourceRoot));
         if (Directory.Exists(buildDir))
             Directory.Delete(buildDir, recursive: true);
         Directory.CreateDirectory(buildDir);

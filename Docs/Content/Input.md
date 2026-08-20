@@ -1,6 +1,6 @@
 # Input
 
-`InputManager` (accessible via `GameClient.InputManager`) reads the state of keyboard, mouse, and gamepad every frame. It also supports a high-level **action map** system for remappable controls.
+`InputManager` (accessible via `GameClient.InputManager`) reads the state of keyboard, mouse, gamepad, and touch every frame. It also supports a high-level **action map** system for remappable controls.
 
 ---
 
@@ -60,6 +60,10 @@ var (scrolled, delta) = input.MouseWheelDeltaChanged();
 
 Use the `MouseButton` enum: `MouseButton.Left`, `MouseButton.Middle`, `MouseButton.Right`.
 
+> **Touch emulates `MouseButton.Left`:** Any active touch is reported as `MouseButton.Left` being down, and `MouseScreenPosition`/`MouseWorldPosition` follow the touch position while it's active - so code that only checks the left mouse button works on a touchscreen with no changes. `Middle`/`Right` have no touch equivalent. This only covers code going through `InputManager`.
+>
+> Controlled by `input.EmulateMouseFromTouch` (default `true`); set it to `false` to keep touch and mouse fully separate.
+
 ```csharp
 // Clicked = pressed this frame only
 if (input.MouseClicked(MouseButton.Left)) { ... }
@@ -94,6 +98,27 @@ if (input.ButtonReleased(Buttons.A)) { ... }
 // Thumbstick (stick 0 = left, stick 1 = right)
 Vector2 leftStick  = input.GetThumbStickPosition(0);
 Vector2 rightStick = input.GetThumbStickPosition(1);
+```
+
+---
+
+## Touch
+
+Backed by MonoGame's `TouchPanel`. Works on any platform (returns no active touches on a device without a touchscreen, so it's safe to read on desktop too).
+
+```csharp
+// Just started this frame (touch's equivalent of a mouse click)
+if (input.AnyTouchTapped()) { ... }
+
+// Currently held
+if (input.AnyTouchDown()) { ... }
+
+// Just lifted this frame
+if (input.AnyTouchReleased()) { ... }
+
+// Position of the first active touch, or null if there's none right now
+Vector2? screen = input.TouchScreenPosition;
+Vector2? world = input.TouchWorldPosition;
 ```
 
 ---

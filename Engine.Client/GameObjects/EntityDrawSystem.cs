@@ -3,6 +3,7 @@ using Engine.Shared.GameObjects;
 /// <summary>
 /// A entity system with capabilities of do Draw() calls. Exclusive to Client-Side.
 /// </summary>
+[IgnoreSystemRegistry]
 public abstract class EntityDrawSystem : EntitySystem
 {
     /// <summary>

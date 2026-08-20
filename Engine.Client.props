@@ -1,0 +1,9 @@
+<Project>
+  <ItemGroup>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Engine.Client\Engine.Client.csproj" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Engine.Shared\Engine.Shared.csproj" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Engine.ResourcesBuilder\ResourcesBuilder.csproj" />
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Engine.Generators\Engine.Generators.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

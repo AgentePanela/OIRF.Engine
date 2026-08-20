@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.Prototypes;
@@ -53,37 +54,47 @@ public sealed partial class EntityManager
                 DeleteEntity(ent);
         }
 
-        if (EntitiesToRemove.Count > 0)
+        var markedForRemoval = new HashSet<EntityUid>();
+        while (true)
         {
-            var snapshot = _tempUids;
-            snapshot.AddRange(EntitiesToRemove);
-            //EntitiesToRemove.Clear();
+            var newlyQueued = _tempUids;
+            foreach (var uid in EntitiesToRemove)
+            {
+                if (markedForRemoval.Add(uid))
+                    newlyQueued.Add(uid);
+            }
 
-            foreach (var uid in snapshot)
+            if (newlyQueued.Count == 0 && CompsPendingRemove.Count == 0)
+            {
+                newlyQueued.Clear();
+                break;
+            }
+
+            foreach (var uid in newlyQueued)
             {
                 var entComps = GetEntityComps(uid);
                 if (entComps is null)
                     continue;
-                
+
                 foreach (var comp in entComps)
-                    comp.RemoveComponent(); // mark entity components to be removed (this will happen in the next loop lol)
+                    comp.RemoveComponent(); // mark entity components to be removed (processed right below)
             }
-            snapshot.Clear();
-        }
+            newlyQueued.Clear();
 
-        if (CompsPendingRemove.Count > 0)
-        {
-            var snapshot = _tempComps;
-            snapshot.AddRange(CompsPendingRemove);
-            CompsPendingRemove.Clear();
-
-            foreach (var comp in snapshot)
+            if (CompsPendingRemove.Count > 0)
             {
-                EventBus.RaiseEvent(comp.Owner, new CompRemovedEvent() { Component = comp });
-                if (_scene.Components.TryGetValue(comp.GetType(), out var pool))
-                    pool.Remove(comp.Owner);
+                var snapshot = _tempComps;
+                snapshot.AddRange(CompsPendingRemove);
+                CompsPendingRemove.Clear();
+
+                foreach (var comp in snapshot)
+                {
+                    EventBus.RaiseEvent(comp.Owner, new CompRemovedEvent() { Component = comp });
+                    if (_scene.Components.TryGetValue(comp.GetType(), out var pool))
+                        pool.TryRemove(comp.Owner, out _);
+                }
+                snapshot.Clear();
             }
-            snapshot.Clear();
         }
 
         if (CompsPendingAdd.Count > 0)
@@ -109,7 +120,7 @@ public sealed partial class EntityManager
             foreach (var uid in snapshot)
             {
                 EventBus.RaiseEvent(uid, new EntityRemovedEvent());
-                _scene.Entities.Remove(uid);
+                _scene.Entities.TryRemove(uid, out _);
             }
             snapshot.Clear();
         }
@@ -122,18 +133,12 @@ public sealed partial class EntityManager
         }
     }
 
-    private Dictionary<EntityUid, Component> GetPool(Type type)
+    private ConcurrentDictionary<EntityUid, Component> GetPool(Type type)
     {
-        if (!_scene.Components.TryGetValue(type, out var pool))
-        {
-            pool = new Dictionary<EntityUid, Component>();
-            _scene.Components[type] = pool;
-        }
-
-        return pool;
+        return _scene.Components.GetOrAdd(type, static _ => new ConcurrentDictionary<EntityUid, Component>());
     }
 
-    private Dictionary<EntityUid, Component> GetPool<T>() where T : Component
+    private ConcurrentDictionary<EntityUid, Component> GetPool<T>() where T : Component
     {
         return GetPool(typeof(T));
     }
