@@ -2,7 +2,7 @@
   id: EngineDefault
   parent: [EngineDefaultButtons, EngineDefaultScroll, EngineDefaultLineEdit,
     EngineDefaultCheckBox, EngineDefaultProgressBar, EngineDefaultSlider, EngineDefaultTextEdit,
-    EngineDefaultWindow]
+    EngineDefaultWindow, EngineDefaultTabContainer, EngineDefaultSplitContainer, EngineDefaultItemList]
 
 - type: style
   id: EngineDefaultButtons
@@ -189,3 +189,45 @@
         outlineColor: "#770B0B"
         outlineThickness: [2, 0, 2, 2]
         padding: 10
+
+- type: style
+  id: EngineDefaultTabContainer
+  abstract: true
+  rules:
+    - class: { control: tabBar }
+      properties:
+        background: "#0A0A0A"
+
+    - class: { control: tabButton, pseudoClass: active }
+      properties:
+        background: "#260202"
+        outlineColor: "#891E1E"
+
+    - class: { control: tabPages }
+      properties:
+        background: "#1a1a1a"
+        outlineColor: "#770B0B"
+        outlineThickness: [2, 0, 2, 2]
+        padding: 10
+
+- type: style
+  id: EngineDefaultSplitContainer
+  abstract: true
+  rules:
+    - class: { control: splitHandle }
+      properties:
+        background: "#4a4a4a"
+
+    - class: { control: splitHandle, pseudoClass: hover }
+      properties:
+        background: "#5a5a5a"
+
+- type: style
+  id: EngineDefaultItemList
+  abstract: true
+  rules:
+    - class: { control: itemList }
+      properties:
+        background: "#0A0A0A"
+        outlineColor: "#770B0B"
+        outlineThickness: 2
