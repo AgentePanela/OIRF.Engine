@@ -5,6 +5,7 @@ using Engine.Client.Graphics;
 using Engine.Client.Graphics.Fonts;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using MonoGame.Extended;
 
 namespace Engine.Client.UI;
@@ -52,6 +53,21 @@ public partial class TextureRect : Control
     [StyleField("nineSliceMargins")]
     private Thickness? _nineSliceMargins;
 
+    /// <summary>
+    /// Rotation applied around Origin. Dosen't affect Bounds.
+    /// </summary>
+    public float Rotation { get; set; }
+
+    /// <summary>
+    /// Point this sprite rotates around.
+    /// </summary>
+    public Vector2? Origin { get; set; }
+
+    /// <summary>
+    /// Horizontal/vertical flip.
+    /// </summary>
+    public SpriteEffects Effects { get; set; } = SpriteEffects.None;
+
     private Rectangle GetEffectiveRegion(AtlasSprite sprite) => SourceRect is { } sub
         ? new Rectangle(sprite.Region.X + sub.X, sprite.Region.Y + sub.Y, sub.Width, sub.Height)
         : sprite.Region;
@@ -81,11 +97,19 @@ public partial class TextureRect : Control
         }
 
         var source = ToRectF(region);
-        var destination = Stretch
-            ? new RectangleF(Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height)
-            : new RectangleF(Bounds.X, Bounds.Y, region.Width, region.Height);
+        var drawSize = Stretch
+            ? new Vector2(Bounds.Width, Bounds.Height)
+            : new Vector2(region.Width, region.Height);
 
-        sb.Draw(page.Texture, destination, source, Tint);
+        var destination = new RectangleF(Bounds.X, Bounds.Y, drawSize.X, drawSize.Y);
+        if (Rotation == 0f && Origin is null && Effects == SpriteEffects.None)
+        {
+            sb.Draw(page.Texture, destination, source, Tint);
+            return;
+        }
+
+        var origin = Origin ?? new Vector2(region.Width / 2f, region.Height / 2f);
+        sb.Draw(page.Texture, destination, source, Tint, Rotation, origin, Effects);
     }
 
     private static MonoGame.Extended.RectangleF ToRectF(Rectangle r) => new(r.X, r.Y, r.Width, r.Height);
