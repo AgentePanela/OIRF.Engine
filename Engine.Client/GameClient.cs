@@ -29,6 +29,7 @@ using Engine.Client.Graphics.Lighting;
 using Engine.Shared.Locale;
 using Engine.Shared.Threading;
 using System.IO;
+using Microsoft.Xna.Framework.Input;
 
 namespace Engine.Client;
 
@@ -302,6 +303,7 @@ public class GameClient : Game
     }
 
     private long _lastDrawEnd;
+    private bool _dumpAfterSweep;
     protected override void Update(GameTime gameTime)
     {
         if (_paused)
@@ -381,6 +383,39 @@ public class GameClient : Game
             Audio.Update(GameTime.DeltaTime);
 
         CommitGCDelta();
+
+        if (_dumpAfterSweep && !Sweep.Running)
+        {
+            _dumpAfterSweep = false;
+            WriteReport();
+            ConfigManager.Set(EngineCvars.ProfilerGpuSync, false);
+        }
+
+        if (InputManager.KeyPressed(Keys.F2))
+            DumpProfilerReport();
+    }
+
+    private void DumpProfilerReport()
+    {
+        var withSweep = InputManager.KeyDown(Keys.LeftShift) || InputManager.KeyDown(Keys.RightShift);
+
+        if (withSweep && !Sweep.Running)
+        {
+            ConfigManager.Set(EngineCvars.ProfilerGpuSync, true);
+            Log.Debug("Running the profiler sweep, hold on...");
+            Sweep.Start();
+            _dumpAfterSweep = true;
+            return;
+        }
+
+        WriteReport();
+    }
+
+    private void WriteReport()
+    {
+        var path = ProfilerReport.Dump("FORCED-REPORT");
+        if (path is not null)
+            Log.Debug($"Profiler report written to {path}");
     }
 
     protected override void Draw(GameTime gameTime)
