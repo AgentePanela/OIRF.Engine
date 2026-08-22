@@ -21,6 +21,7 @@ public sealed partial class RenderManager
         if (label.ShadowEnabled)
             DrawShadow(font, text, position, label);
 
+        _stats.Count(RenderCounter.Strings);
         _spriteBatch.DrawString(
             font,
             text,
@@ -33,6 +34,7 @@ public sealed partial class RenderManager
 
     private void DrawShadow(SpriteFontBase font, string text, Vector2 position, Label2D label)
     {
+        _stats.Count(RenderCounter.StringShadowDraws);
         _spriteBatch.DrawString(
             font,
             text,
@@ -54,6 +56,8 @@ public sealed partial class RenderManager
                 if (x == 0 && y == 0)
                     continue;
 
+                // an outline is (2t+1)^2-1 extra text draws per label
+                _stats.Count(RenderCounter.StringOutlineDraws);
                 _spriteBatch.DrawString(
                     font,
                     text,

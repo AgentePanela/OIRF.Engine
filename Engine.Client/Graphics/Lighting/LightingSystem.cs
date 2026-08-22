@@ -4,6 +4,7 @@ using System;
 using Engine.Client.Assets;
 using Engine.Client.Graphics.Shaders;
 using Engine.Shared.Configuration;
+using Engine.Shared.Debug.Diagnostics;
 using Engine.Shared.GameObjects;
 using Engine.Shared.GameObjects.Components.Lighting;
 using Engine.Shared.IoC;
@@ -27,6 +28,8 @@ public sealed class LightingSystem : EntityDrawSystem
     [Dependency] private readonly IAssetManager _assets = default!;
     [Dependency] private readonly ViewportAdapter _viewport = default!;
     [Dependency] private readonly LightOcclusionSystem _occlusionSys = default!;
+    [Dependency] private readonly FrameProfiler _profiler = default!;
+    [Dependency] private readonly RenderStats _stats = default!;
 
     private readonly LightingRenderTarget _lightmap = new();
     private readonly ShadowMapRT _shadowMap = new();
@@ -284,6 +287,8 @@ public sealed class LightingSystem : EntityDrawSystem
         // unshaded pixels (stencil 1) are left untouched at full brightness.
         // SceneTarget still holds its stencil contents from DrawQueue
         // (RenderTargetUsage.PreserveContents).
+        _stats.RecordBind("SceneTarget");
+        _stats.AddFill("lighting.apply", (double)scene.Width * scene.Height);
         GameClient.GraphicsDevice.SetRenderTarget(scene);
         GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, scene.Width, scene.Height);
 
@@ -291,6 +296,8 @@ public sealed class LightingSystem : EntityDrawSystem
         _render.DrawFullscreenQuad(_lightmap.Target, RenderManager.LightMultiplyBlend, lightSampler, RenderManager.StencilTestShadedOnly);
 
         // Blit the now fully-lit SceneTarget onto FinalTarget/the backbuffer.
+        _stats.Count(RenderCounter.TargetBinds);
+        _stats.AddFill("lighting.blit", (double)_render.LastBackbufferViewport.Width * _render.LastBackbufferViewport.Height);
         GameClient.GraphicsDevice.SetRenderTarget(_render.FinalTarget);
         GameClient.GraphicsDevice.Viewport = _render.LastBackbufferViewport;
         _render.DrawFullscreenQuad(scene, BlendState.Opaque, SamplerState.PointClamp);
@@ -350,8 +357,16 @@ public sealed class LightingSystem : EntityDrawSystem
             return;
         }
 
-        CollectLights();
-        CollectOccluders();
+        using (_profiler.Scope("lighting/collect"))
+        {
+            CollectLights();
+            CollectOccluders();
+        }
+
+        _stats.TrackTarget("Lightmap", _lightmap.Target);
+        _stats.TrackTarget("ShadowMap", _shadowMap.Target);
+        _stats.TrackTarget("WallBleedA", _wallBleed.A);
+        _stats.TrackTarget("BlurScratch", _blurScratch.Target);
 
         // one shadow map row per shadow-casting light, rounded up to a power
         // of two and never shrunk, so lights entering and leaving the view
@@ -399,6 +414,10 @@ public sealed class LightingSystem : EntityDrawSystem
 
         if (_shadowDepthEffect is not null && _shadowMap.Target is not null)
         {
+            using var _ = _profiler.GpuScope("lighting/shadowmap");
+            _stats.RecordBind("ShadowMap");
+            _stats.RecordClear("ShadowMap");
+            _stats.AddFill("lighting.shadowmap", (double)shadowW * shadowH);
             _passTimer.Restart();
             RenderShadowMap();
             _passTimer.Stop();
@@ -411,16 +430,31 @@ public sealed class LightingSystem : EntityDrawSystem
         }
 
         _passTimer.Restart();
-        _render.BeginSceneRender(_lightmap.Target);
-        GameClient.GraphicsDevice.Clear(baseAmbient);
-        DrawRadialLights(viewProj);
-        DrawTextureLights();
-        _render.EndSceneRender();
+        using (_profiler.GpuScope("lighting/lightpass"))
+        {
+            _stats.RecordBind("Lightmap");
+            _stats.RecordClear("Lightmap");
+            _stats.AddFill("lighting.lightmap.clear", (double)lightW * lightH);
+
+            _render.BeginSceneRender(_lightmap.Target);
+            GameClient.GraphicsDevice.Clear(baseAmbient);
+
+            using (_profiler.Scope("lighting/lightpass.radial"))
+                DrawRadialLights(viewProj);
+
+            using (_profiler.Scope("lighting/lightpass.texture"))
+                DrawTextureLights();
+
+            _render.EndSceneRender();
+        }
         _passTimer.Stop();
         lightPassMs = _passTimer.Elapsed.TotalMilliseconds;
 
         if (wallBleed && _occluders.Count > 0)
         {
+            using var _ = _profiler.GpuScope("lighting/wallbleed");
+            // ping pong blur at half lightmap res, both targets written twice
+            _stats.AddFill("lighting.wallbleed", (double)lightW / 2 * lightH / 2 * 4);
             _passTimer.Restart();
             RunWallBleed(viewProj);
             _passTimer.Stop();
@@ -429,6 +463,9 @@ public sealed class LightingSystem : EntityDrawSystem
 
         if (lightBlur)
         {
+            using var _ = _profiler.GpuScope("lighting/lightblur");
+            // separable blur, so the lightmap is shaded twice
+            _stats.AddFill("lighting.lightblur", (double)lightW * lightH * 2);
             _passTimer.Restart();
             RunLightBlur();
             _passTimer.Stop();
@@ -858,6 +895,8 @@ public sealed class LightingSystem : EntityDrawSystem
         foreach (var entry in _lights)
         {
             float radius = entry.Comp.Radius;
+            _stats.Count(RenderCounter.LightmapDraws);
+            _stats.AddFill("lighting.radial", ScreenQuadPixels(radius));
             BuildDiskQuad(entry.WorldPos, radius);
 
             // -1 skips the shadow lookup in the shader. A light with an empty
@@ -1060,6 +1099,21 @@ public sealed class LightingSystem : EntityDrawSystem
             GameClient.GraphicsDevice.DrawUserPrimitives(
                 PrimitiveType.TriangleList, ScreenQuad, 0, 2, ScreenVertex.Declaration);
         }
+    }
+
+    /// <summary>
+    /// Lightmap pixels a light of this radius covers, clamped to the map - the
+    /// fill estimate the profiler reports.
+    /// </summary>
+    private double ScreenQuadPixels(float radius)
+    {
+        if (_lightmap.Target is null)
+            return 0;
+
+        var side = radius * 2f * _camera.Zoom * _lighting.LightmapScale;
+        var w = Math.Min(side, _lightmap.Target.Width);
+        var h = Math.Min(side, _lightmap.Target.Height);
+        return Math.Max(0, w * h);
     }
 
     private void BuildDiskQuad(Vector2 center, float radius)

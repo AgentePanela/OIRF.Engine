@@ -23,3 +23,4 @@ This section covers every API and system that you will interact with when buildi
 | [Tags](Tags.md) | Lightweight entity tagging |
 | [Storage](Storage.md) | Saving and loading user data |
 | [UI](UI.md) | Building user interfaces |
+| [Profiling](Profiling.md) | Finding what is eating the frame |

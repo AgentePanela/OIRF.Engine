@@ -4,6 +4,7 @@ using Engine.Client.Assets.Atlas;
 using Engine.Client.Graphics.Fonts;
 using Engine.Client.Graphics.Lighting;
 using Engine.Client.Graphics.Shaders;
+using Engine.Shared.Debug.Diagnostics;
 using Engine.Shared.IoC;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
@@ -24,6 +25,13 @@ public sealed partial class RenderManager
     [Dependency] private readonly Camera2D _camera = default!;
     [Dependency] private readonly LightingManager _lighting = default!;
     [Dependency] private readonly ShaderManager _shaders = default!;
+    [Dependency] private readonly RenderStats _stats = default!;
+    [Dependency] private readonly FrameProfiler _profiler = default!;
+
+    /// <summary>
+    /// Per-frame render counters: draw calls, batches, batch breaks and fill.
+    /// </summary>
+    public RenderStats Stats => _stats;
 
     public bool Resizing = true;
     public BlendState BlendState = BlendState.AlphaBlend;
@@ -199,6 +207,7 @@ public sealed partial class RenderManager
     {
         queue.SubmitOrder = _submitCounter++;
         _renderQueue.Add(queue);
+        _stats.RecordSubmit();
     }
 
     // True when the effect's active technique is named "Unshaded".
@@ -279,13 +288,20 @@ public sealed partial class RenderManager
         DepthStencilState StencilFor(bool unshaded) =>
             !writeStencil ? DepthStencilState.None : (unshaded ? StencilWriteUnshaded : StencilWriteShaded);
 
+        var sortStart = Stopwatch.GetTimestamp();
         queue.Sort(DepthComparison);
+        _stats.SortMs += (Stopwatch.GetTimestamp() - sortStart) * 1000.0 / Stopwatch.Frequency;
+        _stats.Count(RenderCounter.QueueSize, queue.Count);
+
         foreach (var r in queue)
         {
             if (r.Target is IShapeRenderable)
             {
                 if (spriteOpen)
                 {
+                    // the two batchers are separate, so alternating between
+                    // sprites and shapes costs a flush each way
+                    _stats.Count(RenderCounter.BreakSpriteToShape);
                     End();
                     spriteOpen = false;
                     currentShader = null;
@@ -295,7 +311,14 @@ public sealed partial class RenderManager
                 if (!shapeOpen || r.Target.SamplerState != currentSampler || r.Unshaded != currentUnshaded)
                 {
                     if (shapeOpen)
+                    {
+                        if (r.Target.SamplerState != currentSampler)
+                            _stats.RecordSamplerBreak(currentSampler, r.Target.SamplerState);
+                        if (r.Unshaded != currentUnshaded)
+                            _stats.Count(RenderCounter.BreakUnshaded);
+
                         EndShapes();
+                    }
 
                     BeginShapes(r.Target.SamplerState, StencilFor(r.Unshaded));
                     shapeOpen = true;
@@ -307,6 +330,7 @@ public sealed partial class RenderManager
             {
                 if (shapeOpen)
                 {
+                    _stats.Count(RenderCounter.BreakShapeToSprite);
                     EndShapes();
                     shapeOpen = false;
                     currentSampler = null;
@@ -315,7 +339,18 @@ public sealed partial class RenderManager
                 if (!spriteOpen || r.Shader != currentShader || r.Target.SamplerState != currentSampler || r.Unshaded != currentUnshaded)
                 {
                     if (spriteOpen)
+                    {
+                        // record every reason that differs - a break usually has
+                        // one dominant cause and the report names it
+                        if (r.Shader != currentShader)
+                            _stats.RecordShaderBreak(currentShader, r.Shader);
+                        if (r.Target.SamplerState != currentSampler)
+                            _stats.RecordSamplerBreak(currentSampler, r.Target.SamplerState);
+                        if (r.Unshaded != currentUnshaded)
+                            _stats.Count(RenderCounter.BreakUnshaded);
+
                         End();
+                    }
 
                     // Default (no custom shader) sprites use DefaultLit so they
                     // can sample the lightmap themselves; Unshaded.fx and any
@@ -365,6 +400,7 @@ public sealed partial class RenderManager
 
         queue.Clear();
 
+        _stats.Count(RenderCounter.PooledEntries, pooled.Count);
         foreach (var p in pooled)
             p.ReturnToPool();
         pooled.Clear();
@@ -421,6 +457,7 @@ public sealed partial class RenderManager
     {
         var transform = ComputeTransform();
 
+        _stats.Count(RenderCounter.SpriteBatches);
         _spriteBatch.Begin(
             samplerState: samplerState ?? DefaultSampler,
             transformMatrix: transform,
@@ -446,6 +483,7 @@ public sealed partial class RenderManager
     {
         var transform = ComputeTransform();
 
+        _stats.Count(RenderCounter.ShapeBatches);
         _shapeBatch.Begin(
             view: transform,
             samplerState: samplerState ?? DefaultSampler,
@@ -492,6 +530,7 @@ public sealed partial class RenderManager
         WorldOnSceneTarget = false;
 
         bool lightingActive = _lighting?.Enabled ?? false;
+        _stats.TrackTarget("SceneTarget", SceneTarget);
         if (_renderQueue.Count == 0 && !lightingActive)
             return;
 
@@ -521,6 +560,9 @@ public sealed partial class RenderManager
         if (lightingActive && SceneTarget is not null && QueueHasShadedShape())
         {
             var clearColor = GameClient.Scenes.CurrentScene?.BackgroundColor ?? GameClient.Options.BackgroundColor;
+            _stats.RecordBind("SceneTarget");
+            _stats.RecordClear("SceneTarget");
+            _stats.AddFill("scene.clear", (double)SceneTarget.Width * SceneTarget.Height);
             GameClient.GraphicsDevice.SetRenderTarget(SceneTarget);
             GameClient.GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.Stencil, clearColor, 0f, 0);
             GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, SceneTarget.Width, SceneTarget.Height);
@@ -539,7 +581,10 @@ public sealed partial class RenderManager
         }
 
         if (_renderQueue.Count > 0)
+        {
+            using var _ = _profiler.GpuScope("draw/world.queue");
             DrawRenderQueue(_renderQueue, _pooledEntries, lightingActive, writeStencil: didSwitchTarget);
+        }
 
         if (didSwitchTarget)
         {
@@ -558,6 +603,7 @@ public sealed partial class RenderManager
         Color color = default, float rotation = 0f, Vector2 origin = default, Vector2 scale = default, SpriteEffects effects = SpriteEffects.None,
         float layerDepth = 0f)
     {
+        _stats.Count(RenderCounter.RawSprites);
         _spriteBatch.Draw(
             page.Texture,
             position,
@@ -577,6 +623,7 @@ public sealed partial class RenderManager
         Color color = default, float rotation = 0f, Vector2 origin = default, Vector2 scale = default, SpriteEffects effects = SpriteEffects.None,
         float layerDepth = 0f)
     {
+        _stats.Count(RenderCounter.RawTextures);
         _spriteBatch.Draw(
             texture,
             position,
@@ -620,6 +667,8 @@ public sealed partial class RenderManager
 
         region.X += (int)sprite.Offset.X;
         region.Y += (int)sprite.Offset.Y;
+        _stats.Count(RenderCounter.Sprites);
+        _stats.SpriteFillAccum += Math.Abs(region.Width * sprite.Scale.X * region.Height * sprite.Scale.Y);
         _spriteBatch.Draw(
             texture,
             position,
@@ -634,6 +683,7 @@ public sealed partial class RenderManager
 
     public void DrawTexture(RawTexture texture, Vector2 position)
     {
+        _stats.Count(RenderCounter.RawTextures);
         _spriteBatch.Draw(
             texture.Texture,
             position,
@@ -653,7 +703,12 @@ public sealed partial class RenderManager
 
         var dest = new Rectangle((int)position.X, (int)position.Y, (int)slice.Size.X, (int)slice.Size.Y);
 
+        // one nine slice fans out into up to nine real draws
+        _stats.Count(RenderCounter.NineSlices);
         foreach (var patch in NineSlicePatch.Compute(region, slice.Margin, dest))
+        {
+            _stats.Count(RenderCounter.NineSlicePatches);
             _spriteBatch.Draw(texture, patch.Dest, patch.Source, slice.Tint);
+        }
     }
 }

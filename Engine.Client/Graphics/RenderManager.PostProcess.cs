@@ -49,6 +49,7 @@ public sealed partial class RenderManager
             return;
 
         SceneTarget?.Dispose();
+        _stats.RecordRealloc("SceneTarget");
 
         var pp = GameClient.GraphicsDevice.PresentationParameters;
         SceneTarget = new RenderTarget2D(
@@ -86,6 +87,7 @@ public sealed partial class RenderManager
         if (dest is null)
             return;
 
+        _stats.Count(RenderCounter.TargetBinds);
         GameClient.GraphicsDevice.SetRenderTarget(dest);
         GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, dest.Width, dest.Height);
     }
@@ -121,6 +123,8 @@ public sealed partial class RenderManager
     {
         var vp = GameClient.GraphicsDevice.Viewport;
 
+        _stats.Count(RenderCounter.SpriteBatches);
+        _stats.Count(RenderCounter.RawTextures);
         GameClient.SpriteBatch.Begin(
             samplerState: samplerState,
             blendState: blendState,

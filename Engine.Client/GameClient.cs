@@ -14,8 +14,10 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
 using System;
+using System.Diagnostics;
 using System.Reflection;
 using Engine.Client.Debug.Diagnostics;
+using Engine.Shared.Debug.Diagnostics;
 using Engine.Shared.Configuration.CVars;
 using Engine.Shared.IoC;
 using Engine.Shared;
@@ -100,6 +102,9 @@ public class GameClient : Game
     public static ViewportAdapter Viewport { get; private set; }
     public static Camera2D Camera { get; private set; }
     public static UIManager InterfaceManager { get; private set; }
+    public static FrameProfiler Profiler { get; private set; }
+    public static ProfilerSweep Sweep { get; private set; }
+    public static RenderStats RenderStats { get; private set; }
     public static WindowManager WindowManager { get; private set; }
     public static ILocalizationManager LocalizationManager { get; private set; }
     public static GameState GameState = GameState.Booting;
@@ -155,6 +160,7 @@ public class GameClient : Game
         IoCManager.Register<ViewportAdapter>();
         IoCManager.Register<Camera2D>();
         IoCManager.Register<LightingManager>();
+        IoCManager.Register<RenderStats>();
         IoCManager.Register<RenderManager>();
         IoCManager.Register<InputManager>();
         IoCManager.Register<IVirtualKeyboard, NullVirtualKeyboard>(); // platform-specific mobile backends override this
@@ -174,6 +180,10 @@ public class GameClient : Game
         Viewport = IoCManager.Resolve<ViewportAdapter>();
         Camera = IoCManager.Resolve<Camera2D>();
         InterfaceManager = IoCManager.Resolve<UIManager>();
+        Profiler = IoCManager.Resolve<FrameProfiler>();
+        RenderStats = IoCManager.Resolve<RenderStats>();
+        Profiler.GpuFlush = GpuSync.Flush;
+        Sweep = IoCManager.Resolve<ProfilerSweep>();
         WindowManager = IoCManager.Resolve<WindowManager>();
         ConfigManager = IoCManager.Resolve<IConfigurationManager>();
         LocalizationManager = IoCManager.Resolve<ILocalizationManager>();
@@ -291,50 +301,86 @@ public class GameClient : Game
         //IoCManager.Resolve<ShaderManager>().Init(); - now in loading scene
     }
 
-    private int _gen0 = 0;
-    private int _gen1 = 0;
-    private int _gen2 = 0;
-    private long _gcBytes = 0;
+    private long _lastDrawEnd;
     protected override void Update(GameTime gameTime)
     {
         if (_paused)
             return;
-        
-        int agen0 = GC.CollectionCount(0);
-        int agen1 = GC.CollectionCount(1);
-        int agen2 = GC.CollectionCount(2);
-        var agcBytes = GC.GetAllocatedBytesForCurrentThread();
-        GCMeter.allocatedBytes = agcBytes - _gcBytes;
-        GCMeter.gen0 = agen0 - _gen0;
-        GCMeter.gen1 = agen1 - _gen1;
-        GCMeter.gen2 = agen2 - _gen2;
+
+        // everything between the end of the last Draw and here is Present,
+        // vsync wait and driver blocking - the tell for a GPU bound frame.
+        // Skipped during a sweep: vsync is off and passes are being toggled on
+        // purpose, so this would just pollute the rolling average with noise.
+        if (_lastDrawEnd != 0 && !Sweep.Running)
+            Profiler.RecordPresentWait((Stopwatch.GetTimestamp() - _lastDrawEnd) * 1000.0 / Stopwatch.Frequency);
+
+        // Frozen during a sweep for the same reason: BeginFrame/EndFrame is what
+        // feeds the rolling windows, and a sweep frame has whole passes forced
+        // off on purpose. Scopes opened while frozen (_inFrame stays false) are
+        // no-ops, so nothing gets recorded until real frames resume.
+        if (!Sweep.Running)
+            Profiler.BeginFrame();
+
+        // GC counters bracket this Update() call specifically, not the gap
+        // since the last one (which used to fold Draw()'s allocations in here).
+        int genBefore0 = GC.CollectionCount(0);
+        int genBefore1 = GC.CollectionCount(1);
+        int genBefore2 = GC.CollectionCount(2);
+        var bytesBefore = GC.GetAllocatedBytesForCurrentThread();
+
+        void CommitGCDelta()
+        {
+            GCMeter.gen0 = GC.CollectionCount(0) - genBefore0;
+            GCMeter.gen1 = GC.CollectionCount(1) - genBefore1;
+            GCMeter.gen2 = GC.CollectionCount(2) - genBefore2;
+            GCMeter.allocatedBytes = GC.GetAllocatedBytesForCurrentThread() - bytesBefore;
+        }
 
         GameTime.UpdateDelta(gameTime);
-        InputManager.Update(IsActive);
-        base.Update(gameTime);
-        Assets.Update(gameTime);
-        Prototypes.Update();
-        LocalizationManager.Update();
+
+        using (Profiler.Scope("update/input"))
+            InputManager.Update(IsActive);
+
+        using (Profiler.Scope("update/scenes"))
+            base.Update(gameTime);
+
+        using (Profiler.Scope("update/assets"))
+            Assets.Update(gameTime);
+
+        using (Profiler.Scope("update/prototypes"))
+            Prototypes.Update();
+
+        using (Profiler.Scope("update/locale"))
+            LocalizationManager.Update();
+
         float uiScreenDeltaTime = _paused ? 0f : GameTime.DeltaTime;
 
-        InterfaceManager.Update(uiScreenDeltaTime);
-        WindowManager.Update(GameTime.DeltaTime);
+        using (Profiler.Scope("update/ui"))
+            InterfaceManager.Update(uiScreenDeltaTime);
+
+        using (Profiler.Scope("update/windows"))
+            WindowManager.Update(GameTime.DeltaTime);
 
         // why do we even use this
         if (GameState == GameState.Booting)
             GameState = GameState.Loading;
 
         if (GameState != GameState.Running)
+        {
+            CommitGCDelta();
             return;
+        }
 
         float simulationDeltaTime = _paused ? 0f : GameTime.DeltaTime;
-        EntityManager.Update(simulationDeltaTime);
-        Audio.Update(GameTime.DeltaTime); // after ECS so AudioSystem sees FinishedStreaming before packages get disposed here
 
-        _gen0 = GC.CollectionCount(0);
-        _gen1 = GC.CollectionCount(1);
-        _gen2 = GC.CollectionCount(2);
-        _gcBytes = GC.GetAllocatedBytesForCurrentThread();
+        using (Profiler.Scope("update/ecs"))
+            EntityManager.Update(simulationDeltaTime);
+
+        // after ECS so AudioSystem sees FinishedStreaming before packages get disposed here
+        using (Profiler.Scope("update/audio"))
+            Audio.Update(GameTime.DeltaTime);
+
+        CommitGCDelta();
     }
 
     protected override void Draw(GameTime gameTime)
@@ -342,7 +388,15 @@ public class GameClient : Game
         if (_paused)
             return;
 
-        GraphicsDevice.Clear(Scenes.CurrentScene?.BackgroundColor ?? Options.BackgroundColor);
+        // Same freeze as Profiler.BeginFrame in Update(): a sweep frame has
+        // whole passes forced off on purpose and must not dilute the windows
+        // that a report reads from.
+        if (!Sweep.Running)
+            RenderStats.BeginFrame();
+
+        using (Profiler.GpuScope("draw/clear"))
+            GraphicsDevice.Clear(Scenes.CurrentScene?.BackgroundColor ?? Options.BackgroundColor);
+
         GameTime.UpdateFps(gameTime);
 
         /// estou passando isso pra cá, nao sei se é correto e está muito
@@ -350,7 +404,8 @@ public class GameClient : Game
         /// mas parecisava que o SceneManager recebesse a chamada de draw antes do renderer começar a
         /// realmente desenhar algo, e como o scene manager é um draw game component, ele so 
         /// recebe essa chamada quando ocoore o base.Draw();
-        base.Draw(gameTime);
+        using (Profiler.Scope("draw/scenes"))
+            base.Draw(gameTime);
 
         // Lock the backbuffer viewport to the letterboxed rect before any
         // world draw. The lighting SceneTarget path in Renderer.DrawQueue
@@ -386,15 +441,21 @@ public class GameClient : Game
                 : (Viewport.VirtualWidth, Viewport.VirtualHeight);
             Renderer.EnsureSceneTarget(sceneTargetWidth, sceneTargetHeight);
 
-            EntityManager.Draw(GameTime.DeltaTime);
+            if (!ProfilerSweep.SkipWorld)
+            {
+                using var _ = Profiler.Scope("draw/ecs.submit");
+                EntityManager.Draw(GameTime.DeltaTime);
+            }
         }
 
-        Renderer.DrawQueue();
+        using (Profiler.Scope("draw/render.queue"))
+            Renderer.DrawQueue();
 
         if (GameState == GameState.Running)
         {
             var lightingSystem = EntityManager.GetSystem<LightingSystem>();
-            lightingSystem?.ApplyAfterWorld();
+            using (Profiler.GpuScope("draw/lighting.apply"))
+                lightingSystem?.ApplyAfterWorld();
         }
 
         //Renderer.End();
@@ -410,11 +471,21 @@ public class GameClient : Game
             );
 
         // A captured frame (Renderer.FinalTarget set) shouldn't bake in Myra UI.
-        if (Renderer.FinalTarget is null)
+        if (Renderer.FinalTarget is null && !ProfilerSweep.SkipUi)
         {
+            using var _ = Profiler.GpuScope("draw/ui");
             InterfaceManager.Draw(GameTime.DeltaTime);
         }
 
-        //base.Draw(gameTime);
+        if (!Sweep.Running)
+        {
+            RenderStats.EndFrame();
+            Profiler.EndFrame();
+        }
+
+        // Tick always runs - it's what drives the sweep itself, timed off its
+        // own stopwatch rather than the frozen Profiler.
+        Sweep.Tick();
+        _lastDrawEnd = Stopwatch.GetTimestamp();
     }
 }

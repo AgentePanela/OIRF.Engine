@@ -13,6 +13,7 @@ public sealed class SpriteSystem : EntityDrawSystem
     [Dependency] private readonly RenderManager _renderMan = default!;
     [Dependency] private readonly IAssetManager _assetMan = default!;
     [Dependency] private readonly Camera2D _camera = default!;
+    [Dependency] private readonly RenderStats _stats = default!;
 
     public override void Init()
     {
@@ -32,15 +33,24 @@ public sealed class SpriteSystem : EntityDrawSystem
         foreach ((var uid, var comp, var transform) in query)
         {
             if (!transform.Visible)
+            {
+                _stats.RecordCulled();
                 continue;
+            }
 
             var sprite = GetSprite(comp);
             if (sprite is null)
+            {
+                _stats.RecordCulled();
                 continue;
+            }
 
             var spr = sprite.Value;
             if (!_camera.IsOnScreen(spr, transform.Position))
+            {
+                _stats.RecordCulled();
                 continue;
+            }
 
             UpdateSpriteFields(comp, transform, ref spr);
             SubmitWithLayers(comp, transform, spr);
@@ -63,6 +73,7 @@ public sealed class SpriteSystem : EntityDrawSystem
             SortLayers(comp);
 
         var baseSubmitted = false;
+        _stats.RecordExtra(comp.Layers.Count);
         foreach (var layer in comp.Layers)
         {
             if (!baseSubmitted && layer.Order >= 0)

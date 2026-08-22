@@ -113,10 +113,12 @@ public sealed partial class EntityManager
             if (system.FreezeUpdate)
                 continue;
 
+            var allocBefore = GC.GetAllocatedBytesForCurrentThread();
             _systemTimer.Restart();
             system.Update(dt);
             _systemTimer.Stop();
-            _sysProff.Record(type.Name, _systemTimer.Elapsed.TotalMilliseconds, 0.0);
+            _sysProff.RecordUpdate(type.Name, _systemTimer.Elapsed.TotalMilliseconds,
+                GC.GetAllocatedBytesForCurrentThread() - allocBefore);
         }
     }
 }

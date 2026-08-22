@@ -149,6 +149,18 @@ public sealed partial class EntityManager
     }
 
     /// <summary>
+    /// Get live component count per type.
+    /// </summary>
+    public IEnumerable<(Type Type, int Count)> GetComponentCensus()
+    {
+        if (_scene is null)
+            yield break;
+
+        foreach (var (type, pool) in _scene.Components)
+            yield return (type, pool.Count);
+    }
+
+    /// <summary>
     /// Get all components that the selected entity has.
     /// </summary>
     public List<Component>? GetEntityComps(EntityUid uid)

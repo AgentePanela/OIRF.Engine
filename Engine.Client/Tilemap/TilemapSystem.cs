@@ -124,8 +124,12 @@ public sealed class TilemapSystem : EntityDrawSystem
         float chunkWorldY = trans.Position.Y + chunk.ChunkY * worldChunkSize;
 
         var chunkRect = new Rectangle((int)chunkWorldX, (int)chunkWorldY, worldChunkSize, worldChunkSize);
+        GameClient.RenderStats.RecordExtra();
         if (!bounds.Intersects(chunkRect))
+        {
+            GameClient.RenderStats.RecordCulled();
             return;
+        }
 
         if (chunk.Dirty || chunk.CachedRenderable is null)
         {

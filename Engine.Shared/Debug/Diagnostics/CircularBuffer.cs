@@ -6,7 +6,7 @@ namespace Engine.Shared.Debug.Diagnostics;
 /// stores time info of each system per 60 frames. this just exist to not create a lot of objects.
 /// </summary>
 /// <typeparam name="T"></typeparam>
-internal sealed class CircularBuffer<T> where T : struct
+public sealed class CircularBuffer<T> where T : struct
 {
     private readonly T[] _buffer;
     private int _head;
@@ -50,9 +50,15 @@ internal sealed class CircularBuffer<T> where T : struct
             return _buffer[(start + index) % _buffer.Length];
         }
     }
+
+    public void Clear()
+    {
+        _head = 0;
+        _count = 0;
+    }
 }
 
-internal static class CircularBufferExtensions
+public static class CircularBufferExtensions
 {
     public static double Average(this CircularBuffer<double> buffer)
     {
@@ -79,4 +85,44 @@ internal static class CircularBufferExtensions
         }
         return max;
     }
+
+    public static double Min(this CircularBuffer<double> buffer)
+    {
+        if (buffer.Count == 0)
+            return 0.0;
+
+        double min = double.MaxValue;
+        for (int i = 0; i < buffer.Count; i++)
+        {
+            double v = buffer[i];
+            if (v < min) min = v;
+        }
+        return min;
+    }
+
+    /// <summary>
+    /// Nearest-rank percentile, <paramref name="p"/> in 0..1. Copies into a
+    /// caller-provided scratch array so the hot path doesn't allocate.
+    /// </summary>
+    public static double Percentile(this CircularBuffer<double> buffer, double p, double[] scratch)
+    {
+        if (buffer.Count == 0)
+            return 0.0;
+
+        int n = Math.Min(buffer.Count, scratch.Length);
+        for (int i = 0; i < n; i++)
+            scratch[i] = buffer[i];
+
+        Array.Sort(scratch, 0, n);
+
+        int rank = (int)Math.Ceiling(p * n) - 1;
+        return scratch[Math.Clamp(rank, 0, n - 1)];
+    }
+
+    /// <summary>
+    /// Median of the samples. Used by the profiler sweep, where a couple of
+    /// hitching frames would wreck a plain average.
+    /// </summary>
+    public static double Median(this CircularBuffer<double> buffer, double[] scratch)
+        => buffer.Percentile(0.5, scratch);
 }

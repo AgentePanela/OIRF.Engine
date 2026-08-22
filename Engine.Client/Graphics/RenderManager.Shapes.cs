@@ -157,29 +157,56 @@ public sealed partial class RenderManager
     }
 
     internal void DrawRectShape(RectRenderable r)
-        => _shapeBatch.DrawRectangle(r.XY, r.Size, r.Fill, r.Border, r.Thickness, r.Rounded, r.Rotation);
+    {
+        _stats.Count(RenderCounter.Shapes);
+        _shapeBatch.DrawRectangle(r.XY, r.Size, r.Fill, r.Border, r.Thickness, r.Rounded, r.Rotation);
+    }
 
     internal void DrawCircleShape(CircleRenderable r)
-        => _shapeBatch.DrawCircle(r.Center, r.Radius, r.Fill, r.Border, r.Thickness, r.Rotation);
+    {
+        _stats.Count(RenderCounter.Shapes);
+        _shapeBatch.DrawCircle(r.Center, r.Radius, r.Fill, r.Border, r.Thickness, r.Rotation);
+    }
 
     internal void DrawEllipseShape(EllipseRenderable r)
-        => _shapeBatch.DrawEllipse(r.Center, r.RadiusX, r.RadiusY, r.Fill, r.Border, r.Thickness, r.Rotation);
+    {
+        _stats.Count(RenderCounter.Shapes);
+        _shapeBatch.DrawEllipse(r.Center, r.RadiusX, r.RadiusY, r.Fill, r.Border, r.Thickness, r.Rotation);
+    }
 
     internal void DrawLineShape(LineRenderable r)
-        => _shapeBatch.DrawLine(r.A, r.B, r.Radius, r.Fill, r.Border, r.Thickness);
+    {
+        _stats.Count(RenderCounter.Shapes);
+        _shapeBatch.DrawLine(r.A, r.B, r.Radius, r.Fill, r.Border, r.Thickness);
+    }
 
     internal void DrawHexagonShape(HexagonRenderable r)
-        => _shapeBatch.DrawHexagon(r.Center, r.Radius, r.Fill, r.Border, r.Thickness, r.Rounded, r.Rotation);
+    {
+        _stats.Count(RenderCounter.Shapes);
+        _shapeBatch.DrawHexagon(r.Center, r.Radius, r.Fill, r.Border, r.Thickness, r.Rounded, r.Rotation);
+    }
 
     internal void DrawEquilateralTriangleShape(EquilateralTriangleRenderable r)
-        => _shapeBatch.DrawEquilateralTriangle(r.Center, r.Radius, r.Fill, r.Border, r.Thickness, r.Rounded, r.Rotation);
+    {
+        _stats.Count(RenderCounter.Shapes);
+        _shapeBatch.DrawEquilateralTriangle(r.Center, r.Radius, r.Fill, r.Border, r.Thickness, r.Rounded, r.Rotation);
+    }
 
     internal void DrawTriangleShape(TriangleRenderable r)
-        => _shapeBatch.DrawTriangle(r.A, r.B, r.C, r.Fill, r.Border, r.Thickness, r.Rounded);
+    {
+        _stats.Count(RenderCounter.Shapes);
+        _shapeBatch.DrawTriangle(r.A, r.B, r.C, r.Fill, r.Border, r.Thickness, r.Rounded);
+    }
 
     internal void DrawArcShape(ArcRenderable r)
-        => _shapeBatch.DrawArc(r.Center, r.Angle1, r.Angle2, r.Radius1, r.Radius2, r.Fill, r.Border, r.Thickness);
+    {
+        _stats.Count(RenderCounter.Shapes);
+        _shapeBatch.DrawArc(r.Center, r.Angle1, r.Angle2, r.Radius1, r.Radius2, r.Fill, r.Border, r.Thickness);
+    }
 
     internal void DrawRingShape(RingRenderable r)
-        => _shapeBatch.DrawRing(r.Center, r.Angle1, r.Angle2, r.Radius1, r.Radius2, r.Fill, r.Border, r.Thickness);
+    {
+        _stats.Count(RenderCounter.Shapes);
+        _shapeBatch.DrawRing(r.Center, r.Angle1, r.Angle2, r.Radius1, r.Radius2, r.Fill, r.Border, r.Thickness);
+    }
 }
