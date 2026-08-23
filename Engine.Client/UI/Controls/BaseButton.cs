@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Engine.Client.Inputs;
 
 namespace Engine.Client.UI;
@@ -24,7 +25,10 @@ public abstract partial class BaseButton : PanelContainer
             _content = value;
 
             if (_content is not null)
+            {
                 AddChild(_content);
+                SyncPseudoClasses(_content);
+            }
         }
     }
 
@@ -48,6 +52,9 @@ public abstract partial class BaseButton : PanelContainer
                 PseudoClasses.Add("disabled");
             else
                 PseudoClasses.Remove("disabled");
+
+            if (_content is not null)
+                SyncPseudoClasses(_content);
         }
     }
 
@@ -97,8 +104,57 @@ public abstract partial class BaseButton : PanelContainer
         else
             PseudoClasses.Remove("pressed");
 
+        if (_content is not null)
+            SyncPseudoClasses(_content);
+
         if (invokeEvent)
             OnToggled?.Invoke(pressed);
+    }
+
+    protected internal override void MouseEntered()
+    {
+        base.MouseEntered();
+        if (_content is not null)
+            SyncPseudoClasses(_content);
+    }
+
+    protected internal override void MouseExited()
+    {
+        base.MouseExited();
+        if (_content is not null)
+            SyncPseudoClasses(_content);
+    }
+
+    protected override void FocusChanged(bool focused)
+    {
+        base.FocusChanged(focused);
+        if (_content is not null)
+            SyncPseudoClasses(_content);
+    }
+
+    /// <summary>
+    /// Copies this button's current pseudo-classes (hover/pressed/disabled/focus) onto every
+    /// descendant of <paramref name="node"/> that shares a StyleAlias with it - e.g. Text's
+    /// auto-generated Label, tagged "button" so `control: button` rules match it too. Without
+    /// this, a rule like `{ control: button, pseudoClass: disabled }` never reaches that label's
+    /// own Color, since PseudoClasses is only ever set on the button itself.
+    /// </summary>
+    private void SyncPseudoClasses(Control node)
+    {
+        if (StyleAliasses.Any(node.StyleAliasses.Contains))
+        {
+            foreach (var pseudo in PseudoClasses.ToArray())
+                node.PseudoClasses.Add(pseudo);
+
+            foreach (var pseudo in node.PseudoClasses.ToArray())
+            {
+                if (!PseudoClasses.Contains(pseudo))
+                    node.PseudoClasses.Remove(pseudo);
+            }
+        }
+
+        foreach (var child in node.Children)
+            SyncPseudoClasses(child);
     }
 
     protected internal override void MouseButtonDown(MouseButton button)

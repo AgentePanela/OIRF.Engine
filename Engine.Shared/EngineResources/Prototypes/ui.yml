@@ -2,7 +2,7 @@
   id: EngineDefault
   parent: [EngineDefaultButtons, EngineDefaultScroll, EngineDefaultLineEdit,
     EngineDefaultCheckBox, EngineDefaultProgressBar, EngineDefaultSlider, EngineDefaultTextEdit,
-    EngineDefaultWindow, EngineDefaultTabContainer, EngineDefaultSplitContainer, EngineDefaultItemList]
+    EngineDefaultWindow, EngineDefaultTabContainer, EngineDefaultSplitContainer, EngineDefaultItemList, EngineDefaultOptionButton]
 
 - type: style
   id: EngineDefaultButtons
@@ -231,3 +231,14 @@
         background: "#0A0A0A"
         outlineColor: "#770B0B"
         outlineThickness: 2
+
+- type: style
+  id: EngineDefaultOptionButton
+  abstract: true
+  rules:
+    - class: { control: optionButtonPopup }
+      properties:
+        background: "#1a1a1a"
+        outlineColor: "#770B0B"
+        outlineThickness: 2
+        zIndex: 1000

@@ -39,21 +39,27 @@ public partial class Window
             return;
 
         var mouse = IoCManager.Resolve<InputManager>().MouseScreenPosition;
+        _edge = Resizable ? EdgeAt(mouse) : ResizeEdge.None;
+
+        // plain click somewhere in the window that isn't an edge or the title bar - nothing to
+        // drag or resize, so don't touch position/size at all (pinning here was firing on every
+        // click regardless, which is both pointless and the actual source of the jump the user
+        // saw - see the fix history for this method).
+        if (_edge == ResizeEdge.None && !_titleRow.Bounds.Contains(mouse.ToPoint()))
+            return;
+
         _dragStartMouse = mouse;
         _dragStartPosition = new Vector2(Bounds.X, Bounds.Y);
         _dragStartSize = new Vector2(Bounds.Width, Bounds.Height);
-
         LayoutContainer.SetPosition(this, _dragStartPosition);
         LayoutContainer.SetSize(this, _dragStartSize);
-        _edge = Resizable ? EdgeAt(mouse) : ResizeEdge.None;
+
         if (_edge != ResizeEdge.None)
         {
             _mode = DragMode.Resize;
             PseudoClasses.Add("resizing");
-            return;
         }
-
-        if (_titleRow.Bounds.Contains(mouse.ToPoint()))
+        else
         {
             _mode = DragMode.Move;
             PseudoClasses.Add("dragging");
