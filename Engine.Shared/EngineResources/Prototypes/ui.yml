@@ -7,6 +7,7 @@
     - class: { control: label }
       properties:
         color: "#1A1A1A"
+        fontFamily: Arial
 
 - type: style
   id: EngineDefaultButtons

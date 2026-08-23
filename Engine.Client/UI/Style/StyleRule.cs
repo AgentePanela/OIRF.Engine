@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Engine.Shared.Prototypes;
 
 namespace Engine.Client.UI;
@@ -18,39 +20,11 @@ public sealed class StyleClass
 
     public bool Matches(Control c)
     {
-        // Empty class ("") or "*" matches everything (universal selector)
-        if (IsUniversal)
-        {
-            // But still respect other constraints (control type, pseudo-class, id)
-            if (ControlType is not null)
-            {
-                var exactMatch = c.GetType().Name == ControlType;
-                var aliasMatch = c.StyleAliasses.Contains(ControlType);
-                if (!exactMatch && !aliasMatch)
-                    return false;
-            }
-
-            if (PseudoClass is not null && !c.PseudoClasses.Contains(PseudoClass))
-                return false;
-
-            if (Identifier is not null && c.StyleIdentifier != Identifier)
-                return false;
-
-            return true;
-        }
-
-        if (ControlType is not null)
-        {
-            var exactMatch = c.GetType().Name == ControlType;
-            var aliasMatch = c.StyleAliasses.Contains(ControlType);
-            if (!exactMatch && !aliasMatch)
-                return false;
-        }
-
-        if (Class is null || !c.StyleClasses.Contains(Class))
+        if (!MatchesControlType(c) || !MatchesPseudoClass(c))
             return false;
 
-        if (PseudoClass is not null && !c.PseudoClasses.Contains(PseudoClass))
+        // Empty class ("") or "*" matches everything (universal selector)
+        if (!IsUniversal && (Class is null || !c.StyleClasses.Contains(Class)))
             return false;
 
         if (Identifier is not null && c.StyleIdentifier != Identifier)
@@ -58,6 +32,24 @@ public sealed class StyleClass
 
         return true;
     }
+
+    private bool MatchesControlType(Control c)
+    {
+        if (ControlType is null)
+            return true;
+
+        // walk the class hierarchy - a rule targeting "Label" should also match a Label subclass
+        for (var type = c.GetType(); type is not null && type != typeof(object); type = type.BaseType)
+        {
+            if (string.Equals(type.Name, ControlType, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return c.StyleAliasses.Any(a => string.Equals(a, ControlType, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool MatchesPseudoClass(Control c)
+        => PseudoClass is null || c.PseudoClasses.Any(p => string.Equals(p, PseudoClass, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// How specific this selector is. Used to pick a winner when multiple rules match the

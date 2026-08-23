@@ -112,6 +112,7 @@ public abstract partial class BaseTextInput : PanelContainer
     {
         Focusable = true;
         MouseFilter = MouseFilterMode.Stop;
+        StyleAliasses.Add("label");
     }
 
     protected SpriteFontBase ResolveFont(IFontManager fonts)

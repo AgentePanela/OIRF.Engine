@@ -4,7 +4,7 @@ namespace Engine.Shared.Configuration.CVars;
 public sealed class EngineCvars
 {
     public static readonly CVarDef<string> EngineVersion =
-        CVarDef.Create("engine.version", "0.4.0");
+        CVarDef.Create("engine.version", "1.0.0 IN-DEV");
 
     public static readonly CVarDef<int> SystemProfillerTop =
         CVarDef.Create("engine.system-profiller-top", 10);
