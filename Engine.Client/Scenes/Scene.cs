@@ -18,7 +18,7 @@ namespace Engine.Client.Scenes;
 /// </summary>
 internal class DefaultScene : Scene
 {
-    public override UICanvas? DefaultCanvas { get; protected set; } = null;
+    public override Layout? Layout { get; } = null;
 }
 
 public abstract class Scene : IEntityScene, IDisposable
@@ -39,7 +39,10 @@ public abstract class Scene : IEntityScene, IDisposable
     public int EntUidIndex { get; set; } = 0;
     public ConcurrentDictionary<Type, ConcurrentDictionary<EntityUid, Component>> Components { get; private set; } = new();
 
-    public abstract UICanvas? DefaultCanvas { get; protected set; }
+    /// <summary>
+    /// Scene's own HUD/Overlay displayed after the game world.
+    /// </summary>
+    public abstract Layout? Layout { get; }
 
     public Scene()
     {
@@ -67,6 +70,10 @@ public abstract class Scene : IEntityScene, IDisposable
         if (disposing)
         {
             OnSceneEnd(); // Run this first!!
+
+            if (Layout is not null)
+                GameClient.InterfaceManager.RemoveChild(Layout);
+
             Components.Clear();
             Entities.Clear();
             //UnloadContent();
@@ -85,6 +92,9 @@ public abstract class Scene : IEntityScene, IDisposable
         BootstrapLoadedEntities();
 
         OnSceneStart();
+
+        if (Layout is not null)
+            GameClient.InterfaceManager.AddChild(Layout);
     }
 
     internal Entity CreateLoadedEntity(string? name = default)

@@ -16,6 +16,7 @@ public sealed class SceneManager : DrawableGameComponent
     [Dependency] private readonly EntityManager _entMan = default!;
     public Scene? CurrentScene {get; private set;}
     private Scene? _nextScene;
+    public event SceneChangeAction? OnBeforeSceneChange;
     public event Action<Scene>? OnSceneChanged;
     public event Action<Scene>? OnBeforeSceneInit;
 
@@ -23,6 +24,8 @@ public sealed class SceneManager : DrawableGameComponent
     /// Seeks if a loading scene already happend.
     /// </summary>
     public bool Loaded { get; private set; } = false;
+
+    public delegate void SceneChangeAction(Scene? oldScene, Scene newScene);
 
     public SceneManager(Game? game) : base(game)
     {
@@ -112,6 +115,7 @@ public sealed class SceneManager : DrawableGameComponent
 
     private void TransitionScene()
     {
+        OnBeforeSceneChange?.Invoke(CurrentScene!, _nextScene!);
         DisposeCurrentScene();
         Log.Debug($"Changing current scene - {CurrentScene?.GetType().Name ?? "null"} > {_nextScene?.GetType().Name ?? "null"}");
         CurrentScene = _nextScene;

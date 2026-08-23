@@ -117,11 +117,11 @@ public sealed partial class OptionButton : BaseButton
         if (_items.Count == 0)
             return;
 
-        var ui = IoCManager.Resolve<UIManager>();
+        var window = IoCManager.Resolve<WindowManager>();
 
         _catcher = new ClickCatcher();
         _catcher.OnCatch += ClosePopup;
-        ui.WindowRoot.AddChild(_catcher);
+        window.WindowRoot.AddChild(_catcher);
         LayoutContainer.SetAnchorPreset(_catcher, LayoutPreset.Wide);
 
         var list = new ItemList();
@@ -141,7 +141,7 @@ public sealed partial class OptionButton : BaseButton
         _popup.StyleAliasses.Add("optionButtonPopup");
         _popup.AddChild(list);
 
-        ui.WindowRoot.AddChild(_popup);
+        window.WindowRoot.AddChild(_popup);
         LayoutContainer.SetPosition(_popup, new Vector2(Bounds.X, Bounds.Bottom));
         LayoutContainer.SetSize(_popup, new Vector2(Bounds.Width, PopupMaxHeight));
     }
@@ -151,10 +151,10 @@ public sealed partial class OptionButton : BaseButton
         if (_popup is null)
             return;
 
-        var ui = IoCManager.Resolve<UIManager>();
-        ui.WindowRoot.RemoveChild(_popup, dispose: true);
+        var window = IoCManager.Resolve<WindowManager>();
+        window.WindowRoot.RemoveChild(_popup, dispose: true);
         if (_catcher is not null)
-            ui.WindowRoot.RemoveChild(_catcher, dispose: true);
+            window.WindowRoot.RemoveChild(_catcher, dispose: true);
 
         _popup = null;
         _catcher = null;
