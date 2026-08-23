@@ -3,6 +3,10 @@
   parent: [EngineDefaultButtons, EngineDefaultScroll, EngineDefaultLineEdit,
     EngineDefaultCheckBox, EngineDefaultProgressBar, EngineDefaultSlider, EngineDefaultTextEdit,
     EngineDefaultWindow, EngineDefaultTabContainer, EngineDefaultSplitContainer, EngineDefaultItemList, EngineDefaultOptionButton]
+  rules:
+    - class: { control: label }
+      properties:
+        color: "#1A1A1A"
 
 - type: style
   id: EngineDefaultButtons
@@ -10,25 +14,25 @@
   rules:
     - class: { control: button }
       properties:
-        background: "#1a1a1a"
-        outlineColor: "#770B0B"
-        outlineThickness: 2
+        background: { colorA: "#F5F5F5", colorB: "#DDDDDD", pointA: [0, 0], pointB: [0, 1] }
+        outlineColor: "#C4C4C4"
+        outlineThickness: 1
         padding: 10
 
     - class: { control: button, pseudoClass: hover }
       properties:
-        background: "#262626"
-        outlineColor: "#891E1E"
+        background: { colorA: "#EFEFEF", colorB: "#CFCFCF", pointA: [0, 0], pointB: [0, 1] }
+        outlineColor: "#B0B0B0"
 
     - class: { control: button, pseudoClass: pressed }
       properties:
-        background: "#260202"
-        outlineColor: "#591919"
+        background: { colorA: "#BEBEBE", colorB: "#D4D4D4", pointA: [0, 0], pointB: [0, 1] }
+        outlineColor: "#9E9E9E"
 
     - class: { control: button, pseudoClass: disabled }
       properties:
-        background: "#0A0A0A"
-        outlineColor: "#4a1414"
+        background: "#F0F0F0"
+        outlineColor: "#E0E0E0"
 
 - type: style
   id: EngineDefaultScroll
@@ -36,18 +40,18 @@
   rules:
     - class: { control: scrollBar }
       properties:
-        background: "#141414"
-        thumbColor: "#4a4a4a"
+        background: { colorA: "#EFEFEF", colorB: "#E0E0E0", pointA: [0, 0], pointB: [0, 1] }
+        thumbColor: "#C4C4C4"
         thumbCorner: 10
         antiAnalising: 1
 
     - class: { control: scrollBar, pseudoClass: hover }
       properties:
-        thumbColor: "#5a5a5a"
+        thumbColor: "#B0B0B0"
 
     - class: { control: scrollBar, pseudoClass: pressed }
       properties:
-        thumbColor: "#636363"
+        thumbColor: "#909090"
 
 - type: style
   id: EngineDefaultLineEdit
@@ -55,24 +59,24 @@
   rules:
     - class: { control: lineEdit }
       properties:
-        background: "#1a1a1a"
-        outlineColor: "#770B0B"
+        background: "#FFFFFF"
+        outlineColor: "#C4C4C4"
         outlineThickness: 1
         padding: 6
-        color: "#FFFFFF"
-        placeholderColor: "#757575"
-        selectionColor: "#3390FF80"
-        caretColor: "#FFFFFF"
+        color: "#1A1A1A"
+        placeholderColor: "#9E9E9E"
+        selectionColor: "#2196F340"
+        caretColor: "#1A1A1A"
 
     - class: { control: lineEdit, pseudoClass: focus }
       properties:
-        outlineColor: "#B02929"
+        outlineColor: "#2196F3"
 
     - class: { control: lineEdit, pseudoClass: readonly }
       properties:
-        background: "#0A0A0A"
-        outlineColor: "#4a1414"
-        color: "#909090"
+        background: "#F0F0F0"
+        outlineColor: "#DDDDDD"
+        color: "#9E9E9E"
 
 - type: style
   id: EngineDefaultTextEdit
@@ -80,24 +84,24 @@
   rules:
     - class: { control: textEdit }
       properties:
-        background: "#1a1a1a"
-        outlineColor: "#770B0B"
+        background: "#FFFFFF"
+        outlineColor: "#C4C4C4"
         outlineThickness: 1
         padding: 6
-        color: "#FFFFFF"
-        placeholderColor: "#757575"
-        selectionColor: "#3390FF80"
-        caretColor: "#FFFFFF"
+        color: "#1A1A1A"
+        placeholderColor: "#9E9E9E"
+        selectionColor: "#2196F340"
+        caretColor: "#1A1A1A"
 
     - class: { control: textEdit, pseudoClass: focus }
       properties:
-        outlineColor: "#B02929"
+        outlineColor: "#2196F3"
 
     - class: { control: textEdit, pseudoClass: readonly }
       properties:
-        background: "#0A0A0A"
-        outlineColor: "#4a1414"
-        color: "#909090"
+        background: "#F0F0F0"
+        outlineColor: "#DDDDDD"
+        color: "#9E9E9E"
 
 - type: style
   id: EngineDefaultCheckBox
@@ -122,11 +126,11 @@
   rules:
     - class: { control: progressBar }
       properties:
-        background: "#1a1a1a"
-        fillColor: "#4a1414"
-        outlineColor: "#4a1414"
-        outlineMargin: -5
-        outlineThickness: 3
+        background: { colorA: "#EFEFEF", colorB: "#E4E4E4", pointA: [0, 0], pointB: [0, 1] }
+        fillColor: "#2196F3"
+        outlineColor: "#C4C4C4"
+        outlineMargin: 0
+        outlineThickness: 1
 
 - type: style
   id: EngineDefaultSlider
@@ -134,17 +138,17 @@
   rules:
     - class: { control: slider }
       properties:
-        trackColor: "#4a4a4a"
-        grabberColor: "#770B0B"
+        trackColor: "#D0D0D0"
+        grabberColor: "#2196F3"
         grabberCorner: 8
 
     - class: { control: slider, pseudoClass: hover }
       properties:
-        grabberColor: "#891E1E"
+        grabberColor: "#42A5F5"
 
     - class: { control: slider, pseudoClass: pressed }
       properties:
-        grabberColor: "#591919"
+        grabberColor: "#1976D2"
 
 - type: style
   id: EngineDefaultWindow
@@ -163,31 +167,31 @@
 
     - class: { control: windowTitleBar }
       properties:
-        background: "#0A0A0A"
-        outlineColor: "#770B0B"
-        outlineThickness: 2
+        background: { colorA: "#EAEAEA", colorB: "#D6D6D6", pointA: [0, 0], pointB: [0, 1] }
+        outlineColor: "#C4C4C4"
+        outlineThickness: 1
         padding: 6
 
     - class: { control: windowTitle }
       properties:
-        color: "#E0E0E0"
+        color: "#1A1A1A"
 
     - class: { control: windowCloseButton }
       properties:
-        background: "#0A0A0A"
-        outlineColor: "#770B0B"
-        outlineThickness: 2
+        background: { colorA: "#EAEAEA", colorB: "#D6D6D6", pointA: [0, 0], pointB: [0, 1] }
+        outlineColor: "#C4C4C4"
+        outlineThickness: 1
         padding: 6
 
     - class: { control: windowCloseButton, pseudoClass: hover }
       properties:
-        background: "#891E1E"
+        background: "#F44336"
 
     - class: { control: windowContents }
       properties:
-        background: "#1a1a1a"
-        outlineColor: "#770B0B"
-        outlineThickness: [2, 0, 2, 2]
+        background: "#FFFFFF"
+        outlineColor: "#C4C4C4"
+        outlineThickness: [1, 0, 1, 1]
         padding: 10
 
 - type: style
@@ -196,18 +200,18 @@
   rules:
     - class: { control: tabBar }
       properties:
-        background: "#0A0A0A"
+        background: { colorA: "#E6E6E6", colorB: "#D6D6D6", pointA: [0, 0], pointB: [0, 1] }
 
     - class: { control: tabButton, pseudoClass: active }
       properties:
-        background: "#260202"
-        outlineColor: "#891E1E"
+        background: "#FFFFFF"
+        outlineColor: "#2196F3"
 
     - class: { control: tabPages }
       properties:
-        background: "#1a1a1a"
-        outlineColor: "#770B0B"
-        outlineThickness: [2, 0, 2, 2]
+        background: "#FFFFFF"
+        outlineColor: "#C4C4C4"
+        outlineThickness: [1, 0, 1, 1]
         padding: 10
 
 - type: style
@@ -216,11 +220,11 @@
   rules:
     - class: { control: splitHandle }
       properties:
-        background: "#4a4a4a"
+        background: { colorA: "#D8D8D8", colorB: "#C4C4C4", pointA: [0, 0], pointB: [0, 1] }
 
     - class: { control: splitHandle, pseudoClass: hover }
       properties:
-        background: "#5a5a5a"
+        background: "#B0B0B0"
 
 - type: style
   id: EngineDefaultItemList
@@ -228,9 +232,9 @@
   rules:
     - class: { control: itemList }
       properties:
-        background: "#0A0A0A"
-        outlineColor: "#770B0B"
-        outlineThickness: 2
+        background: "#FFFFFF"
+        outlineColor: "#C4C4C4"
+        outlineThickness: 1
 
 - type: style
   id: EngineDefaultOptionButton
@@ -238,7 +242,7 @@
   rules:
     - class: { control: optionButtonPopup }
       properties:
-        background: "#1a1a1a"
-        outlineColor: "#770B0B"
-        outlineThickness: 2
+        background: "#FFFFFF"
+        outlineColor: "#C4C4C4"
+        outlineThickness: 1
         zIndex: 1000
