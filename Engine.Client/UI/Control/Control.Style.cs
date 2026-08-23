@@ -96,20 +96,24 @@ public abstract partial class Control
             return cached.Found;
         }
 
-        var sheet = FindEffectiveStylesheet();
-
         StyleRule? best = null;
 
-        foreach (var rule in sheet.Rules)
+        foreach (var sheet in EffectiveStylesheets())
         {
-            if (!rule.Properties.ContainsKey(name))
-                continue;
+            foreach (var rule in sheet.Rules)
+            {
+                if (!rule.Properties.ContainsKey(name))
+                    continue;
 
-            if (!rule.StyleClass.Matches(this))
-                continue;
+                if (!rule.StyleClass.Matches(this))
+                    continue;
 
-            if (best is null || rule.StyleClass.Specificity >= best.StyleClass.Specificity)
-                best = rule;
+                if (best is null || rule.StyleClass.Specificity >= best.StyleClass.Specificity)
+                    best = rule;
+            }
+
+            if (best is not null)
+                break;
         }
 
         if (best is null)
@@ -135,25 +139,30 @@ public abstract partial class Control
     }
 
     /// <summary>
-    /// Walks up from this control to the nearest ancestor with a
-    /// <see cref="StylesheetOverride"/> set. Falls back to the UIManager's ActiveTheme if
-    /// nothing in the chain has one - never null.
+    /// Every <see cref="StylesheetOverride"/> found walking up from this control, nearest
+    /// ancestor first, followed by the UIManager's ActiveTheme as the final fallback.
     /// </summary>
-    private StylePrototype FindEffectiveStylesheet()
+    private IEnumerable<StylePrototype> EffectiveStylesheets()
     {
         var ui = IoCManager.Resolve<UIManager>();
+        HashSet<string>? seen = null;
 
         for (var control = this; control is not null; control = control.Parent)
         {
-            if (control.StylesheetOverride is not null)
-            {
-                var resolved = ui.ResolveStyleId(control.StylesheetOverride);
-                if (resolved is not null)
-                    return resolved;
-            }
+            if (control.StylesheetOverride is null)
+                continue;
+
+            var resolved = ui.ResolveStyleId(control.StylesheetOverride);
+            if (resolved is null)
+                continue;
+
+            // two ancestors could point at the same override id - only yield it once
+            seen ??= new();
+            if (seen.Add(resolved.ID))
+                yield return resolved;
         }
 
-        return ui.ActiveTheme;
+        yield return ui.ActiveTheme;
     }
 
     #endregion
