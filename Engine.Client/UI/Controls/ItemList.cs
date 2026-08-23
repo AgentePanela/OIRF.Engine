@@ -10,6 +10,7 @@ public sealed partial class ItemList : ScrollContainer
 {
     private readonly BoxContainer _rows;
     private readonly List<Button> _rowButtons = new();
+    private readonly List<Label?> _iconLabels = new(); // set only for rows added with an icon
 
     public ListSelectMode SelectMode { get; set; } = ListSelectMode.Single;
 
@@ -64,13 +65,33 @@ public sealed partial class ItemList : ScrollContainer
     public new void AddChild(Control child) =>
         throw new InvalidOperationException("Use AddItem(text) on an ItemList.");
 
-    public int AddItem(string text)
+    public int AddItem(string text) => AddItem(text, null);
+
+    public int AddItem(string text, string? iconKey)
     {
-        var row = new Button(text) { ToggleMode = true, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var row = new Button { ToggleMode = true, HorizontalAlignment = HorizontalAlignment.Stretch };
         row.StyleAliasses.Add("itemListRow");
         row.OnToggled += pressed => OnRowToggled(row, pressed);
 
+        Label? iconLabel = null;
+
+        if (iconKey is null)
+        {
+            row.Text = text;
+        }
+        else
+        {
+            iconLabel = new Label { Text = text, VerticalAlignment = VerticalAlignment.Center };
+            iconLabel.StyleAliasses.Add("button");
+
+            var content = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 6 };
+            content.AddChild(new TextureRect { Key = iconKey, Stretch = true, Width = 24, Height = 24 });
+            content.AddChild(iconLabel);
+            row.Content = content;
+        }
+
         _rowButtons.Add(row);
+        _iconLabels.Add(iconLabel);
         _rows.AddChild(row);
 
         return _rowButtons.Count - 1;
@@ -83,6 +104,7 @@ public sealed partial class ItemList : ScrollContainer
 
         var row = _rowButtons[index];
         _rowButtons.RemoveAt(index);
+        _iconLabels.RemoveAt(index);
         _rows.RemoveChild(row, dispose: true);
     }
 
@@ -92,11 +114,18 @@ public sealed partial class ItemList : ScrollContainer
             _rows.RemoveChild(row, dispose: true);
 
         _rowButtons.Clear();
+        _iconLabels.Clear();
     }
 
-    public string GetItemText(int index) => _rowButtons[index].Text;
+    public string GetItemText(int index) => _iconLabels[index]?.Text ?? _rowButtons[index].Text;
 
-    public void SetItemText(int index, string text) => _rowButtons[index].Text = text;
+    public void SetItemText(int index, string text)
+    {
+        if (_iconLabels[index] is { } label)
+            label.Text = text;
+        else
+            _rowButtons[index].Text = text;
+    }
 
     public void Select(int index)
     {
