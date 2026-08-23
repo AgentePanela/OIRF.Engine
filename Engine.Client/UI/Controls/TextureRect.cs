@@ -26,6 +26,19 @@ public partial class TextureRect : Control
         set => SetLayoutField(ref _key, value);
     }
 
+    private Texture2D? _source;
+
+    /// <summary>
+    /// Raw texture to display instead of looking up <see cref="Key"/> in the atlas.
+    /// Takes priority over Key when set - useful for debug tooling previewing a texture
+    /// that isn't itself an atlas sprite (e.g. a whole atlas page).
+    /// </summary>
+    public Texture2D? Source
+    {
+        get => _source;
+        set => SetLayoutField(ref _source, value);
+    }
+
     private Rectangle? _sourceRect;
 
     /// <summary>
@@ -74,6 +87,9 @@ public partial class TextureRect : Control
 
     protected override Vector2 MeasureCore(Vector2 availableSize)
     {
+        if (Source is { } tex)
+            return SourceRect is { } sub ? new Vector2(sub.Width, sub.Height) : new Vector2(tex.Width, tex.Height);
+
         if (Key is null || !IoCManager.Resolve<IAssetManager>().GetTexture(Key, out var sprite, out _))
             return Vector2.Zero;
 
@@ -83,6 +99,14 @@ public partial class TextureRect : Control
 
     protected override void DrawSelf(ShapeBatch sb, IFontManager fontManager, float dt)
     {
+        if (Source is { } tex)
+        {
+            var srcRegion = SourceRect ?? new Rectangle(0, 0, tex.Width, tex.Height);
+            var srcDrawSize = Stretch ? new Vector2(Bounds.Width, Bounds.Height) : new Vector2(srcRegion.Width, srcRegion.Height);
+            sb.Draw(tex, new RectangleF(Bounds.X, Bounds.Y, srcDrawSize.X, srcDrawSize.Y), ToRectF(srcRegion), Tint);
+            return;
+        }
+
         if (Key is null || !IoCManager.Resolve<IAssetManager>().GetTexture(Key, out var sprite, out var page))
             return;
 
