@@ -68,15 +68,24 @@ public abstract partial class Control : IDisposable
     /// screen-space point and whose <see cref="MouseFilter"/> isn't Ignore. Invisible
     /// controls and their whole subtree are never hit.
     /// </summary>
-    public Control? HitTest(Vector2 point)
+    public Control? HitTest(Vector2 point) => HitTest(point, null);
+    
+    private Control? HitTest(Vector2 point, Rectangle? ancestorClip)
     {
         if (!EffectivelyVisible)
             return null;
 
+        if (ancestorClip is { } clip && !clip.Contains(point.ToPoint()))
+            return null;
+
+        var childClip = ClipsContent
+            ? (ancestorClip is { } c ? Rectangle.Intersect(c, Bounds) : Bounds)
+            : ancestorClip;
+
         var ordered = OrderedChildren;
         for (var i = ordered.Count - 1; i >= 0; i--)
         {
-            if (ordered[i].HitTest(point) is { } hit)
+            if (ordered[i].HitTest(point, childClip) is { } hit)
                 return hit;
         }
 

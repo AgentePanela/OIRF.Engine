@@ -24,7 +24,7 @@ public class DefaultLoadingScene : LoadingScene
     private Label2D _label;
     private Vector2 _labelPos;
     private string _loadingFlavour = string.Empty;
-    public override UICanvas? DefaultCanvas { get; protected set; } = null;
+    public override Layout? Layout { get; } = null;
 
     public override void OnSceneStart()
     {

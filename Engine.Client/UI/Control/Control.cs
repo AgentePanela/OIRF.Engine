@@ -119,6 +119,15 @@ public abstract partial class Control : IDisposable
             child.Dispose();
     }
 
+    /// <summary>
+    /// Remove and dispose all children.
+    /// </summary>
+    public void ClearChildren()
+    {
+        for (var i = Children.Count - 1; i >= 0; i--)
+            RemoveChild(Children[i], dispose: true);
+    }
+
     #endregion
 
     private bool _disposed;

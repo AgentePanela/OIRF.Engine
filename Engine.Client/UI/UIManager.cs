@@ -8,6 +8,8 @@ using Engine.Shared.IoC;
 using Engine.Shared.Prototypes;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using System.Collections.Generic;
+using Engine.Client.Scenes;
 
 namespace Engine.Client.UI;
 
@@ -20,6 +22,7 @@ public sealed partial class UIManager
     [Dependency] private readonly InputManager _input = default!;
     [Dependency] private readonly IPrototypeManager _protoMan = default!;
     [Dependency] private readonly IVirtualKeyboard _virtualKeyboard = default!;
+    [Dependency] private readonly SceneManager _sceneMan = default!;
 
     public PanelContainer Root { get; } = new()
     {
@@ -27,12 +30,6 @@ public sealed partial class UIManager
         HorizontalAlignment = HorizontalAlignment.Stretch,
         //Background = new Color(0, 255, 155, 0.25f)
     };
-
-    /// <summary>
-    /// Layer every Window lives in. Its zIndex (set from the stylesheet) keeps it above regular
-    /// UI no matter what order things were added to Root in.
-    /// </summary>
-    public LayoutContainer WindowRoot { get; } = new();
 
     private ShapeBatch _shapeBatch = default!;
     private Vector2 _lastScreenSize;
@@ -47,20 +44,30 @@ public sealed partial class UIManager
         GameClient.Instance.Window.TextInput += OnTextInput; //ts looks ugly
         Root.StyleAliasses.Add("body"); // css lol
 
-        WindowRoot.StyleAliasses.Add("windowRoot");
-        Root.AddChild(WindowRoot);
-
         //clears cache
         _protoMan.PrototypesReloaded += (typeKey, _) =>
         {
             if (typeKey.Equals("style", StringComparison.OrdinalIgnoreCase))
                 Root.AnnounceThemeUpdate();
         };
+
+        _sceneMan.OnBeforeSceneChange += (old, scene) =>
+        {
+            if (old is not null && old.Layout is not null)
+                RemoveOverlay(old.Layout, true);
+
+            if (scene.Layout is null)
+                return;
+
+            AddOverlay(scene.Layout, zindex: 0);
+            if (scene.Layout.Name is null)
+                scene.Layout.Name = scene.GetType().Name;
+        };
     }
 
     public void AddChild(Control control) => Root.AddChild(control);
 
-    public void RemoveChild(Control control) => Root.RemoveChild(control);
+    public void RemoveChild(Control control, bool dispose = false) => Root.RemoveChild(control, dispose);
 
     public T? FindControl<T>(string name) where T : Control => Root.FindControl<T>(name);
 
@@ -142,5 +149,25 @@ public sealed partial class UIManager
         Root.Draw(_shapeBatch, _fontMan, dt);
         _shapeBatch.End();
         UIProfiler.EndFrame();
+    }
+
+    public void AddOverlay(Overlay overlay, string? name = default, int zindex = 998)
+    {
+        if (name is null && overlay.Name is null)
+            name = Guid.NewGuid().ToString();
+        
+        overlay.ZIndex = zindex;
+        overlay.Name = name;
+        AddChild(overlay);
+    }
+
+    public T? GetOverlay<T>(string name) where T : Overlay
+    {
+        return FindControl<T>(name);
+    }
+
+    public void RemoveOverlay(Overlay overlay, bool dispose = true)
+    {
+        RemoveChild(overlay, dispose);
     }
 }

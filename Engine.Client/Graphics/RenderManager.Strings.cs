@@ -28,7 +28,8 @@ public sealed partial class RenderManager
             label.Color,
             label.Rotation,
             label.Origin,
-            label.Scale);
+            label.Scale,
+            textStyle: label.Decoration.ToTextStyle());
     }
 
     private void DrawShadow(SpriteFontBase font, string text, Vector2 position, Label2D label)

@@ -7,13 +7,18 @@ using Microsoft.Xna.Framework.Input;
 namespace Engine.Client.UI;
 
 /// <summary>
-/// Opens, stacks and closes <see cref="Window"/>s. Owns the LayoutContainer layer they live in,
-/// which the UIManager keeps above regular UI via its zIndex.
+/// Opens, stacks and closes <see cref="Window"/>s.
 /// </summary>
 public sealed class WindowManager
 {
     [Dependency] private readonly InputManager _input = default!;
     [Dependency] private readonly UIManager _ui = default!;
+
+    /// <summary>
+    /// Layer every Window lives in. Its zIndex (set from the stylesheet) keeps it above regular
+    /// UI no matter what order things were added to Root in.
+    /// </summary>
+    public LayoutContainer WindowRoot { get; } = new();
 
     private readonly List<Window> _windows = new();
 
@@ -25,6 +30,8 @@ public sealed class WindowManager
     public WindowManager()
     {
         IoCManager.ResolveDependencies(this);
+        WindowRoot.StyleAliasses.Add("windowRoot");
+        _ui.Root.AddChild(WindowRoot);
     }
 
     /// <summary>
@@ -38,12 +45,11 @@ public sealed class WindowManager
         if (_windows.Contains(window))
             return BringToFront(window);
 
-        // windows ported from the old system lean on [Dependency] fields heavily
         IoCManager.ResolveDependencies(window);
 
         window.Manager = this;
         _windows.Add(window);
-        _ui.WindowRoot.AddChild(window);
+        WindowRoot.AddChild(window);
         LayoutContainer.SetAnchorPreset(window, LayoutPreset.Center);
 
         return window;
@@ -56,7 +62,7 @@ public sealed class WindowManager
         if (_windows.Remove(window))
             _windows.Add(window);
 
-        _ui.WindowRoot.MoveChildToFront(window);
+        WindowRoot.MoveChildToFront(window);
         return window;
     }
 
@@ -66,7 +72,7 @@ public sealed class WindowManager
             return;
 
         window.Manager = null;
-        _ui.WindowRoot.RemoveChild(window);
+        WindowRoot.RemoveChild(window);
         window.NotifyClosed();
         window.Dispose();
     }
@@ -97,7 +103,7 @@ public sealed class WindowManager
     internal void Update(float dt)
     {
         // Control.KeyDown only reaches whoever holds keyboard focus, so a global shortcut like
-        // this has to poll the InputManager - same as the old Myra WindowManager did.
+        // this has to poll the InputManager
         if (!_input.KeyPressed(Keys.Escape))
             return;
 

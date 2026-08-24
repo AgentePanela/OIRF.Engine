@@ -5,6 +5,7 @@ using Engine.Client.Graphics;
 using Engine.Client.Graphics.Fonts;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using MonoGame.Extended;
 
 namespace Engine.Client.UI;
@@ -23,6 +24,19 @@ public partial class TextureRect : Control
     {
         get => _key;
         set => SetLayoutField(ref _key, value);
+    }
+
+    private Texture2D? _source;
+
+    /// <summary>
+    /// Raw texture to display instead of looking up <see cref="Key"/> in the atlas.
+    /// Takes priority over Key when set - useful for debug tooling previewing a texture
+    /// that isn't itself an atlas sprite (e.g. a whole atlas page).
+    /// </summary>
+    public Texture2D? Source
+    {
+        get => _source;
+        set => SetLayoutField(ref _source, value);
     }
 
     private Rectangle? _sourceRect;
@@ -52,12 +66,30 @@ public partial class TextureRect : Control
     [StyleField("nineSliceMargins")]
     private Thickness? _nineSliceMargins;
 
+    /// <summary>
+    /// Rotation applied around Origin. Dosen't affect Bounds.
+    /// </summary>
+    public float Rotation { get; set; }
+
+    /// <summary>
+    /// Point this sprite rotates around.
+    /// </summary>
+    public Vector2? Origin { get; set; }
+
+    /// <summary>
+    /// Horizontal/vertical flip.
+    /// </summary>
+    public SpriteEffects Effects { get; set; } = SpriteEffects.None;
+
     private Rectangle GetEffectiveRegion(AtlasSprite sprite) => SourceRect is { } sub
         ? new Rectangle(sprite.Region.X + sub.X, sprite.Region.Y + sub.Y, sub.Width, sub.Height)
         : sprite.Region;
 
     protected override Vector2 MeasureCore(Vector2 availableSize)
     {
+        if (Source is { } tex)
+            return SourceRect is { } sub ? new Vector2(sub.Width, sub.Height) : new Vector2(tex.Width, tex.Height);
+
         if (Key is null || !IoCManager.Resolve<IAssetManager>().GetTexture(Key, out var sprite, out _))
             return Vector2.Zero;
 
@@ -67,6 +99,14 @@ public partial class TextureRect : Control
 
     protected override void DrawSelf(ShapeBatch sb, IFontManager fontManager, float dt)
     {
+        if (Source is { } tex)
+        {
+            var srcRegion = SourceRect ?? new Rectangle(0, 0, tex.Width, tex.Height);
+            var srcDrawSize = Stretch ? new Vector2(Bounds.Width, Bounds.Height) : new Vector2(srcRegion.Width, srcRegion.Height);
+            sb.Draw(tex, new RectangleF(Bounds.X, Bounds.Y, srcDrawSize.X, srcDrawSize.Y), ToRectF(srcRegion), Tint);
+            return;
+        }
+
         if (Key is null || !IoCManager.Resolve<IAssetManager>().GetTexture(Key, out var sprite, out var page))
             return;
 
@@ -81,11 +121,19 @@ public partial class TextureRect : Control
         }
 
         var source = ToRectF(region);
-        var destination = Stretch
-            ? new RectangleF(Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height)
-            : new RectangleF(Bounds.X, Bounds.Y, region.Width, region.Height);
+        var drawSize = Stretch
+            ? new Vector2(Bounds.Width, Bounds.Height)
+            : new Vector2(region.Width, region.Height);
 
-        sb.Draw(page.Texture, destination, source, Tint);
+        var destination = new RectangleF(Bounds.X, Bounds.Y, drawSize.X, drawSize.Y);
+        if (Rotation == 0f && Origin is null && Effects == SpriteEffects.None)
+        {
+            sb.Draw(page.Texture, destination, source, Tint);
+            return;
+        }
+
+        var origin = Origin ?? new Vector2(region.Width / 2f, region.Height / 2f);
+        sb.Draw(page.Texture, destination, source, Tint, Rotation, origin, Effects);
     }
 
     private static MonoGame.Extended.RectangleF ToRectF(Rectangle r) => new(r.X, r.Y, r.Width, r.Height);
