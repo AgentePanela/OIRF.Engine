@@ -52,6 +52,9 @@ public partial class Label : Control
     [StyleField("fontVariant", FontVariant.Regular)]
     private FontVariant? _fontVariant;
 
+    [StyleField("textDecoration", TextDecoration.None)]
+    private TextDecoration? _textDecoration;
+
     /// <summary>
     /// Wraps Text onto multiple lines instead of overflowing the available width.
     /// </summary>
@@ -79,41 +82,57 @@ public partial class Label : Control
     private SpriteFontBase ResolveFont(IFontManager fonts)
         => FontFamily is null ? fonts.Get(FontSize, FontVariant) : fonts.Get(FontSize, FontFamily, FontVariant);
 
-    private string? _displayCacheSourceText;
-    private TTransform _displayCacheTransform;
-    private bool _displayCacheWrap;
-    private float _displayCacheWidth;
-    private string? _displayCacheFontFamily;
-    private float _displayCacheFontSize;
-    private FontVariant _displayCacheFontVariant;
-    private string? _displayCacheResult;
-
-    private string GetDisplayText(SpriteFontBase font, float maxWidth, bool wrap)
+    // Measure and Draw can legitimately be called with different maxWidth - a Stretch-aligned
+    // control (the default) ignores an explicit Width during Arrange, so Bounds.Width can end up
+    // wider than what Width clamped MeasureCore's availableSize to. A single shared cache slot
+    // would thrash forever between the two, redoing the wrap every single frame - two slots means
+    // each caller just keeps hitting its own.
+    private struct DisplayCache
     {
-        if (_displayCacheResult is not null
-            && ReferenceEquals(_displayCacheSourceText, Text)
-            && _displayCacheTransform == TextTransform
-            && _displayCacheWrap == wrap
-            && (!wrap || _displayCacheWidth == maxWidth)
-            && ReferenceEquals(_displayCacheFontFamily, FontFamily)
-            && _displayCacheFontSize == FontSize
-            && _displayCacheFontVariant == FontVariant)
-        {
-            return _displayCacheResult;
-        }
+        public string? SourceText;
+        public TTransform Transform;
+        public bool Wrap;
+        public float Width;
+        public string? FontFamily;
+        public float FontSize;
+        public FontVariant FontVariant;
+        public string? Result;
+
+        public readonly bool Matches(Label label, bool wrap, float width)
+            => Result is not null
+                && ReferenceEquals(SourceText, label.Text)
+                && Transform == label.TextTransform
+                && Wrap == wrap
+                && (!wrap || Width == width)
+                && ReferenceEquals(FontFamily, label.FontFamily)
+                && FontSize == label.FontSize
+                && FontVariant == label.FontVariant;
+    }
+
+    private DisplayCache _measureCache;
+    private DisplayCache _drawCache;
+
+    private string GetDisplayText(SpriteFontBase font, float maxWidth, bool wrap, bool forDraw)
+    {
+        ref var cache = ref forDraw ? ref _drawCache : ref _measureCache;
+        if (cache.Matches(this, wrap, maxWidth))
+            return cache.Result!;
 
         var text = ApplyTransform(Text);
         if (wrap)
             text = new Label2D(font, text).WrapText(maxWidth);
 
-        _displayCacheSourceText = Text;
-        _displayCacheTransform = TextTransform;
-        _displayCacheWrap = wrap;
-        _displayCacheWidth = maxWidth;
-        _displayCacheFontFamily = FontFamily;
-        _displayCacheFontSize = FontSize;
-        _displayCacheFontVariant = FontVariant;
-        _displayCacheResult = text;
+        cache = new DisplayCache
+        {
+            SourceText = Text,
+            Transform = TextTransform,
+            Wrap = wrap,
+            Width = maxWidth,
+            FontFamily = FontFamily,
+            FontSize = FontSize,
+            FontVariant = FontVariant,
+            Result = text,
+        };
         return text;
     }
 
@@ -155,7 +174,7 @@ public partial class Label : Control
         var fonts = IoCManager.Resolve<IFontManager>();
         var font = ResolveFont(fonts);
         var wrap = AutoWrap && !float.IsInfinity(availableSize.X);
-        var text = GetDisplayText(font, availableSize.X, wrap);
+        var text = GetDisplayText(font, availableSize.X, wrap, forDraw: false);
 
         return MeasureString(font, text);
     }
@@ -163,7 +182,7 @@ public partial class Label : Control
     protected override void DrawSelf(ShapeBatch sb, IFontManager fontManager, float dt)
     {
         var font = ResolveFont(fontManager);
-        var text = GetDisplayText(font, Bounds.Width, AutoWrap);
+        var text = GetDisplayText(font, Bounds.Width, AutoWrap, forDraw: true);
         var textSize = MeasureString(font, text);
 
         var x = TextAlign switch
@@ -180,7 +199,7 @@ public partial class Label : Control
             _ => Bounds.Y, // Top, Stretch
         };
 
-        sb.DrawString(font, text, new Vector2(x, y), Color);
+        sb.DrawString(font, text, new Vector2(x, y), Color, textStyle: TextDecoration.ToTextStyle());
     }
 
     protected Vector2 MeasureString(SpriteFontBase font, string text)
