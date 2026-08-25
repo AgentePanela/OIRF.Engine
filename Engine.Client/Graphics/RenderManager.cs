@@ -24,6 +24,7 @@ public sealed partial class RenderManager
     [Dependency] private readonly Camera2D _camera = default!;
     [Dependency] private readonly LightingManager _lighting = default!;
     [Dependency] private readonly ShaderManager _shaders = default!;
+    [Dependency] private readonly RenderStats _stats = default!;
 
     public bool Resizing = true;
     public BlendState BlendState = BlendState.AlphaBlend;
@@ -279,7 +280,11 @@ public sealed partial class RenderManager
         DepthStencilState StencilFor(bool unshaded) =>
             !writeStencil ? DepthStencilState.None : (unshaded ? StencilWriteUnshaded : StencilWriteShaded);
 
+        var sortWatch = Stopwatch.StartNew();
         queue.Sort(DepthComparison);
+        sortWatch.Stop();
+        _stats.SortMs = sortWatch.Elapsed.TotalMilliseconds;
+
         foreach (var r in queue)
         {
             if (r.Target is IShapeRenderable)
@@ -290,14 +295,22 @@ public sealed partial class RenderManager
                     spriteOpen = false;
                     currentShader = null;
                     currentSampler = null;
+                    _stats.Count(RenderCounter.BreakSpriteToShape);
                 }
 
                 if (!shapeOpen || r.Target.SamplerState != currentSampler || r.Unshaded != currentUnshaded)
                 {
                     if (shapeOpen)
+                    {
                         EndShapes();
+                        if (r.Target.SamplerState != currentSampler)
+                            _stats.RecordSamplerBreak(currentSampler, r.Target.SamplerState);
+                        else
+                            _stats.Count(RenderCounter.BreakUnshaded);
+                    }
 
                     BeginShapes(r.Target.SamplerState, StencilFor(r.Unshaded));
+                    _stats.Count(RenderCounter.ShapeBatches);
                     shapeOpen = true;
                     currentSampler = r.Target.SamplerState;
                     currentUnshaded = r.Unshaded;
@@ -310,12 +323,21 @@ public sealed partial class RenderManager
                     EndShapes();
                     shapeOpen = false;
                     currentSampler = null;
+                    _stats.Count(RenderCounter.BreakShapeToSprite);
                 }
 
                 if (!spriteOpen || r.Shader != currentShader || r.Target.SamplerState != currentSampler || r.Unshaded != currentUnshaded)
                 {
                     if (spriteOpen)
+                    {
                         End();
+                        if (r.Shader != currentShader)
+                            _stats.RecordShaderBreak(currentShader, r.Shader);
+                        else if (r.Target.SamplerState != currentSampler)
+                            _stats.RecordSamplerBreak(currentSampler, r.Target.SamplerState);
+                        else
+                            _stats.Count(RenderCounter.BreakUnshaded);
+                    }
 
                     // Default (no custom shader) sprites use DefaultLit so they
                     // can sample the lightmap themselves; Unshaded.fx and any
@@ -348,6 +370,7 @@ public sealed partial class RenderManager
                     var dss = !writeStencil ? DepthStencilState.None : StencilWriteUnshaded;
 
                     Begin(shaderToUse, r.Target.SamplerState, dss);
+                    _stats.Count(RenderCounter.SpriteBatches);
                     spriteOpen = true;
                     currentShader = r.Shader;
                     currentSampler = r.Target.SamplerState;
@@ -521,8 +544,8 @@ public sealed partial class RenderManager
         if (lightingActive && SceneTarget is not null && QueueHasShadedShape())
         {
             var clearColor = GameClient.Scenes.CurrentScene?.BackgroundColor ?? GameClient.Options.BackgroundColor;
-            GameClient.GraphicsDevice.SetRenderTarget(SceneTarget);
-            GameClient.GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.Stencil, clearColor, 0f, 0);
+            GameClient.GraphicsDevice.SetRenderTargetTracked(SceneTarget, "SceneTarget");
+            GameClient.GraphicsDevice.ClearTracked(ClearOptions.Target | ClearOptions.Stencil, clearColor, 0f, 0, "SceneTarget");
             GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, SceneTarget.Width, SceneTarget.Height);
             didSwitchTarget = true;
             WorldOnSceneTarget = true;
@@ -534,16 +557,31 @@ public sealed partial class RenderManager
             // SceneTarget switch below there'd be nothing else to - so the
             // world would draw into the lightmap and Present would fault on a
             // still-active render target.
-            GameClient.GraphicsDevice.SetRenderTarget(FinalTarget);
+            GameClient.GraphicsDevice.SetRenderTargetTracked(FinalTarget, "FinalTarget");
             GameClient.GraphicsDevice.Viewport = previousViewport;
         }
 
+        var metricsBefore = GameClient.GraphicsDevice.Metrics;
+
         if (_renderQueue.Count > 0)
+        {
+            _stats.RecordQueueSize(_renderQueue.Count);
             DrawRenderQueue(_renderQueue, _pooledEntries, lightingActive, writeStencil: didSwitchTarget);
+        }
+
+        // Target/clear deltas are cross-checked at the GameClient.Draw level
+        // instead (see RenderStats.MetricsTargetDelta) - lighting's passes
+        // bind/clear targets outside this method, so a delta taken only
+        // around DrawQueue would permanently under-count against the tracked
+        // Binds/Clears sums, which do span the whole frame.
+        var metricsDelta = GameClient.GraphicsDevice.Metrics - metricsBefore;
+        _stats.Count(RenderCounter.MetricsDrawDelta, metricsDelta.DrawCount);
+        _stats.Count(RenderCounter.MetricsPrimitiveDelta, metricsDelta.PrimitiveCount);
+        _stats.Count(RenderCounter.MetricsSpriteDelta, metricsDelta.SpriteCount);
 
         if (didSwitchTarget)
         {
-            GameClient.GraphicsDevice.SetRenderTarget(FinalTarget);
+            GameClient.GraphicsDevice.SetRenderTargetTracked(FinalTarget, "FinalTarget");
             GameClient.GraphicsDevice.Viewport = previousViewport;
         }
 

@@ -27,6 +27,7 @@ public sealed class LightingSystem : EntityDrawSystem
     [Dependency] private readonly IAssetManager _assets = default!;
     [Dependency] private readonly ViewportAdapter _viewport = default!;
     [Dependency] private readonly LightOcclusionSystem _occlusionSys = default!;
+    [Dependency] private readonly RenderStats _stats = default!;
 
     private readonly LightingRenderTarget _lightmap = new();
     private readonly ShadowMapRT _shadowMap = new();
@@ -263,7 +264,7 @@ public sealed class LightingSystem : EntityDrawSystem
 
         if (_lighting.DebugDraw)
         {
-            GameClient.GraphicsDevice.SetRenderTarget(_render.FinalTarget);
+            GameClient.GraphicsDevice.SetRenderTargetTracked(_render.FinalTarget, "FinalTarget");
             GameClient.GraphicsDevice.Viewport = _render.LastBackbufferViewport;
 
             // SpriteBatch coords are viewport relative, so draw at 0,0 -
@@ -284,15 +285,17 @@ public sealed class LightingSystem : EntityDrawSystem
         // unshaded pixels (stencil 1) are left untouched at full brightness.
         // SceneTarget still holds its stencil contents from DrawQueue
         // (RenderTargetUsage.PreserveContents).
-        GameClient.GraphicsDevice.SetRenderTarget(scene);
+        GameClient.GraphicsDevice.SetRenderTargetTracked(scene, "SceneTarget");
         GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, scene.Width, scene.Height);
+        _stats.AddFill("lighting.apply", (double)scene.Width * scene.Height);
 
         var lightSampler = _lighting.PixelatedLighting ? SamplerState.PointClamp : SamplerState.LinearClamp;
         _render.DrawFullscreenQuad(_lightmap.Target, RenderManager.LightMultiplyBlend, lightSampler, RenderManager.StencilTestShadedOnly);
 
         // Blit the now fully-lit SceneTarget onto FinalTarget/the backbuffer.
-        GameClient.GraphicsDevice.SetRenderTarget(_render.FinalTarget);
+        GameClient.GraphicsDevice.SetRenderTargetTracked(_render.FinalTarget, "FinalTarget");
         GameClient.GraphicsDevice.Viewport = _render.LastBackbufferViewport;
+        _stats.AddFill("lighting.blit", (double)_render.LastBackbufferViewport.Width * _render.LastBackbufferViewport.Height);
         _render.DrawFullscreenQuad(scene, BlendState.Opaque, SamplerState.PointClamp);
     }
 
@@ -411,8 +414,9 @@ public sealed class LightingSystem : EntityDrawSystem
         }
 
         _passTimer.Restart();
-        _render.BeginSceneRender(_lightmap.Target);
-        GameClient.GraphicsDevice.Clear(baseAmbient);
+        _render.BeginSceneRender(_lightmap.Target, "Lightmap");
+        GameClient.GraphicsDevice.ClearTracked(baseAmbient, "Lightmap");
+        _stats.AddFill("lighting.lightmap.clear", (double)lightW * lightH);
         DrawRadialLights(viewProj);
         DrawTextureLights();
         _render.EndSceneRender();
@@ -653,9 +657,10 @@ public sealed class LightingSystem : EntityDrawSystem
 
         // clear color = "no occluder", depth = far so the LESS test accepts the first write
         _buildTimer.Restart();
-        GameClient.GraphicsDevice.SetRenderTarget(shadowMap);
-        GameClient.GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.DepthBuffer,
-            new Color(255, 255, 0, 255), 1f, 0);
+        GameClient.GraphicsDevice.SetRenderTargetTracked(shadowMap, "ShadowMap");
+        GameClient.GraphicsDevice.ClearTracked(ClearOptions.Target | ClearOptions.DepthBuffer,
+            new Color(255, 255, 0, 255), 1f, 0, "ShadowMap");
+        _stats.AddFill("lighting.shadowmap", (double)shadowMap.Width * shadowMap.Height);
         _buildTimer.Stop();
         _shadowSetupMs = _buildTimer.Elapsed.TotalMilliseconds;
 
@@ -858,6 +863,7 @@ public sealed class LightingSystem : EntityDrawSystem
         foreach (var entry in _lights)
         {
             float radius = entry.Comp.Radius;
+            _stats.AddFill("lighting.radial", ScreenQuadPixels(radius));
             BuildDiskQuad(entry.WorldPos, radius);
 
             // -1 skips the shadow lookup in the shader. A light with an empty
@@ -1004,8 +1010,8 @@ public sealed class LightingSystem : EntityDrawSystem
         Texture2D source = _lightmap.Target;
         for (int i = 0; i < iterations; i++)
         {
-            BlurPass(source, _wallBleed.A, 1f, blurScale);
-            BlurPass(_wallBleed.A, _wallBleed.B, 0f, blurScale);
+            BlurPass(source, _wallBleed.A, 1f, blurScale, "WallBleedA");
+            BlurPass(_wallBleed.A, _wallBleed.B, 0f, blurScale, "WallBleedB");
             source = _wallBleed.B;
         }
 
@@ -1013,8 +1019,9 @@ public sealed class LightingSystem : EntityDrawSystem
         _wmViewProj?.SetValue(viewProj);
         _wmBleedStrength?.SetValue(_lighting.WallBleedStrength);
 
-        GameClient.GraphicsDevice.SetRenderTarget(_lightmap.Target);
+        GameClient.GraphicsDevice.SetRenderTargetTracked(_lightmap.Target, "Lightmap");
         GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, _lightmap.Target.Width, _lightmap.Target.Height);
+        _stats.AddFill("lighting.wallbleed.merge", (double)_lightmap.Target.Width * _lightmap.Target.Height);
         GameClient.GraphicsDevice.BlendState = BlendState.Opaque;
         GameClient.GraphicsDevice.DepthStencilState = DepthStencilState.None;
         GameClient.GraphicsDevice.RasterizerState = RasterizerState.CullNone;
@@ -1034,20 +1041,21 @@ public sealed class LightingSystem : EntityDrawSystem
         if (_lightBlurEffect is null || _blurScratch.Target is null || _lightmap.Target is null)
             return;
 
-        BlurPass(_lightmap.Target, _blurScratch.Target, 1f);
-        BlurPass(_blurScratch.Target, _lightmap.Target, 0f);
+        BlurPass(_lightmap.Target, _blurScratch.Target, 1f, 1f, "BlurScratch");
+        BlurPass(_blurScratch.Target, _lightmap.Target, 0f, 1f, "Lightmap");
 
         GameClient.GraphicsDevice.BlendState = BlendState.AlphaBlend;
     }
 
-    private void BlurPass(Texture2D source, RenderTarget2D dest, float isHorizontal, float blurScale = 1f)
+    private void BlurPass(Texture2D source, RenderTarget2D dest, float isHorizontal, float blurScale, string destName)
     {
         _blSourceMap?.SetValue(source);
         _blSourceTexel?.SetValue(new Vector2(1f / source.Width, 1f / source.Height));
         _blIsHorizontal?.SetValue(isHorizontal);
         _blBlurScale?.SetValue(blurScale);
 
-        GameClient.GraphicsDevice.SetRenderTarget(dest);
+        GameClient.GraphicsDevice.SetRenderTargetTracked(dest, destName);
+        _stats.AddFill($"lighting.blur.{destName}", (double)dest.Width * dest.Height);
         GameClient.GraphicsDevice.BlendState = BlendState.Opaque;
         // SpriteBatch leaves CullCounterClockwise on, which would cull the quad
         GameClient.GraphicsDevice.RasterizerState = RasterizerState.CullNone;
@@ -1060,6 +1068,21 @@ public sealed class LightingSystem : EntityDrawSystem
             GameClient.GraphicsDevice.DrawUserPrimitives(
                 PrimitiveType.TriangleList, ScreenQuad, 0, 2, ScreenVertex.Declaration);
         }
+    }
+
+    /// <summary>
+    /// Lightmap pixels a light of this radius covers, clamped to the map - the
+    /// fill estimate the profiler reports.
+    /// </summary>
+    private double ScreenQuadPixels(float radius)
+    {
+        if (_lightmap.Target is null)
+            return 0;
+
+        var side = radius * 2f * _camera.Zoom * _lighting.LightmapScale;
+        var w = Math.Min(side, _lightmap.Target.Width);
+        var h = Math.Min(side, _lightmap.Target.Height);
+        return Math.Max(0, w * h);
     }
 
     private void BuildDiskQuad(Vector2 center, float radius)

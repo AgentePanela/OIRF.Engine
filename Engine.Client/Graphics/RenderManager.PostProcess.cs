@@ -66,10 +66,10 @@ public sealed partial class RenderManager
 
     /// <summary>
     /// Switch the active render target to <see cref="SceneTarget"/>
-    /// (or any custom RT). Restores the previous target (backbuffer) when
-    /// <see cref="EndSceneRender"/> is called.
+    /// (or any custom RT, named for the profiler). Restores the previous
+    /// target (backbuffer) when <see cref="EndSceneRender"/> is called.
     /// </summary>
-    public void BeginSceneRender(RenderTarget2D? target = null)
+    public void BeginSceneRender(RenderTarget2D? target = null, string name = "SceneTarget")
     {
         if (_inSceneRender)
             return;
@@ -86,7 +86,7 @@ public sealed partial class RenderManager
         if (dest is null)
             return;
 
-        GameClient.GraphicsDevice.SetRenderTarget(dest);
+        GameClient.GraphicsDevice.SetRenderTargetTracked(dest, name);
         GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, dest.Width, dest.Height);
     }
 
@@ -98,7 +98,7 @@ public sealed partial class RenderManager
     {
         if (!_inSceneRender)
             return;
-        GameClient.GraphicsDevice.SetRenderTarget(_previousTarget);
+        GameClient.GraphicsDevice.SetRenderTargetTracked(_previousTarget, "FinalTarget");
         GameClient.GraphicsDevice.Viewport = _previousViewport;
         _previousTarget = null;
         _inSceneRender = false;

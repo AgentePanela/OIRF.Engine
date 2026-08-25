@@ -14,9 +14,11 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
 using System;
+using System.Diagnostics;
 using System.Reflection;
 using Engine.Client.Debug.Diagnostics;
 using Engine.Shared.Configuration.CVars;
+using Engine.Shared.Debug.Diagnostics;
 using Engine.Shared.IoC;
 using Engine.Shared;
 using Engine.Shared.Storage;
@@ -104,11 +106,17 @@ public class GameClient : Game
     public static ILocalizationManager LocalizationManager { get; private set; }
     public static GameState GameState = GameState.Booting;
 
+    public static RenderStats RenderStats { get; private set; }
+    public static FrameProfiler Profiler { get; private set; }
+    public static ProfilerSweep Sweep { get; private set; }
+    public static SessionGCTracker GCTracker { get; private set; }
+
     public static ClientOptions Options = new ClientOptions();
     public static GTime GameTime = new GTime();
     public GCMeter GCMeter = new();
 
     private bool _paused = false;
+    private long _lastDrawEnd;
 
     /// <summary>
     /// Creates a new GameClient instance.
@@ -155,6 +163,10 @@ public class GameClient : Game
         IoCManager.Register<ViewportAdapter>();
         IoCManager.Register<Camera2D>();
         IoCManager.Register<LightingManager>();
+        // registered manually (not [RegisterIoC]) and before RenderManager,
+        // which depends on it and is itself constructed below, ahead of the
+        // AutoRegister call that would otherwise register RenderStats
+        IoCManager.Register<RenderStats>();
         IoCManager.Register<RenderManager>();
         IoCManager.Register<InputManager>();
         IoCManager.Register<IVirtualKeyboard, NullVirtualKeyboard>(); // platform-specific mobile backends override this
@@ -177,6 +189,12 @@ public class GameClient : Game
         WindowManager = IoCManager.Resolve<WindowManager>();
         ConfigManager = IoCManager.Resolve<IConfigurationManager>();
         LocalizationManager = IoCManager.Resolve<ILocalizationManager>();
+
+        RenderStats = IoCManager.Resolve<RenderStats>();
+        Profiler = IoCManager.Resolve<FrameProfiler>();
+        Sweep = IoCManager.Resolve<ProfilerSweep>();
+        GCTracker = IoCManager.Resolve<SessionGCTracker>();
+        Profiler.GpuFlush = GpuSync.Flush;
 
         ConfigManager.ForceDefaultValue(GameCVars.GameVersion, Options.Version);
         ConfigManager.ForceDefaultValue(GameCVars.ResolutionWidth, Options.Width);
@@ -299,7 +317,20 @@ public class GameClient : Game
     {
         if (_paused)
             return;
-        
+
+        // everything between the end of the last Draw and here is Present,
+        // vsync wait and driver blocking - the tell for a GPU bound frame.
+        // Skipped during a sweep: vsync is off and passes are being toggled
+        // on purpose there, so this would just pollute the rolling average.
+        if (_lastDrawEnd != 0 && !Sweep.Running)
+            Profiler.RecordPresentWait((Stopwatch.GetTimestamp() - _lastDrawEnd) * 1000.0 / Stopwatch.Frequency);
+
+        // Frozen during a sweep for the same reason: a sweep frame has whole
+        // passes forced off on purpose and must not dilute the rolling
+        // windows a report reads from. Scopes opened while frozen are no-ops.
+        if (!Sweep.Running)
+            Profiler.BeginFrame();
+
         int agen0 = GC.CollectionCount(0);
         int agen1 = GC.CollectionCount(1);
         int agen2 = GC.CollectionCount(2);
@@ -341,6 +372,14 @@ public class GameClient : Game
     {
         if (_paused)
             return;
+
+        // Same freeze as Profiler.BeginFrame in Update() - a sweep frame has
+        // whole passes forced off on purpose and must not dilute the windows
+        // a report reads from.
+        if (!Sweep.Running)
+            RenderStats.BeginFrame();
+
+        var metricsBefore = GraphicsDevice.Metrics;
 
         GraphicsDevice.Clear(Scenes.CurrentScene?.BackgroundColor ?? Options.BackgroundColor);
         GameTime.UpdateFps(gameTime);
@@ -386,7 +425,8 @@ public class GameClient : Game
                 : (Viewport.VirtualWidth, Viewport.VirtualHeight);
             Renderer.EnsureSceneTarget(sceneTargetWidth, sceneTargetHeight);
 
-            EntityManager.Draw(GameTime.DeltaTime);
+            if (!ProfilerSweep.SkipWorld)
+                EntityManager.Draw(GameTime.DeltaTime);
         }
 
         Renderer.DrawQueue();
@@ -410,11 +450,31 @@ public class GameClient : Game
             );
 
         // A captured frame (Renderer.FinalTarget set) shouldn't bake in Myra UI.
-        if (Renderer.FinalTarget is null)
+        if (Renderer.FinalTarget is null && !ProfilerSweep.SkipUi)
         {
             InterfaceManager.Draw(GameTime.DeltaTime);
         }
 
         //base.Draw(gameTime);
+
+        // Target/clear deltas spanning the whole frame (unlike RenderManager's
+        // own Metrics sample, which only covers DrawQueue) - the same span as
+        // RenderStats' own Binds/Clears tracking, so ProfilerReport's cross-
+        // check compares like against like instead of permanently under-
+        // counting against lighting's passes, which bind/clear outside DrawQueue.
+        var metricsDelta = GraphicsDevice.Metrics - metricsBefore;
+        RenderStats.Count(RenderCounter.MetricsTargetDelta, metricsDelta.TargetCount);
+        RenderStats.Count(RenderCounter.MetricsClearDelta, metricsDelta.ClearCount);
+
+        if (!Sweep.Running)
+        {
+            RenderStats.EndFrame();
+            Profiler.EndFrame();
+        }
+
+        // Tick always runs - it's what drives the sweep itself, timed off its
+        // own stopwatch rather than the (possibly frozen) Profiler.
+        Sweep.Tick();
+        _lastDrawEnd = Stopwatch.GetTimestamp();
     }
 }
