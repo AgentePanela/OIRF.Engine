@@ -37,7 +37,7 @@ public abstract class Scene : IEntityScene, IDisposable
     public bool IsDisposed { get; private set; }
     public ConcurrentDictionary<EntityUid, Entity> Entities { get; private set; } = new();
     public int EntUidIndex { get; set; } = 0;
-    public ConcurrentDictionary<Type, ConcurrentDictionary<EntityUid, Component>> Components { get; private set; } = new();
+    public ConcurrentDictionary<Type, Dictionary<EntityUid, Component>> Components { get; private set; } = new();
 
     /// <summary>
     /// Scene's own HUD/Overlay displayed after the game world.
@@ -114,7 +114,7 @@ public abstract class Scene : IEntityScene, IDisposable
         if (!Entities.ContainsKey(uid))
             throw new InvalidOperationException($"Cannot attach component '{comp.GetType().Name}' to unknown entity '{uid}'.");
 
-        var pool = Components.GetOrAdd(comp.GetType(), _ => new ConcurrentDictionary<EntityUid, Component>());
+        var pool = Components.GetOrAdd(comp.GetType(), _ => new Dictionary<EntityUid, Component>());
 
         if (pool.ContainsKey(uid))
             throw new InvalidOperationException($"Entity '{uid}' already has component '{comp.GetType().Name}'.");

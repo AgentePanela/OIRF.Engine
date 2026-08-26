@@ -120,17 +120,17 @@ public abstract class EntitySystem
         => _entManager.GetEntityComps(uid);
 
     /// <inheritdoc cref="EntityManager.Query{T}()"/>
-    protected IEnumerable<(EntityUid uid, T comp)> 
+    protected ComponentQuery<T>
         GetEntitiesWithComp<T>() where T : Component
             => _entManager.Query<T>();
 
     /// <inheritdoc cref="EntityManager.Query{T1, T2}()"/>
-    protected IEnumerable<(EntityUid uid, T1 comp1, T2 comp2)> 
+    protected ComponentQuery<T1, T2>
         GetEntitiesWithComp<T1, T2>() where T1 : Component where T2 : Component
             => _entManager.Query<T1, T2>();
 
     /// <inheritdoc cref="EntityManager.Query{T1, T2, T3}()"/>
-    protected IEnumerable<(EntityUid uid, T1, T2, T3)>
+    protected ComponentQuery<T1, T2, T3>
         GetEntitiesWithComp<T1, T2, T3>() where T1 : Component where T2 : Component where T3 : Component
             => _entManager.Query<T1, T2, T3>();
 

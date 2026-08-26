@@ -91,7 +91,7 @@ public sealed partial class EntityManager
                 {
                     EventBus.RaiseEvent(comp.Owner, new CompRemovedEvent() { Component = comp });
                     if (_scene.Components.TryGetValue(comp.GetType(), out var pool))
-                        pool.TryRemove(comp.Owner, out _);
+                        pool.Remove(comp.Owner);
                 }
                 snapshot.Clear();
             }
@@ -133,12 +133,12 @@ public sealed partial class EntityManager
         }
     }
 
-    private ConcurrentDictionary<EntityUid, Component> GetPool(Type type)
+    private Dictionary<EntityUid, Component> GetPool(Type type)
     {
-        return _scene.Components.GetOrAdd(type, static _ => new ConcurrentDictionary<EntityUid, Component>());
+        return _scene.Components.GetOrAdd(type, static _ => new Dictionary<EntityUid, Component>());
     }
 
-    private ConcurrentDictionary<EntityUid, Component> GetPool<T>() where T : Component
+    private Dictionary<EntityUid, Component> GetPool<T>() where T : Component
     {
         return GetPool(typeof(T));
     }
