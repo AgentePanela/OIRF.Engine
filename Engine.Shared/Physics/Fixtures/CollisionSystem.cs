@@ -32,6 +32,18 @@ public sealed class CollisionSystem : EntitySystem
         base.Init();
         _cfg.Subs(PhysicsCvars.CellSize, v => CellSize = v);
     }
+
+    private static bool SetsOverlap(HashSet<string> a, HashSet<string> b)
+    {
+        var (small, large) = a.Count <= b.Count ? (a, b) : (b, a);
+        foreach (var item in small)
+        {
+            if (large.Contains(item))
+                return true;
+        }
+
+        return false;
+    }
  
     public override void Update(float dt)
     {
@@ -235,7 +247,7 @@ public sealed class CollisionSystem : EntitySystem
 
             foreach (var (_, fixture) in collision.Fixtures)
             {
-                if (mask != null && !mask.Overlaps(fixture.Layers))
+                if (mask != null && !SetsOverlap(mask, fixture.Layers))
                     continue;
 
                 if (!IsPosInsideFixture(worldPos, transform.Position, fixture.Shape))
@@ -294,7 +306,7 @@ public sealed class CollisionSystem : EntitySystem
         {
             foreach (var (id, fixture) in col.Fixtures)
             {
-                if (mask != null && !mask.Overlaps(fixture.Layers))
+                if (mask != null && !SetsOverlap(mask, fixture.Layers))
                     continue;
  
                 if (!RayVsShape(origin, direction, maxDistance, transform.Position, fixture.Shape, out float dist))
@@ -334,7 +346,7 @@ public sealed class CollisionSystem : EntitySystem
         {
             foreach (var (id, fixture) in col.Fixtures)
             {
-                if (mask != null && !mask.Overlaps(fixture.Layers))
+                if (mask != null && !SetsOverlap(mask, fixture.Layers))
                     continue;
  
                 if (!RayVsShape(origin, direction, maxDistance, transform.Position, fixture.Shape, out float dist))
@@ -365,8 +377,8 @@ public sealed class CollisionSystem : EntitySystem
             fixA.Shape.GetAABB(posA, out float axMin, out float ayMin, out float axMax, out float ayMax);
             foreach (var (idB, fixB) in colB.Fixtures)
             {
-                bool aSeesB = fixA.Masks.Overlaps(fixB.Layers);
-                bool bSeesA = fixB.Masks.Overlaps(fixA.Layers);
+                bool aSeesB = SetsOverlap(fixA.Masks, fixB.Layers);
+                bool bSeesA = SetsOverlap(fixB.Masks, fixA.Layers);
                 if (!aSeesB && !bSeesA)
                     continue;
 

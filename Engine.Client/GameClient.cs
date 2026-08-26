@@ -224,6 +224,8 @@ public class GameClient : Game
         Graphics.GraphicsProfile = options.GraphicsProfile;
         Graphics.SynchronizeWithVerticalRetrace = ConfigManager.Get(GameCVars.Vsync);
         IsFixedTimeStep = ConfigManager.Get(GameCVars.FixedTimestep);
+        var targetFramerate = (double)ConfigManager.Get(GameCVars.FramerateLimit);
+        TargetElapsedTime = TimeSpan.FromSeconds(1d / targetFramerate);
 
         // Apply the graphic presentation changes.
         Graphics.ApplyChanges();
