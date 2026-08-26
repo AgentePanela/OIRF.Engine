@@ -1,7 +1,7 @@
 using System;
 using Engine.Client.Assets;
 using Engine.Shared.GameObjects;
-using Engine.Shared.GameObjects.Components.Lighting;
+using Engine.Shared.Lighting;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
 

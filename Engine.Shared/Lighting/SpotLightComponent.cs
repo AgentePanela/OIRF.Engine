@@ -1,13 +1,10 @@
 using Engine.Shared.GameObjects;
 using Microsoft.Xna.Framework;
 
-namespace Engine.Shared.GameObjects.Components.Lighting;
+namespace Engine.Shared.Lighting;
 
 /// <summary>
-/// Represents a cone-shaped light source. Emits light radially like
-/// <see cref="PointLightComponent"/> but restricted to an angular cone
-/// around <see cref="Direction"/>. Supports the same shadow casting as
-/// point lights.
+/// Represents a cone-shaped light source.
 /// </summary>
 [RegisterComponent("SpotLight")]
 public sealed class SpotLightComponent : Component, IRadialLight

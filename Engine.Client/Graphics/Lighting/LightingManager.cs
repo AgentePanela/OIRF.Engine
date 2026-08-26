@@ -6,7 +6,7 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
-/// Runtime configuration for the lighting pipeline. Resolve via IoC.
+/// Runtime configuration for the lighting pipeline.
 /// </summary>
 public sealed class LightingManager
 {
@@ -87,11 +87,7 @@ public sealed class LightingManager
 
     /// <summary>
     /// How wide the wall bleed blur reaches, as a multiplier on the tap
-    /// spacing. This is the knob for how long the fade to black is at the
-    /// edge of the glow - <see cref="WallBleedIterations"/> deliberately holds
-    /// the width constant, so raising that one does nothing here. Push this
-    /// far enough and the 9-tap kernel starts to band; add an iteration to
-    /// smooth it back out.
+    /// spacing.
     /// </summary>
     public float WallBleedRadius
     {
@@ -102,16 +98,15 @@ public sealed class LightingManager
 
     /// <summary>
     /// Separable blur iterations for the wall bleed, each a horizontal plus a
-    /// vertical pass. The tap spacing narrows as iterations rise to keep the
-    /// same total sigma, so this trades fill for a smoother, more gaussian
-    /// falloff - not a wider one. Use <see cref="WallBleedRadius"/> for width.
+    /// vertical pass.
     /// </summary>
     public int WallBleedIterations
     {
         get => _wallBleedIterations;
         set => _wallBleedIterations = Math.Clamp(value, 1, 4);
     }
-    private int _wallBleedIterations = 2;
+
+    private int _wallBleedIterations = 1;
 
     /// <summary>
     /// Gaussian blur over the finished lightmap, smooths shadow banding.

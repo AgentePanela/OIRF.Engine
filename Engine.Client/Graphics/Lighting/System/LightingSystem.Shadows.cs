@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Engine.Shared.GameObjects;
-using Engine.Shared.GameObjects.Components.Lighting;
+using Engine.Shared.Lighting;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 

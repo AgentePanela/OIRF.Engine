@@ -1,12 +1,10 @@
 using Engine.Shared.GameObjects;
 using Microsoft.Xna.Framework;
 
-namespace Engine.Shared.GameObjects.Components.Lighting;
+namespace Engine.Shared.Lighting;
 
 /// <summary>
-/// Represents a point light source. Emits light in a radial pattern from the
-/// owning entity's transform position. Supports color, radius, intensity and
-/// optional shadow casting via <c>CastShadows</c>.
+/// Represents a point light source.
 /// </summary>
 [RegisterComponent("PointLight")]
 public sealed class PointLightComponent : Component, IRadialLight
