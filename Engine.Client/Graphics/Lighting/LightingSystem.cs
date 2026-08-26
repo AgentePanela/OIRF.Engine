@@ -28,6 +28,7 @@ public sealed class LightingSystem : EntityDrawSystem
     [Dependency] private readonly ViewportAdapter _viewport = default!;
     [Dependency] private readonly LightOcclusionSystem _occlusionSys = default!;
     [Dependency] private readonly RenderStats _stats = default!;
+    [Dependency] private readonly TransformSystem _transformSys = default!;
 
     private readonly LightingRenderTarget _lightmap = new();
     private readonly ShadowMapRT _shadowMap = new();
@@ -78,6 +79,9 @@ public sealed class LightingSystem : EntityDrawSystem
     private readonly List<LightEntry> _lights = new();
     private readonly List<ShadowGeometry.ShadowOccluder> _occluders = new();
     private DiskVertex[] _wallVerts = new DiskVertex[256 * 6];
+
+    private Rectangle _lastOccluderBounds;
+    private bool _occludersDirty = true;
 
     private float _maxLightRadius;
     private bool _warnedShadowCap;
@@ -169,6 +173,11 @@ public sealed class LightingSystem : EntityDrawSystem
         _cfg.Subs(LightingCvars.LightmapScale,    v => _lighting.LightmapScale    = v);
         _cfg.Subs(LightingCvars.PixelatedLighting, v => _lighting.PixelatedLighting = v);
         _cfg.Subs(LightingCvars.LightPixelSize,   v => _lighting.LightPixelSize   = v);
+
+        // an occluder spawning/despawning changes what CollectOccluders should
+        // find even if the camera hasn't moved, so force a rebuild next frame
+        SubscribeEvent<OccluderComponent, CompAddedEvent>(OnOccluderAdded);
+        SubscribeEvent<OccluderComponent, CompRemovedEvent>(OnOccluderRemoved);
 
         _shadowDepthEffect = _shaders.GetShader("ShadowDepth")?.Clone();
         _lightSoftEffect   = _shaders.GetShader("LightSoft")?.Clone();
@@ -546,14 +555,17 @@ public sealed class LightingSystem : EntityDrawSystem
 
     private void CollectOccluders()
     {
-        _occluders.Clear();
-        _scratchRectOccluders.Clear();
-
         // an occluder within a light radius of the view can still push a
         // shadow into the view, so pad the culling bounds by the biggest one
         var bounds = _camera.ViewportBounds;
         int pad = (int)MathF.Ceiling(_maxLightRadius);
         bounds.Inflate(pad, pad);
+
+        if (!_occludersDirty && bounds == _lastOccluderBounds && !AnyOccluderMoved())
+            return;
+
+        _occluders.Clear();
+        _scratchRectOccluders.Clear();
 
         foreach (var (uid, occluder, transform) in GetEntitiesWithComp<OccluderComponent, TransformComponent>())
         {
@@ -575,7 +587,26 @@ public sealed class LightingSystem : EntityDrawSystem
                 _scratchRectOccluders.Add(_occluders.Count - 1);
         }
         CullTouchingEntityEdges(_scratchRectOccluders);
+
+        _lastOccluderBounds = bounds;
+        _occludersDirty = false;
     }
+
+    private bool AnyOccluderMoved()
+    {
+        foreach (var uid in _transformSys.MovedThisFrame)
+        {
+            if (HasComp<OccluderComponent>(uid))
+                return true;
+        }
+        return false;
+    }
+
+    private void OnOccluderAdded(EntityUid uid, OccluderComponent comp, CompAddedEvent args)
+        => _occludersDirty = true;
+
+    private void OnOccluderRemoved(EntityUid uid, OccluderComponent comp, CompRemovedEvent args)
+        => _occludersDirty = true;
 
     // an entity occluder's edge is an interior seam - and gets culled - when
     // another occluder's opposite-facing edge sits exactly on it and fully

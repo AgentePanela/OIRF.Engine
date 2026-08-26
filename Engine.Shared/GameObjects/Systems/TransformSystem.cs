@@ -8,6 +8,13 @@ public sealed class TransformSystem : EntitySystem
 {
     // Last Position/Angle seen per entity, last tick
     private readonly Dictionary<EntityUid, (Vector2 Pos, float Angle)> _lastTransform = new();
+    private readonly HashSet<EntityUid> _movedThisFrame = new();
+
+    /// <summary>
+    /// Entities whose <see cref="TransformComponent"/> changed position or angle
+    /// this frame. Valid only for the current frame.
+    /// </summary>
+    public IReadOnlySet<EntityUid> MovedThisFrame => _movedThisFrame;
 
     public override void Init()
     {
@@ -18,6 +25,8 @@ public sealed class TransformSystem : EntitySystem
     public override void Update(float dt)
     {
         base.Update(dt);
+
+        _movedThisFrame.Clear();
 
         foreach (var (uid, t) in GetEntitiesWithComp<TransformComponent>())
         {
@@ -34,6 +43,7 @@ public sealed class TransformSystem : EntitySystem
             if (posDelta == Vector2.Zero && angleDelta == 0f)
                 continue;
 
+            _movedThisFrame.Add(uid);
             MoveChildren(uid, posDelta, angleDelta);
         }
     }
@@ -48,6 +58,7 @@ public sealed class TransformSystem : EntitySystem
             t.Position += posDelta;
             t.Angle += angleDelta;
             _lastTransform[uid] = (t.Position, t.Angle);
+            _movedThisFrame.Add(uid);
 
             MoveChildren(uid, posDelta, angleDelta);
         }

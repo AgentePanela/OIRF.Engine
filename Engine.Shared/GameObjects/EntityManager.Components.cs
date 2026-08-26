@@ -2,7 +2,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using Engine.Shared.Prototypes;
 using Engine.Shared.Threading;
 
@@ -224,8 +223,9 @@ public sealed partial class EntityManager
             yield break;
 
         // get the component with less entities
-        var pools = new[] { p1, p2, p3 };
-        var primary = pools.OrderBy(p => p.Count).First();
+        var primary = p1;
+        if (p2.Count < primary.Count) primary = p2;
+        if (p3.Count < primary.Count) primary = p3;
 
         foreach (var (uid, _) in primary)
         {

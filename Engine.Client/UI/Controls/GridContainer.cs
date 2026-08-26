@@ -25,6 +25,7 @@ public partial class GridContainer : PanelContainer
 
     private float[] _columnWidths = System.Array.Empty<float>();
     private float[] _rowHeights = System.Array.Empty<float>();
+    private float[] _columnX = System.Array.Empty<float>();
 
     protected override Vector2 MeasureCore(Vector2 availableSize)
     {
@@ -37,8 +38,15 @@ public partial class GridContainer : PanelContainer
         var columns = MathHelper.Max(1, Columns);
         var rows = Children.Count == 0 ? 0 : (Children.Count + columns - 1) / columns;
 
-        _columnWidths = new float[columns];
-        _rowHeights = new float[rows];
+        if (_columnWidths.Length != columns)
+            _columnWidths = new float[columns];
+        else
+            System.Array.Clear(_columnWidths);
+
+        if (_rowHeights.Length != rows)
+            _rowHeights = new float[rows];
+        else
+            System.Array.Clear(_rowHeights);
 
         for (var i = 0; i < Children.Count; i++)
         {
@@ -67,11 +75,13 @@ public partial class GridContainer : PanelContainer
 
         var columns = MathHelper.Max(1, Columns);
 
-        var columnX = new float[columns];
+        if (_columnX.Length != columns)
+            _columnX = new float[columns];
+
         var offset = (float)finalRect.X;
         for (var c = 0; c < columns; c++)
         {
-            columnX[c] = offset;
+            _columnX[c] = offset;
             offset += (c < _columnWidths.Length ? _columnWidths[c] : 0f) + HSeparation;
         }
 
@@ -88,7 +98,7 @@ public partial class GridContainer : PanelContainer
                 row++;
             }
 
-            var cellRect = new Rectangle((int)columnX[col], rowY, (int)_columnWidths[col], (int)_rowHeights[row]);
+            var cellRect = new Rectangle((int)_columnX[col], rowY, (int)_columnWidths[col], (int)_rowHeights[row]);
             Children[i].Arrange(cellRect);
         }
     }

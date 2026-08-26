@@ -14,4 +14,10 @@ public static class GameCVars
 
     public static CVarDef<bool> ScaleOuter
         = CVarDef.Create("game.scale", true);
+
+    public static CVarDef<bool> Vsync
+        = CVarDef.Create("game.vsync", true);
+
+    public static CVarDef<bool> FixedTimestep
+        = CVarDef.Create("game.fixed-timestep", true);
 }

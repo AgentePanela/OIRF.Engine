@@ -52,8 +52,8 @@ public sealed partial class RenderManager
     private int _submitCounter;
 
     // Single flat sort key: Layer first (coarse bucket), then Depth within it,
-    // then SubmitOrder as a stable tiebreak. Same ordering as the old
-    // SortedDictionary<Layer, List<RenderQueue>> produced, just without the
+    // then Unshaded, then SubmitOrder as a stable tiebreak. Same ordering as the
+    // old SortedDictionary<Layer, List<RenderQueue>> produced, just without the
     // per-layer bucketing - one sort over one list instead of one dictionary
     // lookup per submit plus one sort per layer.
     private static readonly Comparison<RenderQueue> DepthComparison = (a, b) =>
@@ -63,7 +63,11 @@ public sealed partial class RenderManager
             return layerCmp;
 
         var depthCmp = a.Target.Depth.CompareTo(b.Target.Depth);
-        return depthCmp != 0 ? depthCmp : a.SubmitOrder.CompareTo(b.SubmitOrder);
+        if (depthCmp != 0)
+            return depthCmp;
+
+        var unshadedCmp = a.Unshaded.CompareTo(b.Unshaded);
+        return unshadedCmp != 0 ? unshadedCmp : a.SubmitOrder.CompareTo(b.SubmitOrder);
     };
 
     // Marks stencil=0 (shaded) / stencil=1 (unshaded) while the merged queue draws
