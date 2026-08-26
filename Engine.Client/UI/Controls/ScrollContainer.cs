@@ -143,7 +143,7 @@ public partial class ScrollContainer : PanelContainer
         protected override Vector2 MeasureCore(Vector2 availableSize)
         {
             var size = Vector2.Zero;
-            foreach (var child in Children)
+            foreach (var child in ChildrenList)
             {
                 child.Measure(availableSize);
                 size = Vector2.Max(size, child.DesiredSize);
@@ -160,7 +160,7 @@ public partial class ScrollContainer : PanelContainer
                 (int)MathHelper.Max(finalRect.Width, DesiredSize.X),
                 (int)MathHelper.Max(finalRect.Height, DesiredSize.Y));
 
-            foreach (var child in Children)
+            foreach (var child in ChildrenList)
                 child.Arrange(contentRect);
         }
     }

@@ -57,7 +57,7 @@ public abstract partial class Control
 
     internal void InvalidateStyleCache()
     {
-        _styleCache = null;
+        _styleCache?.Clear();
     }
 
     internal void AnnounceThemeUpdate()
@@ -65,7 +65,7 @@ public abstract partial class Control
         InvalidateStyleCache();
         UIManager.InvalidateLayout();
         OnThemeUpdated();
-        foreach (var child in Children)
+        foreach (var child in _children)
             child.AnnounceThemeUpdate();
     }
 
@@ -98,25 +98,7 @@ public abstract partial class Control
             return cached.Found;
         }
 
-        StyleRule? best = null;
-
-        foreach (var sheet in EffectiveStylesheets())
-        {
-            foreach (var rule in sheet.Rules)
-            {
-                if (!rule.Properties.ContainsKey(name))
-                    continue;
-
-                if (!rule.StyleClass.Matches(this))
-                    continue;
-
-                if (best is null || rule.StyleClass.Specificity >= best.StyleClass.Specificity)
-                    best = rule;
-            }
-
-            if (best is not null)
-                break;
-        }
+        var best = FindStyleRule(name);
 
         if (best is null)
         {
@@ -141,10 +123,10 @@ public abstract partial class Control
     }
 
     /// <summary>
-    /// Every <see cref="StylesheetOverride"/> found walking up from this control, nearest
-    /// ancestor first, followed by the UIManager's ActiveTheme as the final fallback.
+    /// Walks stylesheet overrides from this control up to the root (nearest ancestor
+    /// first), then ActiveTheme as the final fallback.
     /// </summary>
-    private IEnumerable<StylePrototype> EffectiveStylesheets()
+    private StyleRule? FindStyleRule(string name)
     {
         var ui = IoCManager.Resolve<UIManager>();
         HashSet<string>? seen = null;
@@ -158,13 +140,34 @@ public abstract partial class Control
             if (resolved is null)
                 continue;
 
-            // two ancestors could point at the same override id - only yield it once
+            // two ancestors could point at the same override id - only check it once
             seen ??= new();
-            if (seen.Add(resolved.ID))
-                yield return resolved;
+            if (!seen.Add(resolved.ID))
+                continue;
+
+            if (BestRuleIn(resolved, name) is { } best)
+                return best;
         }
 
-        yield return ui.ActiveTheme;
+        return BestRuleIn(ui.ActiveTheme, name);
+    }
+
+    private StyleRule? BestRuleIn(StylePrototype sheet, string name)
+    {
+        StyleRule? best = null;
+        foreach (var rule in sheet.Rules)
+        {
+            if (!rule.Properties.ContainsKey(name))
+                continue;
+
+            if (!rule.StyleClass.Matches(this))
+                continue;
+
+            if (best is null || rule.StyleClass.Specificity >= best.StyleClass.Specificity)
+                best = rule;
+        }
+
+        return best;
     }
 
     #endregion

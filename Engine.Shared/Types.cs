@@ -88,7 +88,8 @@ public readonly struct EntityUid : IEquatable<EntityUid>, IComparable<EntityUid>
 }
 
 public readonly record struct ProtoId(string Value);
-public readonly struct ProtoId<T> where T : IPrototype
+
+public readonly struct ProtoId<T> : IEquatable<ProtoId<T>> where T : IPrototype
 {
     public readonly string Id;
 
@@ -98,6 +99,13 @@ public readonly struct ProtoId<T> where T : IPrototype
     }
 
     public override string ToString() => Id;
+
+    public bool Equals(ProtoId<T> other) => Id == other.Id;
+    public override bool Equals(object? obj) => obj is ProtoId<T> other && Equals(other);
+    public override int GetHashCode() => Id?.GetHashCode() ?? 0;
+
+    public static bool operator ==(ProtoId<T> left, ProtoId<T> right) => left.Equals(right);
+    public static bool operator !=(ProtoId<T> left, ProtoId<T> right) => !left.Equals(right);
 
     public static implicit operator string(ProtoId<T> id) => id.Id;
     public static implicit operator ProtoId<T>(string id) => new(id);
