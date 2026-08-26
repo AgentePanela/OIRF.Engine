@@ -13,6 +13,7 @@ public sealed partial class EntityManager
     [Dependency] internal SystemsProfiler _sysProff = default!;
 
     internal Dictionary<Type, EntitySystem> Systems = new();
+    internal List<EntitySystem> OrderedSystems = new();
 
     // lookup used by GetSystem<T>/GetSystem(Type): real type + every abstract ancestor
     private readonly Dictionary<Type, EntitySystem> _systemLookup = new();
@@ -59,7 +60,11 @@ public sealed partial class EntityManager
             instance.SetBus(EventBus);
         }
 
-        foreach ((_, var system) in Systems) // resolve dependencies and init the system
+        OrderedSystems = Systems.Values
+            .OrderBy(s => s.GetType().GetCustomAttribute<SystemPriorityAttribute>()?.Priority ?? 0)
+            .ToList();
+
+        foreach (var system in OrderedSystems) // resolve dependencies and init the system
         {
             IoCManager.ResolveDependencies(system);
             system.Init();
@@ -68,7 +73,7 @@ public sealed partial class EntityManager
 
     internal void OnShutdown()
     {
-        foreach ((_, var system) in Systems)
+        foreach (var system in OrderedSystems)
             system.OnShutdown();
     }
 
@@ -108,7 +113,7 @@ public sealed partial class EntityManager
 
     private void UpdateSystems(float dt)
     {
-        foreach ((var type, var system) in Systems)
+        foreach (var system in OrderedSystems)
         {
             if (system.FreezeUpdate)
                 continue;
@@ -116,7 +121,7 @@ public sealed partial class EntityManager
             _systemTimer.Restart();
             system.Update(dt);
             _systemTimer.Stop();
-            _sysProff.Record(type.Name, _systemTimer.Elapsed.TotalMilliseconds, 0.0);
+            _sysProff.Record(system.GetType().Name, _systemTimer.Elapsed.TotalMilliseconds, 0.0);
         }
     }
 }

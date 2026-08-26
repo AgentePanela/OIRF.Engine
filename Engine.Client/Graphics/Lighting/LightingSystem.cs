@@ -28,7 +28,6 @@ public sealed class LightingSystem : EntityDrawSystem
     [Dependency] private readonly ViewportAdapter _viewport = default!;
     [Dependency] private readonly LightOcclusionSystem _occlusionSys = default!;
     [Dependency] private readonly RenderStats _stats = default!;
-    [Dependency] private readonly TransformSystem _transformSys = default!;
 
     private readonly LightingRenderTarget _lightmap = new();
     private readonly ShadowMapRT _shadowMap = new();
@@ -178,6 +177,7 @@ public sealed class LightingSystem : EntityDrawSystem
         // find even if the camera hasn't moved, so force a rebuild next frame
         SubscribeEvent<OccluderComponent, CompAddedEvent>(OnOccluderAdded);
         SubscribeEvent<OccluderComponent, CompRemovedEvent>(OnOccluderRemoved);
+        SubscribeEvent<OccluderComponent, MoveEvent>(OnOccluderMoved);
 
         _shadowDepthEffect = _shaders.GetShader("ShadowDepth")?.Clone();
         _lightSoftEffect   = _shaders.GetShader("LightSoft")?.Clone();
@@ -561,7 +561,7 @@ public sealed class LightingSystem : EntityDrawSystem
         int pad = (int)MathF.Ceiling(_maxLightRadius);
         bounds.Inflate(pad, pad);
 
-        if (!_occludersDirty && bounds == _lastOccluderBounds && !AnyOccluderMoved())
+        if (!_occludersDirty && bounds == _lastOccluderBounds)
             return;
 
         _occluders.Clear();
@@ -592,20 +592,13 @@ public sealed class LightingSystem : EntityDrawSystem
         _occludersDirty = false;
     }
 
-    private bool AnyOccluderMoved()
-    {
-        foreach (var uid in _transformSys.MovedThisFrame)
-        {
-            if (HasComp<OccluderComponent>(uid))
-                return true;
-        }
-        return false;
-    }
-
     private void OnOccluderAdded(EntityUid uid, OccluderComponent comp, CompAddedEvent args)
         => _occludersDirty = true;
 
     private void OnOccluderRemoved(EntityUid uid, OccluderComponent comp, CompRemovedEvent args)
+        => _occludersDirty = true;
+
+    private void OnOccluderMoved(EntityUid uid, OccluderComponent comp, MoveEvent args)
         => _occludersDirty = true;
 
     // an entity occluder's edge is an interior seam - and gets culled - when
