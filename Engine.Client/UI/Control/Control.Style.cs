@@ -28,6 +28,8 @@ public abstract partial class Control
 
             _styleIdentifier = value;
             InvalidateStyleCache();
+
+            UIManager.InvalidateLayout();
         }
     }
 
@@ -56,12 +58,12 @@ public abstract partial class Control
     internal void InvalidateStyleCache()
     {
         _styleCache = null;
-        UIManager.InvalidateLayout();
     }
 
     internal void AnnounceThemeUpdate()
     {
         InvalidateStyleCache();
+        UIManager.InvalidateLayout();
         OnThemeUpdated();
         foreach (var child in Children)
             child.AnnounceThemeUpdate();

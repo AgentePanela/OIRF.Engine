@@ -140,6 +140,12 @@ public abstract partial class Control
     /// </summary>
     public void Arrange(Rectangle finalRect)
     {
+        if (!EffectivelyVisible && !ReservesSpace)
+        {
+            Bounds = Rectangle.Empty;
+            return;
+        }
+
         var contentRect = new Rectangle(
             (int)(finalRect.X + Margin.Left),
             (int)(finalRect.Y + Margin.Top),
