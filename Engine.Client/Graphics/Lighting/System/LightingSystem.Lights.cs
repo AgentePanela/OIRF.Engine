@@ -146,7 +146,6 @@ public sealed partial class LightingSystem
         foreach (var entry in _lights)
         {
             float radius = entry.Comp.Radius;
-            _stats.AddFill("lighting.radial", ScreenQuadPixels(radius));
             BuildDiskQuad(entry.WorldPos, radius);
 
             // -1 skips the shadow lookup in the shader. A light with an empty
@@ -252,21 +251,6 @@ public sealed partial class LightingSystem
 
         if (batchOpen)
             GameClient.SpriteBatch.End();
-    }
-
-    /// <summary>
-    /// Lightmap pixels a light of this radius covers, clamped to the map - the
-    /// fill estimate the profiler reports.
-    /// </summary>
-    private double ScreenQuadPixels(float radius)
-    {
-        if (_lightmap.Target is null)
-            return 0;
-
-        var side = radius * 2f * _camera.Zoom * _lighting.LightmapScale;
-        var w = Math.Min(side, _lightmap.Target.Width);
-        var h = Math.Min(side, _lightmap.Target.Height);
-        return Math.Max(0, w * h);
     }
 
     private void BuildDiskQuad(Vector2 center, float radius)

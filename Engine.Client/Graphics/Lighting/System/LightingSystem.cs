@@ -24,7 +24,6 @@ public sealed partial class LightingSystem : EntityDrawSystem
     [Dependency] private readonly IAssetManager _assets = default!;
     [Dependency] private readonly ViewportAdapter _viewport = default!;
     [Dependency] private readonly LightOcclusionSystem _occlusionSys = default!;
-    [Dependency] private readonly RenderStats _stats = default!;
 
     private readonly LightingRenderTarget _lightmap = new();
     private readonly ShadowMapRT _shadowMap = new();
@@ -163,7 +162,7 @@ public sealed partial class LightingSystem : EntityDrawSystem
 
         if (_lighting.DebugDraw)
         {
-            GameClient.GraphicsDevice.SetRenderTargetTracked(_render.FinalTarget, "FinalTarget");
+            GameClient.GraphicsDevice.SetRenderTarget(_render.FinalTarget);
             GameClient.GraphicsDevice.Viewport = _render.LastBackbufferViewport;
 
             // SpriteBatch coords are viewport relative, so draw at 0,0 -
@@ -184,17 +183,15 @@ public sealed partial class LightingSystem : EntityDrawSystem
         // unshaded pixels (stencil 1) are left untouched at full brightness.
         // SceneTarget still holds its stencil contents from DrawQueue
         // (RenderTargetUsage.PreserveContents).
-        GameClient.GraphicsDevice.SetRenderTargetTracked(scene, "SceneTarget");
+        GameClient.GraphicsDevice.SetRenderTarget(scene);
         GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, scene.Width, scene.Height);
-        _stats.AddFill("lighting.apply", (double)scene.Width * scene.Height);
 
         var lightSampler = _lighting.PixelatedLighting ? SamplerState.PointClamp : SamplerState.LinearClamp;
         _render.DrawFullscreenQuad(_lightmap.Target, RenderManager.LightMultiplyBlend, lightSampler, RenderManager.StencilTestShadedOnly);
 
         // Blit the now fully-lit SceneTarget onto FinalTarget/the backbuffer.
-        GameClient.GraphicsDevice.SetRenderTargetTracked(_render.FinalTarget, "FinalTarget");
+        GameClient.GraphicsDevice.SetRenderTarget(_render.FinalTarget);
         GameClient.GraphicsDevice.Viewport = _render.LastBackbufferViewport;
-        _stats.AddFill("lighting.blit", (double)_render.LastBackbufferViewport.Width * _render.LastBackbufferViewport.Height);
         _render.DrawFullscreenQuad(scene, BlendState.Opaque, SamplerState.PointClamp);
     }
 
@@ -313,9 +310,8 @@ public sealed partial class LightingSystem : EntityDrawSystem
         }
 
         _passTimer.Restart();
-        _render.BeginSceneRender(_lightmap.Target, "Lightmap");
-        GameClient.GraphicsDevice.ClearTracked(baseAmbient, "Lightmap");
-        _stats.AddFill("lighting.lightmap.clear", (double)lightW * lightH);
+        _render.BeginSceneRender(_lightmap.Target);
+        GameClient.GraphicsDevice.Clear(baseAmbient);
         DrawRadialLights(viewProj);
         DrawTextureLights();
         _render.EndSceneRender();

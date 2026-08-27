@@ -31,12 +31,6 @@ internal sealed class CircularBuffer<T> where T : struct
             _count++;
     }
 
-    public void Clear()
-    {
-        _head = 0;
-        _count = 0;
-    }
-
     /// <summary>
     /// Iterate samples from oldest to newest.
     /// </summary>
@@ -84,45 +78,5 @@ internal static class CircularBufferExtensions
             if (v > max) max = v;
         }
         return max;
-    }
-
-    public static double Min(this CircularBuffer<double> buffer)
-    {
-        if (buffer.Count == 0)
-            return 0.0;
-
-        double min = double.MaxValue;
-        for (int i = 0; i < buffer.Count; i++)
-        {
-            double v = buffer[i];
-            if (v < min) min = v;
-        }
-        return min;
-    }
-
-    /// <summary>
-    /// Middle sample once sorted. <paramref name="scratch"/> must be at least
-    /// Count long and is reused across calls, so this doesn't allocate.
-    /// </summary>
-    public static double Median(this CircularBuffer<double> buffer, double[] scratch)
-        => buffer.Percentile(0.5, scratch);
-
-    /// <summary>
-    /// Sample at the given percentile (0..1) once sorted. <paramref name="scratch"/>
-    /// must be at least Count long and is reused across calls, so this doesn't allocate.
-    /// </summary>
-    public static double Percentile(this CircularBuffer<double> buffer, double p, double[] scratch)
-    {
-        int count = buffer.Count;
-        if (count == 0)
-            return 0.0;
-
-        for (int i = 0; i < count; i++)
-            scratch[i] = buffer[i];
-
-        Array.Sort(scratch, 0, count);
-
-        int rank = (int)Math.Clamp(Math.Round(p * (count - 1)), 0, count - 1);
-        return scratch[rank];
     }
 }

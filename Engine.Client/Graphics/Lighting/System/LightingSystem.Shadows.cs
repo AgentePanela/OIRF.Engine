@@ -273,10 +273,9 @@ public sealed partial class LightingSystem
 
         // clear color = "no occluder", depth = far so the LESS test accepts the first write
         _buildTimer.Restart();
-        GameClient.GraphicsDevice.SetRenderTargetTracked(shadowMap, "ShadowMap");
-        GameClient.GraphicsDevice.ClearTracked(ClearOptions.Target | ClearOptions.DepthBuffer,
-            new Color(255, 255, 0, 255), 1f, 0, "ShadowMap");
-        _stats.AddFill("lighting.shadowmap", (double)shadowMap.Width * shadowMap.Height);
+        GameClient.GraphicsDevice.SetRenderTarget(shadowMap);
+        GameClient.GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.DepthBuffer,
+            new Color(255, 255, 0, 255), 1f, 0);
         _buildTimer.Stop();
         _shadowSetupMs = _buildTimer.Elapsed.TotalMilliseconds;
 

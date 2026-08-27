@@ -1,4 +1,3 @@
-using Engine.Client.Debug.Diagnostics;
 using Engine.Shared.Configuration;
 using Engine.Shared.Configuration.CVars;
 using Engine.Shared.Physics.Configuration;
@@ -13,8 +12,6 @@ public sealed class DebugToolsTab
     private readonly IConfigurationManager _cfg;
     private readonly CheckBox _collisionCheck;
     private readonly CheckBox _scaleCheck;
-    private readonly CheckBox _gpuSyncCheck;
-    private readonly Button _sweepBtn;
     private bool _disposed;
 
     public Control Root { get; }
@@ -45,21 +42,6 @@ public sealed class DebugToolsTab
         _scaleCheck.OnToggled += pressed => _cfg.Set(GameCVars.ScaleOuter, pressed);
         box.AddChild(_scaleCheck);
 
-        box.AddChild(new Label { Text = "Profiler" });
-
-        _gpuSyncCheck = new CheckBox { Text = "GPU sync (inflates frame time, measures real GPU cost)" };
-        _gpuSyncCheck.OnToggled += pressed => _cfg.Set(ProfilerCvars.GpuSync, pressed);
-        box.AddChild(_gpuSyncCheck);
-
-        var sweepRow = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 8 };
-        _sweepBtn = new Button("Run Sweep");
-        _sweepBtn.OnClick += _ => GameClient.Sweep.Start();
-        var dumpBtn = new Button("Dump Report (F2)");
-        dumpBtn.OnClick += _ => ProfilerReport.Dump();
-        sweepRow.AddChild(_sweepBtn);
-        sweepRow.AddChild(dumpBtn);
-        box.AddChild(sweepRow);
-
         ReloadCvars();
         _cfg.OnConfigLoad += ReloadCvars;
     }
@@ -75,6 +57,5 @@ public sealed class DebugToolsTab
     {
         _collisionCheck.Pressed = _cfg.Get(PhysicsCvars.CollisionMask);
         _scaleCheck.Pressed = _cfg.Get(GameCVars.ScaleOuter);
-        _gpuSyncCheck.Pressed = _cfg.Get(ProfilerCvars.GpuSync);
     }
 }

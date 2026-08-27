@@ -71,8 +71,8 @@ public sealed partial class LightingSystem
         Texture2D source = _lightmap.Target;
         for (int i = 0; i < iterations; i++)
         {
-            BlurPass(source, _wallBleed.A, 1f, blurScale, "WallBleedA");
-            BlurPass(_wallBleed.A, _wallBleed.B, 0f, blurScale, "WallBleedB");
+            BlurPass(source, _wallBleed.A, 1f, blurScale);
+            BlurPass(_wallBleed.A, _wallBleed.B, 0f, blurScale);
             source = _wallBleed.B;
         }
 
@@ -80,9 +80,8 @@ public sealed partial class LightingSystem
         _wmViewProj?.SetValue(viewProj);
         _wmBleedStrength?.SetValue(_lighting.WallBleedStrength);
 
-        GameClient.GraphicsDevice.SetRenderTargetTracked(_lightmap.Target, "Lightmap");
+        GameClient.GraphicsDevice.SetRenderTarget(_lightmap.Target);
         GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, _lightmap.Target.Width, _lightmap.Target.Height);
-        _stats.AddFill("lighting.wallbleed.merge", (double)_lightmap.Target.Width * _lightmap.Target.Height);
         GameClient.GraphicsDevice.BlendState = BlendState.Opaque;
         GameClient.GraphicsDevice.DepthStencilState = DepthStencilState.None;
         GameClient.GraphicsDevice.RasterizerState = RasterizerState.CullNone;
@@ -102,21 +101,20 @@ public sealed partial class LightingSystem
         if (_lightBlurEffect is null || _blurScratch.Target is null || _lightmap.Target is null)
             return;
 
-        BlurPass(_lightmap.Target, _blurScratch.Target, 1f, 1f, "BlurScratch");
-        BlurPass(_blurScratch.Target, _lightmap.Target, 0f, 1f, "Lightmap");
+        BlurPass(_lightmap.Target, _blurScratch.Target, 1f);
+        BlurPass(_blurScratch.Target, _lightmap.Target, 0f);
 
         GameClient.GraphicsDevice.BlendState = BlendState.AlphaBlend;
     }
 
-    private void BlurPass(Texture2D source, RenderTarget2D dest, float isHorizontal, float blurScale, string destName)
+    private void BlurPass(Texture2D source, RenderTarget2D dest, float isHorizontal, float blurScale = 1f)
     {
         _blSourceMap?.SetValue(source);
         _blSourceTexel?.SetValue(new Vector2(1f / source.Width, 1f / source.Height));
         _blIsHorizontal?.SetValue(isHorizontal);
         _blBlurScale?.SetValue(blurScale);
 
-        GameClient.GraphicsDevice.SetRenderTargetTracked(dest, destName);
-        _stats.AddFill($"lighting.blur.{destName}", (double)dest.Width * dest.Height);
+        GameClient.GraphicsDevice.SetRenderTarget(dest);
         GameClient.GraphicsDevice.BlendState = BlendState.Opaque;
         // SpriteBatch leaves CullCounterClockwise on, which would cull the quad
         GameClient.GraphicsDevice.RasterizerState = RasterizerState.CullNone;
