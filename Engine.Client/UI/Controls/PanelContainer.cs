@@ -74,7 +74,7 @@ public partial class PanelContainer : Control
             MathHelper.Max(0, availableSize.Y - overflow.Top - overflow.Bottom));
 
         var size = Vector2.Zero;
-        foreach (var child in Children)
+        foreach (var child in ChildrenList)
         {
             child.Measure(inner);
             size = Vector2.Max(size, child.DesiredSize);
@@ -86,7 +86,7 @@ public partial class PanelContainer : Control
     protected override void ArrangeCore(Rectangle finalRect)
     {
         var panelRect = PanelRect(finalRect);
-        foreach (var child in Children)
+        foreach (var child in ChildrenList)
             child.Arrange(panelRect);
     }
 

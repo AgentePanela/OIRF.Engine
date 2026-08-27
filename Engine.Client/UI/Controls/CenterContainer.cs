@@ -11,7 +11,7 @@ public partial class CenterContainer : PanelContainer
     {
         var size = Vector2.Zero;
 
-        foreach (var child in Children)
+        foreach (var child in ChildrenList)
         {
             child.Measure(availableSize);
             size = Vector2.Max(size, child.DesiredSize);
@@ -22,7 +22,7 @@ public partial class CenterContainer : PanelContainer
 
     protected override void ArrangeCore(Rectangle finalRect)
     {
-        foreach (var child in Children)
+        foreach (var child in ChildrenList)
         {
             var width = MathHelper.Min(child.DesiredSize.X, finalRect.Width);
             var height = MathHelper.Min(child.DesiredSize.Y, finalRect.Height);

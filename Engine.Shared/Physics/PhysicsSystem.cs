@@ -14,6 +14,7 @@ namespace Engine.Shared.Physics;
 /// Listens to CollisionStartEvent fired by CollisionSystem and
 /// applies the push - CollisionSystem never touches transforms.
 /// </summary>
+[SystemPriority(-997)]
 public sealed class PhysicsSystem : EntitySystem
 {
     [Dependency] private readonly CollisionSystem _collision = default!;

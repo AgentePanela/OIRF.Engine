@@ -242,6 +242,9 @@ public sealed class StylePropertyGenerator : IIncrementalGenerator
                     get => {{body}};
                     set
                     {
+                        if (Equals({{field.FieldName}}, value))
+                            return;
+
                         {{field.FieldName}} = value;
                         InvalidateLayout();
                     }

@@ -14,4 +14,16 @@ public static class GameCVars
 
     public static CVarDef<bool> ScaleOuter
         = CVarDef.Create("game.scale", true);
+
+    public static CVarDef<bool> Vsync
+        = CVarDef.Create("game.vsync", true);
+
+    /// <summary>
+    /// When enabled, limits the framerate to the <seealso cref="FramerateLimit"/> value.
+    /// </summary>
+    public static CVarDef<bool> FixedTimestep
+        = CVarDef.Create("game.fixed-timestep", true);
+
+    public static CVarDef<int> FramerateLimit
+        = CVarDef.Create("game.framerate-limit", 60);
 }

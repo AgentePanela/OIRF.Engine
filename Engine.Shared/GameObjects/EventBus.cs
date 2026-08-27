@@ -27,8 +27,10 @@ public interface IEntEventCustomValidation
 /// </summary>
 public sealed class EventBus
 {
+    // todo: maybe change the tuple to a interface like CompHandler<TransformComponent, MoveEvent>
     [Dependency] EntityManager _entityManager = default!;
-    private readonly Dictionary<Type, List<Delegate>> _events = new();
+
+    private readonly Dictionary<Type, List<object>> _events = new();
 
     internal void Init()
     {
@@ -52,7 +54,7 @@ public sealed class EventBus
 
         if (!_events.TryGetValue(type, out var list))
         {
-            list = new List<Delegate>();
+            list = new List<object>();
             _events[type] = list;
         }
 
@@ -80,11 +82,13 @@ public sealed class EventBus
 
         if (!_events.TryGetValue(type, out var list))
         {
-            list = new List<Delegate>();
+            list = new List<object>();
             _events[type] = list;
         }
 
-        list.Add(handler);
+        // CompT/EventT are closed over here, once, at subscribe time
+        Action<EntityUid, Component, EntityEvent> invoke = (u, c, e) => handler(u, (CompT)c, (EventT)e);
+        list.Add((CompType: typeof(CompT), Invoke: invoke));
     }
 
     /// <summary>
@@ -98,9 +102,9 @@ public sealed class EventBus
         if (!_events.TryGetValue(typeof(T), out var list))
             return;
 
-        foreach (var del in list)
+        foreach (var sub in list)
         {
-           if (del is GlobalEventHandler<T> action)
+           if (sub is GlobalEventHandler<T> action)
                 ActionGlobalEvent(action, ev);
 
             if (ev.Handled)
@@ -113,7 +117,7 @@ public sealed class EventBus
         if (action is IEntEventCustomValidation validator)
             if (!validator.Validate(ev))
                 return;
-        
+
         action(ev);
     }
 
@@ -131,9 +135,9 @@ public sealed class EventBus
         if (!_events.TryGetValue(typeof(T), out var list))
             return;
 
-        foreach (var del in list)
+        foreach (var sub in list)
         {
-            switch (del)
+            switch (sub)
             {
                 // event only handler
                 case GlobalEventHandler<T> action: // reach events without comp
@@ -141,12 +145,7 @@ public sealed class EventBus
                     break;
 
                 // Comp handler
-                default:
-                    var type = del.GetType().GenericTypeArguments;
-                    if (type.Length != 2)
-                        continue;
-
-                    var compType = type[0];
+                case (Type compType, Action<EntityUid, Component, EntityEvent> invoke):
                     Component comp;
 
                     if (ev is ComponentEvent cv)
@@ -157,12 +156,12 @@ public sealed class EventBus
                     }
                     else if (!_entityManager.TryComp(uid, compType, out comp!))
                         continue;
-                    
+
                     if (ev is IEntEventCustomValidation validator)
                         if (!validator.Validate(ev, uid, comp))
                             continue;
 
-                    del.DynamicInvoke(uid, comp, ev);
+                    invoke(uid, comp, ev);
 
                     break;
             }

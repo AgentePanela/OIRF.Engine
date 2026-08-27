@@ -11,7 +11,7 @@ internal static class EntityManagerExtensions
 
     internal static void DrawSystems(this EntityManager entityManager, float dt)
     {
-        foreach ((var type, var system) in entityManager.Systems)
+        foreach (var system in entityManager.OrderedSystems)
         {
             if (system is not EntityDrawSystem eds)
                 continue;
@@ -22,7 +22,7 @@ internal static class EntityManagerExtensions
             entityManager._systemTimer.Restart();
             eds.Draw(dt);
             entityManager._systemTimer.Stop();
-            entityManager._sysProff.Record(type.Name, 0.0, entityManager._systemTimer.Elapsed.TotalMilliseconds);
+            entityManager._sysProff.Record(system.GetType().Name, 0.0, entityManager._systemTimer.Elapsed.TotalMilliseconds);
         }
     }
 }

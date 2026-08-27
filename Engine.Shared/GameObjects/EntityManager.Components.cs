@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using Engine.Shared.Prototypes;
 using Engine.Shared.Threading;
 
@@ -10,7 +8,7 @@ namespace Engine.Shared.GameObjects;
 
 public sealed partial class EntityManager
 {
-    private ConcurrentDictionary<EntityUid, Component>? TryGetPool(Type type)
+    private Dictionary<EntityUid, Component>? TryGetPool(Type type)
     {
         if (_scene.Components.TryGetValue(type, out var pool))
             return pool;
@@ -171,77 +169,21 @@ public sealed partial class EntityManager
     /// <summary>
     /// Get all entities with the component
     /// </summary>
-    public IEnumerable<(EntityUid uid, T comp)> Query<T>() where T : Component
-    {
-        var pool = TryGetPool(typeof(T));
-
-        if (pool is null)
-            yield break;
-
-        foreach (var (uid, comp) in pool)
-            yield return (uid, (T)comp);
-    }
+    public ComponentQuery<T> Query<T>() where T : Component
+        => new(TryGetPool(typeof(T)));
 
     /// <summary>
     /// Get all entities with the selected components
     /// </summary>
-    public IEnumerable<(EntityUid uid, T1 comp1, T2 comp2)> 
-        Query<T1, T2>() where T1 : Component where T2 : Component
-    {
-        var pool1 = TryGetPool(typeof(T1));
-        var pool2 = TryGetPool(typeof(T2));
-
-        if (pool1 is null || pool2 is null)
-            yield break;
-
-        // get the comp with less entities
-        var primary = pool1.Count <= pool2.Count ? pool1 : pool2;
-        var secondary = primary == pool1 ? pool2 : pool1;
-
-        foreach (var (uid, comp) in primary)
-        {
-            if (secondary.TryGetValue(uid, out var other))
-            {
-                if (primary == pool1)
-                    yield return (uid, (T1)comp, (T2)other);
-                else
-                    yield return (uid, (T1)other, (T2)comp);
-            }
-        }
-    }
+    public ComponentQuery<T1, T2> Query<T1, T2>() where T1 : Component where T2 : Component
+        => new(TryGetPool(typeof(T1)), TryGetPool(typeof(T2)));
 
     /// <summary>
     /// Get all entities with the selected components
     /// </summary>
-    public IEnumerable<(EntityUid uid, T1, T2, T3)>
-        Query<T1, T2, T3>() where T1 : Component where T2 : Component where T3 : Component
-    {
-        var p1 = TryGetPool(typeof(T1));
-        var p2 = TryGetPool(typeof(T2));
-        var p3 = TryGetPool(typeof(T3));
-
-        if (p1 is null || p2 is null || p3 is null)
-            yield break;
-
-        // get the component with less entities
-        var pools = new[] { p1, p2, p3 };
-        var primary = pools.OrderBy(p => p.Count).First();
-
-        foreach (var (uid, _) in primary)
-        {
-            if (p1.ContainsKey(uid) &&
-                p2.ContainsKey(uid) &&
-                p3.ContainsKey(uid))
-            {
-                yield return (
-                    uid,
-                    (T1)p1[uid],
-                    (T2)p2[uid],
-                    (T3)p3[uid]
-                );
-            }
-        }
-    }
+    public ComponentQuery<T1, T2, T3> Query<T1, T2, T3>()
+        where T1 : Component where T2 : Component where T3 : Component
+        => new(TryGetPool(typeof(T1)), TryGetPool(typeof(T2)), TryGetPool(typeof(T3)));
 
     #endregion
 }

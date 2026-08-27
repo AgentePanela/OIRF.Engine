@@ -1,11 +1,10 @@
 using Engine.Shared.GameObjects;
 using Microsoft.Xna.Framework;
 
-namespace Engine.Shared.GameObjects.Components.Lighting;
+namespace Engine.Shared.Lighting;
 
 /// <summary>
-/// Represents a light whose shape is defined by a texture. Useful for
-/// spotlights, glowing windows, sign panels, custom shaped lights, etc.
+/// Represents a light whose shape is defined by a texture.
 /// </summary>
 [RegisterComponent("TextureLight")]
 public sealed class TextureLightComponent : Component

@@ -1,12 +1,10 @@
 using Microsoft.Xna.Framework;
 
-namespace Engine.Shared.GameObjects.Components.Lighting;
+namespace Engine.Shared.Lighting;
 
 /// <summary>
 /// Shared falloff/shadow properties of any light that radiates from a point
 /// (<see cref="PointLightComponent"/>, <see cref="SpotLightComponent"/>).
-/// Lets <c>LightingSystem</c> collect and shadow-cast both kinds through the
-/// same code path.
 /// </summary>
 public interface IRadialLight
 {

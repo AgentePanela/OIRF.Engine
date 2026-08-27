@@ -4,10 +4,22 @@ using Microsoft.Xna.Framework;
 
 namespace Engine.Shared.GameObjects;
 
+/// <summary>
+/// Raised on an entity changes it Position or Angle in the Transform.
+/// </summary>
+public sealed class MoveEvent : EntityEvent
+{
+}
+
+// runs before EVERYONE AHAHHJAHAHGAHGBAYHAYHHYAHAHBNA\Ha
+[SystemPriority(-999)]
 public sealed class TransformSystem : EntitySystem
 {
     // Last Position/Angle seen per entity, last tick
     private readonly Dictionary<EntityUid, (Vector2 Pos, float Angle)> _lastTransform = new();
+
+    // Reused and re-raised every time an entity moves instead of a fresh MoveEvent per ent
+    private readonly MoveEvent _moveEvent = new();
 
     public override void Init()
     {
@@ -34,6 +46,9 @@ public sealed class TransformSystem : EntitySystem
             if (posDelta == Vector2.Zero && angleDelta == 0f)
                 continue;
 
+            _moveEvent.Handled = false;
+            RaiseEvent(uid, _moveEvent);
+
             MoveChildren(uid, posDelta, angleDelta);
         }
     }
@@ -48,6 +63,9 @@ public sealed class TransformSystem : EntitySystem
             t.Position += posDelta;
             t.Angle += angleDelta;
             _lastTransform[uid] = (t.Position, t.Angle);
+
+            _moveEvent.Handled = false;
+            RaiseEvent(uid, _moveEvent);
 
             MoveChildren(uid, posDelta, angleDelta);
         }

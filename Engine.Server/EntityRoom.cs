@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using Engine.Shared.GameObjects;
 
 namespace Engine.Server;
@@ -13,5 +14,5 @@ internal sealed class EntityRoom : IEntityScene
 {
     public ConcurrentDictionary<EntityUid, Entity> Entities { get; } = new();
     public int EntUidIndex { get; set; } = 1;
-    public ConcurrentDictionary<Type, ConcurrentDictionary<EntityUid, Component>> Components { get; } = new();
+    public ConcurrentDictionary<Type, Dictionary<EntityUid, Component>> Components { get; } = new();
 }

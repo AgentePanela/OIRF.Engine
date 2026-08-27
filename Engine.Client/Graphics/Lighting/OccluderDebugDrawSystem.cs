@@ -1,7 +1,7 @@
 using Engine.Client.Graphics.Fonts;
 using Engine.Shared.Configuration;
 using Engine.Shared.GameObjects;
-using Engine.Shared.GameObjects.Components.Lighting;
+using Engine.Shared.Lighting;
 using Microsoft.Xna.Framework;
 
 namespace Engine.Client.Graphics.Lighting;

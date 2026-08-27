@@ -53,6 +53,8 @@ public abstract partial class Control : IDisposable
     private readonly List<Control> _children = new();
     public IReadOnlyList<Control> Children => _children;
 
+    protected List<Control> ChildrenList => _children;
+
     /// <summary>
     /// Our parent inside the control tree.
     /// </summary>
@@ -63,7 +65,7 @@ public abstract partial class Control : IDisposable
 
     public T? FindControl<T>(string name) where T : Control
     {
-        foreach (var child in Children)
+        foreach (var child in _children)
         {
             if (child.Name == name && child is T typed)
                 return typed;
@@ -180,7 +182,13 @@ public abstract partial class Control : IDisposable
     internal void UpdateAll(float dt)
     {
         Update(dt);
-        foreach (var child in Children)
+
+        // _children directly, not the Children property - Children is typed as
+        // IReadOnlyList<Control>, and foreach through that interface boxes List<T>'s
+        // own struct enumerator. This runs for every control in the tree, every
+        // frame, recursively - by far the largest remaining allocation source once
+        // the per-frame CollisionSystem/AutoTileSystem ones were fixed.
+        foreach (var child in _children)
             child.UpdateAll(dt);
     }
 

@@ -8,7 +8,6 @@ using Engine.Shared.IoC;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
-using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
@@ -50,20 +49,6 @@ public sealed partial class RenderManager
     // in a layer keep their submit order instead of jumping around.
     private int _submitCounter;
 
-    // Single flat sort key: Layer first (coarse bucket), then Depth within it,
-    // then SubmitOrder as a stable tiebreak. Same ordering as the old
-    // SortedDictionary<Layer, List<RenderQueue>> produced, just without the
-    // per-layer bucketing - one sort over one list instead of one dictionary
-    // lookup per submit plus one sort per layer.
-    private static readonly Comparison<RenderQueue> DepthComparison = (a, b) =>
-    {
-        var layerCmp = a.Target.Layer.CompareTo(b.Target.Layer);
-        if (layerCmp != 0)
-            return layerCmp;
-
-        var depthCmp = a.Target.Depth.CompareTo(b.Target.Depth);
-        return depthCmp != 0 ? depthCmp : a.SubmitOrder.CompareTo(b.SubmitOrder);
-    };
 
     // Marks stencil=0 (shaded) / stencil=1 (unshaded) while the merged queue draws
     // into SceneTarget, so LightingSystem.ApplyAfterWorld can multiply the lightmap
@@ -279,7 +264,8 @@ public sealed partial class RenderManager
         DepthStencilState StencilFor(bool unshaded) =>
             !writeStencil ? DepthStencilState.None : (unshaded ? StencilWriteUnshaded : StencilWriteShaded);
 
-        queue.Sort(DepthComparison);
+        queue.Sort();
+
         foreach (var r in queue)
         {
             if (r.Target is IShapeRenderable)

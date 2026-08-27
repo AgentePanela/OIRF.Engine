@@ -204,8 +204,10 @@ public class GameClient : Game
         Graphics.PreferredBackBufferHeight = options.Height;
         Graphics.IsFullScreen = options.FullScreen;
         Graphics.GraphicsProfile = options.GraphicsProfile;
-        // Graphics.SynchronizeWithVerticalRetrace = false;
-        // IsFixedTimeStep = false;
+        Graphics.SynchronizeWithVerticalRetrace = ConfigManager.Get(GameCVars.Vsync);
+        IsFixedTimeStep = ConfigManager.Get(GameCVars.FixedTimestep);
+        var targetFramerate = (double)ConfigManager.Get(GameCVars.FramerateLimit);
+        TargetElapsedTime = TimeSpan.FromSeconds(1d / targetFramerate);
 
         // Apply the graphic presentation changes.
         Graphics.ApplyChanges();
@@ -299,7 +301,7 @@ public class GameClient : Game
     {
         if (_paused)
             return;
-        
+
         int agen0 = GC.CollectionCount(0);
         int agen1 = GC.CollectionCount(1);
         int agen2 = GC.CollectionCount(2);

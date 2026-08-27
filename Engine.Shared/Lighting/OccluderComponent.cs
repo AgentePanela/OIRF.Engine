@@ -1,11 +1,9 @@
 using Engine.Shared.GameObjects;
 
-namespace Engine.Shared.GameObjects.Components.Lighting;
+namespace Engine.Shared.Lighting;
 
 /// <summary>
-/// Marks an entity as a light occluder. Any <see cref="PointLightComponent"/>
-/// or <see cref="TextureLightComponent"/> with <c>CastShadows = true</c> will
-/// cast a ray-cast shadow around this entity.
+/// Marks an entity as a light occluder.
 /// </summary>
 [RegisterComponent("Occluder")]
 public sealed class OccluderComponent : Component

@@ -12,6 +12,7 @@ namespace Engine.Shared.Physics.Fixtures;
 /// Detects overlaps between CollisionComponents, computes the MTV (Minimum Translation Vector)
 /// and fires CollisionStartEvent / CollisionEndEvent.
 /// </summary>
+[SystemPriority(-998)]
 public sealed class CollisionSystem : EntitySystem
 {
     [Dependency] private readonly IConfigurationManager _cfg = default!;
@@ -27,10 +28,29 @@ public sealed class CollisionSystem : EntitySystem
     private readonly Dictionary<(int, int), List<int>> _spatialHash = new();
     private readonly HashSet<long> _testedPairs = new();
 
+    private readonly HashSet<EntityUid> _movedThisFrame = new();
+    private readonly HashSet<EntityUid> _knownEntities = new();
+
     public override void Init()
     {
         base.Init();
         _cfg.Subs(PhysicsCvars.CellSize, v => CellSize = v);
+        SubscribeEvent<CollisionComponent, MoveEvent>(OnEntityMoved);
+    }
+
+    private void OnEntityMoved(EntityUid uid, CollisionComponent comp, MoveEvent args)
+        => _movedThisFrame.Add(uid);
+
+    private static bool SetsOverlap(HashSet<string> a, HashSet<string> b)
+    {
+        var (small, large) = a.Count <= b.Count ? (a, b) : (b, a);
+        foreach (var item in small)
+        {
+            if (large.Contains(item))
+                return true;
+        }
+
+        return false;
     }
  
     public override void Update(float dt)
@@ -102,6 +122,13 @@ public sealed class CollisionSystem : EntitySystem
                 var (uidA, transformA, colA) = _entityBuffer[a];
                 var (uidB, transformB, colB) = _entityBuffer[b];
 
+                if (!_movedThisFrame.Contains(uidA) && !_movedThisFrame.Contains(uidB)
+                    && _knownEntities.Contains(uidA) && _knownEntities.Contains(uidB))
+                {
+                    CarryForwardPairs(uidA, colA, uidB, colB);
+                    continue;
+                }
+
                 CheckEntityPair(
                     uidA, transformA.Position, colA,
                     uidB, transformB.Position, colB);
@@ -122,6 +149,23 @@ public sealed class CollisionSystem : EntitySystem
         _activePairs.Clear();
         foreach (var p in _currentPairs)
             _activePairs.Add(p);
+
+        _movedThisFrame.Clear();
+
+        _knownEntities.Clear();
+        foreach (var (uid, _, _) in _entityBuffer)
+            _knownEntities.Add(uid);
+    }
+
+    private void CarryForwardPairs(EntityUid uidA, CollisionComponent colA, EntityUid uidB, CollisionComponent colB)
+    {
+        foreach (var (idA, _) in colA.Fixtures)
+        foreach (var (idB, _) in colB.Fixtures)
+        {
+            var pair = MakePair(uidA, idA, uidB, idB);
+            if (_activePairs.Contains(pair))
+                _currentPairs.Add(pair);
+        }
     }
 
     #region Collision
@@ -235,7 +279,7 @@ public sealed class CollisionSystem : EntitySystem
 
             foreach (var (_, fixture) in collision.Fixtures)
             {
-                if (mask != null && !mask.Overlaps(fixture.Layers))
+                if (mask != null && !SetsOverlap(mask, fixture.Layers))
                     continue;
 
                 if (!IsPosInsideFixture(worldPos, transform.Position, fixture.Shape))
@@ -294,7 +338,7 @@ public sealed class CollisionSystem : EntitySystem
         {
             foreach (var (id, fixture) in col.Fixtures)
             {
-                if (mask != null && !mask.Overlaps(fixture.Layers))
+                if (mask != null && !SetsOverlap(mask, fixture.Layers))
                     continue;
  
                 if (!RayVsShape(origin, direction, maxDistance, transform.Position, fixture.Shape, out float dist))
@@ -334,7 +378,7 @@ public sealed class CollisionSystem : EntitySystem
         {
             foreach (var (id, fixture) in col.Fixtures)
             {
-                if (mask != null && !mask.Overlaps(fixture.Layers))
+                if (mask != null && !SetsOverlap(mask, fixture.Layers))
                     continue;
  
                 if (!RayVsShape(origin, direction, maxDistance, transform.Position, fixture.Shape, out float dist))
@@ -365,8 +409,8 @@ public sealed class CollisionSystem : EntitySystem
             fixA.Shape.GetAABB(posA, out float axMin, out float ayMin, out float axMax, out float ayMax);
             foreach (var (idB, fixB) in colB.Fixtures)
             {
-                bool aSeesB = fixA.Masks.Overlaps(fixB.Layers);
-                bool bSeesA = fixB.Masks.Overlaps(fixA.Layers);
+                bool aSeesB = SetsOverlap(fixA.Masks, fixB.Layers);
+                bool bSeesA = SetsOverlap(fixB.Masks, fixA.Layers);
                 if (!aSeesB && !bSeesA)
                     continue;
 

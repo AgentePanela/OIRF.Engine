@@ -28,7 +28,7 @@ public partial class BoxContainer : PanelContainer
         var crossMax = 0f;
         var count = 0;
 
-        foreach (var child in Children)
+        foreach (var child in ChildrenList)
         {
             child.Measure(availableSize);
 
@@ -66,7 +66,7 @@ public partial class BoxContainer : PanelContainer
         var desiredTotal = 0f;
         var expandCount = 0;
 
-        foreach (var child in Children)
+        foreach (var child in ChildrenList)
         {
             desiredTotal += horizontal ? child.DesiredSize.X : child.DesiredSize.Y;
 
@@ -82,7 +82,7 @@ public partial class BoxContainer : PanelContainer
 
         float offset = horizontal ? finalRect.X : finalRect.Y;
 
-        foreach (var child in Children)
+        foreach (var child in ChildrenList)
         {
             var mainSize = horizontal ? child.DesiredSize.X : child.DesiredSize.Y;
             var expands = horizontal ? child.HorizontalExpand : child.VerticalExpand;

@@ -16,3 +16,13 @@ public sealed class RegisterComponentAttribute(string name) : Attribute
 public sealed class IgnoreSystemRegistryAttribute() : Attribute
 {
 }
+
+/// <summary>
+/// Controls this system priority order for Init/Update/Draw/Shutdown against every other
+/// system.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class SystemPriorityAttribute(int priority) : Attribute
+{
+    public int Priority => priority;
+}
