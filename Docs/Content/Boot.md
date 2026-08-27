@@ -69,7 +69,7 @@ public abstract class LoadingScene : Scene
 
 | Method | Runs when | Default behavior |
 |---|---|---|
-| `StartLoading()` | Once, from `OnSceneStart()`, unless `_autoStartLoading` is set to `false` | Initializes the asset manager and calls `IFontManager.BootstrapDefaults()` |
+| `StartLoading()` | Once, from `OnSceneStart()`, unless `_autoStartLoading` is set to `false` | Initializes the asset manager and audio manager |
 | `TexturesPhase(dt)` | Every frame while textures are still loading | Ticks the asset manager's loading progress |
 | `RegistryPhase()` | Once textures finish loading | Loads scene/component factories and initializes `EntityManager` on a background `Task` |
 | `LoadingCompleted()` | Once, after the registry task finishes | Sets `GameState = Running` and raises `LoadingFinishedEvent` |

@@ -1,6 +1,6 @@
 # Content — Game Developer Documentation
 
-Welcome to the **ORIF Engine** game developer documentation.
+Welcome to the **Engine** game developer documentation.
 
 This section covers every API and system that you will interact with when building a game using the ORIF Engine. If you are looking to modify the engine itself, see the [Engine docs](../Engine/Home.md).
 
@@ -23,3 +23,4 @@ This section covers every API and system that you will interact with when buildi
 | [Tags](Tags.md) | Lightweight entity tagging |
 | [Storage](Storage.md) | Saving and loading user data |
 | [UI](UI.md) | Building user interfaces |
+| [UI Controls](UIControls.md) | Reference for every built-in UI control |

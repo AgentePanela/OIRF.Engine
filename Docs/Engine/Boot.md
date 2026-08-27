@@ -58,7 +58,7 @@ graph TD
 
 Once MonoGame initializes the native graphic graphics card context:
 * Instantiates `SpriteBatch`.
-* Prepares the Myra UI context (`InterfaceManager.Init()`).
+* Prepares the UI context (`InterfaceManager.Init()`).
 * Adds the `SceneManager` component to MonoGame's game components (`Components.Add(Scenes)`).
 
 ---

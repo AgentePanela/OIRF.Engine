@@ -23,7 +23,7 @@ Everything you need to build a game on top of ORIF.
 | [Animations](Content/Animations.md) | Spritesheet/frame-based animations via info.yml |
 | [Lighting](Content/Lighting.md) | Dynamic 2D lighting, shadows, and ambient light |
 | [Audio](Content/Audio.md) | ECS-integrated sound, tags, spatial audio, and volume |
-| [Fonts](Content/Fonts.md) | Font registration, FontKey, and TextStyle |
+| [Fonts](Content/Fonts.md) | Font families, IFontManager, and world-space text |
 | [Shaders](Content/Shaders.md) | Custom shaders and the resource builder pipeline |
 | [Input](Content/Input.md) | Keyboard, mouse, gamepad, and action maps |
 | [Physics](Content/Physics.md) | Collision, physics components, and raycasting |
@@ -32,7 +32,8 @@ Everything you need to build a game on top of ORIF.
 | [Localization](Content/Localization.md) | Multi-language support with Fluent |
 | [Tags](Content/Tags.md) | Entity tagging system |
 | [Storage](Content/Storage.md) | Persistent user data (saves, config) |
-| [UI](Content/UI.md) | UI canvases, windows, and widgets |
+| [UI](Content/UI.md) | Control tree, layout, styling, windows |
+| [UI Controls](Content/UIControls.md) | Reference for every built-in UI control |
 
 ### 🔧 Engine — For Engine Developers
 Internals and extension guides for contributors.

@@ -282,6 +282,17 @@ public sealed class MySpriteSystem : EntityDrawSystem
 }
 ```
 
+### System Ordering
+
+By default systems run in no particular order relative to each other. Use `[SystemPriority(n)]` on a system class to control where it falls in a single, global ordering shared by `Init`/`Update`/`Draw`/`OnShutdown` across every system:
+
+```csharp
+[SystemPriority(-999)]
+public sealed class TransformSystem : EntitySystem { ... }
+```
+
+Systems are sorted ascending by priority (lower runs first), with unannotated systems defaulting to `0`. A handful of foundational engine systems already claim negative priorities to guarantee they run before regular gameplay systems each frame — e.g. `TransformSystem` (`-999`), `CollisionSystem` (`-998`), `PhysicsSystem` (`-997`). Pick priorities for your own systems relative to those (or to each other) only when the ordering actually matters — most systems don't need this attribute at all.
+
 ### EntitySystem Shorthand Methods
 
 All `EntityManager` and `EventBus` methods are available as protected/public shorthands on `EntitySystem`:

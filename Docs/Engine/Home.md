@@ -49,5 +49,5 @@ c:\Users\<user>\Documents\Project ORIF\
 ### Component Roles
 
 1. **Engine.Shared**: Must not contain any client-side graphics dependencies (no MonoGame `ContentManager` or UI canvas instances). It handles standard database prototypes, files storage, event-bus routing, and baseline physics.
-2. **Engine.Client**: Integrates MonoGame rendering ticks, audio channels, Myra UI event hooks, and viewport adapters. It depends on `Engine.Shared`.
+2. **Engine.Client**: Integrates MonoGame rendering ticks, audio channels, the UI toolkit input hooks, and viewport adapters. It depends on `Engine.Shared`.
 3. **Engine.Server**: Operates as a headless process running the simulation tick loop without rendering viewports.

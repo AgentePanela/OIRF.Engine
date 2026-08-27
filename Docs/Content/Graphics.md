@@ -73,11 +73,10 @@ if (GameClient.Assets.GetSprite("player/idle", out var sprite))
 
 ### Label2D
 
-`Label2D` draws text with optional shadow and outline. It can be driven three ways: a raw `SpriteFontBase`, a managed `FontKey`, or a high-level `TextStyle` (see [Fonts](Fonts.md) for how those resolve to an actual font).
+`Label2D` draws text with optional shadow and outline. It can be driven by a raw `SpriteFontBase`, or by a size/family/`FontVariant` resolved through `IFontManager` for you (see [Fonts](Fonts.md)).
 
 ```csharp
-// Managed font-key path
-var label = new Label2D(FontKey.UiBody, "Hello, World!")
+var label = new Label2D("Hello, World!", size: 20f, family: "Arial", FontVariant.Bold)
 {
     Color = Color.White,
     Layer = 10,
@@ -91,8 +90,8 @@ var label = new Label2D(FontKey.UiBody, "Hello, World!")
 
 _renderer.Submit(label, position);
 
-// High-level style path, font/size/color/effects all come from the style
-var title = new Label2D(TextStyle.Title, "Game Over");
+// Default family/size
+var title = new Label2D("Game Over", size: 32f);
 _renderer.Submit(title, position);
 ```
 

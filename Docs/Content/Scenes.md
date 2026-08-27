@@ -14,8 +14,8 @@ using Engine.Client.UI;
 
 public sealed class GameplayScene : Scene
 {
-    // Optionally set a default UI canvas for this scene (null = no UI)
-    public override UICanvas? DefaultCanvas { get; protected set; } = null;
+    // Optionally give this scene its own HUD (null = no UI) - see the UI docs
+    public override Layout? Layout { get; } = null;
 
     public override void OnSceneStart()
     {
@@ -110,17 +110,17 @@ Scene? current = GameClient.Scenes.CurrentScene;
 
 ---
 
-## DefaultCanvas
+## Layout (scene HUD)
 
-Each scene can declare a default `UICanvas`. When the scene loads, the engine automatically installs the canvas as the active UI screen.
+Each scene can declare a `Layout` — its own full-screen HUD. When the scene starts, the engine automatically adds it under `UIManager.Root`; it's removed again when the scene ends.
 
 ```csharp
-public override UICanvas? DefaultCanvas { get; protected set; } = new MyHUD();
+public override Layout? Layout { get; } = new MyHud();
 ```
 
 Set to `null` to use no UI (or manage UI manually via `UIManager`).
 
-See the [UI docs](UI.md) for details on creating canvases.
+See the [UI docs](Ui.md#wiring-ui-to-a-scene) for details on writing a `Layout`.
 
 ---
 

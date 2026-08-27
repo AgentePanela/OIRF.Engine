@@ -1,6 +1,6 @@
 # Fonts
 
-Text rendering is handled by `IFontManager` (accessible via `GameClient.FontManager`). Fonts are TrueType files (`.ttf`) rasterized on demand, so there is no content-pipeline step and no `.xnb` involved.
+Text rendering is handled by `IFontManager` (accessible via `[Dependency]`, or `GameClient.InterfaceManager`'s controls resolve it themselves). Fonts are TrueType files (`.ttf`) rasterized on demand via FontStashSharp, so there is no content-pipeline step and no `.xnb` involved.
 
 ---
 
@@ -12,55 +12,29 @@ Place `.ttf` files inside a `Fonts/` folder under `Resources/` (same convention 
 Resources/
   Fonts/
     MyPixelFont.ttf
+    MyPixelFont-Bold.ttf
 ```
 
-Every `.ttf` found is added to a single shared `FontManager.MyraFontSystem` ([FontStashSharp](https://github.com/FontStashSharp/FontStashSharp)) at startup. Because rasterization happens on demand at whatever pixel size is requested, you don't need separate font assets per size.
+Because rasterization happens on demand at whatever pixel size is requested, you don't need separate font assets per size.
 
 ---
 
-## FontKey
+## FontFamilyPrototype
 
-`FontKey` is a small enum of the engine's built-in font roles:
+Group up to 4 `.ttf` files (regular/bold/italic/boldItalic) under one family name via a `fontFamily` prototype:
 
-```csharp
-public enum FontKey
-{
-    None = 0,
-    Default,
-    UiBody,
-    UiTitle,
-    Debug,
-    Loading,
-    Tooltip,
-    Button,
-    UiSmall,
-    Notification,
-}
+```yaml
+- type: fontFamily
+  id: Arial
+  regular: Arial           # file name, without extension
+  bold: Arial-Bold
+  italic: Arial-Italic
+  boldItalic: Arial-BoldItalic
 ```
 
-Each key resolves to a `SpriteFontBase` registered via `IFontManager.Register`. `IFontManager.BootstrapDefaults()` registers all of the built-in keys automatically (called during the loading scene, see [Boot](Boot.md)); you don't need to call it yourself, but it's safe to call again.
+Only `regular` is required. Requesting a variant that isn't configured for a family falls back to that family's `regular`. The engine ships an `Arial` family (`Engine.Shared/EngineResources/Prototypes/fonts.yml`) as the default — the first `fontFamily` prototype loaded (by iteration order) is what `IFontManager` falls back to when no family is specified.
 
-### Default Sizes
-
-Each `FontKey` has a default rasterization size, held in the static `DefaultFontSizes` registry:
-
-```csharp
-float size = DefaultFontSizes.Get(FontKey.UiBody); // 16f by default
-
-DefaultFontSizes.Set(FontKey.UiBody, 20f); // override before BootstrapDefaults() runs
-```
-
-| FontKey | Default Size |
-|---|---|
-| `Default` | 16 |
-| `UiBody` | 16 |
-| `UiTitle` | 24 |
-| `Debug` | 13 |
-| `Loading` | 16 |
-| `Tooltip` | 14 |
-| `Button` | 16 |
-| `UiSmall` | 12 |
-| `Notification` | 15 |
+`FontVariant` is a `[Flags]` enum: `Regular`, `Bold`, `Italic` (combine `Bold | Italic` for bold-italic).
 
 ---
 
@@ -69,80 +43,43 @@ DefaultFontSizes.Set(FontKey.UiBody, 20f); // override before BootstrapDefaults(
 ```csharp
 [Dependency] private readonly IFontManager _fonts = default!;
 
-SpriteFontBase font = _fonts.Get(FontKey.UiBody);
-bool exists          = _fonts.Has(FontKey.UiBody);
-bool found           = _fonts.TryGet(FontKey.UiBody, out var maybeFont);
-SpriteFontBase fallback = _fonts.GetFallback(); // FontKey.Default, or the first registered font
+IReadOnlyCollection<string> families = _fonts.Families; // every fontFamily prototype ID
 
-Vector2 size = _fonts.Measure(FontKey.UiBody, "Hello, World!");
+// Default family, at a given size
+SpriteFontBase font = _fonts.Get(20f);
+
+// A specific family/variant
+SpriteFontBase bold = _fonts.Get(20f, "Arial", FontVariant.Bold);
+
+// Font used when nothing else was specified
+SpriteFontBase fallback = _fonts.GetFallback();
+
+Vector2 size = _fonts.Measure("Hello, World!", 20f);
+Vector2 sizeVariant = _fonts.Measure("Hello, World!", "Arial", 20f, FontVariant.Bold);
 ```
 
-Registering a custom font under one of the built-in keys (or your own convention) is a matter of loading it from `FontManager.MyraFontSystem` and registering it:
+`Get` throws `InvalidOperationException` if the requested family doesn't exist as a `fontFamily` prototype *and* isn't a loose `.ttf` whose file name matches exactly (a loose file only ever stands in for `Regular` — it has no bold/italic pairing).
 
-```csharp
-var font = FontManager.MyraFontSystem.GetFont(18f);
-_fonts.Register(FontKey.UiBody, font);
-```
+This is the same API the built-in UI controls (`Label`, `RichLabel`, text inputs — see [UI Controls](UIControls.md#text)) use for their `FontFamily`/`FontSize`/`FontVariant` style properties.
 
 ---
 
-## TextStyle
+## Drawing World-Space Text (Label2D)
 
-For most UI/game text you don't need to touch `FontKey` directly. Use a `TextStyle` instead, which bundles a `FontKey`, size, color, and shadow/outline effects into one reusable definition:
+`Label2D` is a renderable (`IRenderable`) for drawing text through [`RenderManager`](Graphics.md), with optional shadow/outline:
 
 ```csharp
-public enum TextStyle
+var label = new Label2D("Hello, World!", size: 20f, family: "Arial", FontVariant.Bold)
 {
-    None = 0,
-    Body,
-    Title,
-    Debug,
-    Loading,
-    Tooltip,
-    Button,
-    ButtonText,
-    Caption,
-    Notification,
-}
-```
-
-`TextStyleLibrary` (injected, or resolved through `IFontManager.GetForStyle`) maps each `TextStyle` to a `TextStyleDefinition`:
-
-```csharp
-public sealed class TextStyleDefinition
-{
-    public FontKey FontKey { get; set; }
-    public Color Color { get; set; }
-    public float Scale { get; set; }
-    public float Size { get; set; }
-    public bool ShadowEnabled { get; set; }
-    public Color ShadowColor { get; set; }
-    public Vector2 ShadowOffset { get; set; }
-    public bool OutlineEnabled { get; set; }
-    public Color OutlineColor { get; set; }
-    public int OutlineThickness { get; set; }
-}
-```
-
-```csharp
-SpriteFontBase font = _fonts.GetForStyle(TextStyle.Title);
-Vector2 size         = _fonts.Measure(TextStyle.Title, "Game Over");
-```
-
-To override a style (e.g. reskin `Title` for your game), resolve `TextStyleLibrary` and call `Set`:
-
-```csharp
-[Dependency] private readonly TextStyleLibrary _styles = default!;
-
-_styles.Set(TextStyle.Title, new TextStyleDefinition(FontKey.UiTitle, Color.Gold)
-{
-    Size = 32f,
+    Color = Color.White,
     ShadowEnabled = true,
-});
+    ShadowColor = Color.Black,
+    ShadowOffset = new Vector2(1, 1),
+};
+
+_renderer.Submit(label, position);
 ```
 
----
+Constructor overloads: `(string)` (default family/size), `(string, size)`, `(string, size, family, variant)`, or hand it a `SpriteFontBase` you already resolved yourself. `Label2D.WrapText(maxWidth)`/`TruncateText(maxWidth)` measure against its own `Font` and return a new string — they don't mutate `Label2D` itself. See [Label2D](Graphics.md#label2d) for the full renderable API (layering, rotation, scale).
 
-## Drawing Text
-
-See [Label2D](Graphics.md#label2d) for how to submit text through the render queue using a `FontKey` or `TextStyle`.
+> There is currently no named/semantic style layer (the old `FontKey`/`TextStyle` registries) on top of this — every `Label2D`/UI control picks its own family, size and color directly.
