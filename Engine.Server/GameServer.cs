@@ -110,7 +110,7 @@ public class GameServer : IDisposable
         ConfigManager.ForceDefaultValue(ServerCVars.ServerName, Options.ServerName);
 
         // Post-init shared systems
-        PrototypesToIgnore();
+        BeforeInit();
         sharedContent.PostInit();
         Initialize();
         
@@ -133,9 +133,10 @@ public class GameServer : IDisposable
     }
 
     /// <summary>
-    /// Add here your prototypes to be ignored via Prototypes.IgnorePrototypes([]);
+    /// Happends before ECS/Cvars/Prototypes/etc...
+    /// Add here things like your prototypes to be ignored via Prototypes.IgnorePrototypes([]);
     /// </summary>
-    protected virtual void PrototypesToIgnore()
+    protected virtual void BeforeInit()
     {
         Prototypes.IgnorePrototypes(["inputMap"]); //todo: improve this
     }

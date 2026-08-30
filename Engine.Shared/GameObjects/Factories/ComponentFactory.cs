@@ -15,6 +15,11 @@ public sealed class ComponentFactory
     public Dictionary<string, Type> Components {get; private set;} = new();
     public Dictionary<string, Type> ComponentsSanitized {get; private set;} = new();
 
+    /// <summary>
+    /// Components types in here will not be registred during loading.
+    /// </summary>
+    public readonly List<Type> ComponentsBlacklist = new();
+
     public ComponentFactory()
         => IoCManager.ResolveDependencies(this);
 
@@ -30,7 +35,7 @@ public sealed class ComponentFactory
 
         foreach (var type in types)
         {
-            if (!type.IsSubclassOf(typeof(Component)) || type.IsAbstract)
+            if (ComponentsBlacklist.Contains(type) || !type.IsSubclassOf(typeof(Component)) || type.IsAbstract)
                 continue;
             
             var attr = type.GetCustomAttribute<RegisterComponentAttribute>();

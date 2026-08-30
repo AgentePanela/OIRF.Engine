@@ -12,10 +12,16 @@ public sealed partial class EntityManager
 {
     [Dependency] internal SystemsProfiler _sysProff = default!;
 
+    /// <summary>
+    /// The system type will be ignored during system loading.
+    /// </summary>
+    public readonly List<Type> SystemBlacklist = new();
+
     internal Dictionary<Type, EntitySystem> Systems = new();
     internal List<EntitySystem> OrderedSystems = new();
 
     // lookup used by GetSystem<T>/GetSystem(Type): real type + every abstract ancestor
+
     private readonly Dictionary<Type, EntitySystem> _systemLookup = new();
 
     internal readonly Stopwatch _systemTimer = new();
@@ -31,7 +37,7 @@ public sealed partial class EntityManager
             });
         foreach (var type in types)
         {
-            if (type.IsAbstract || !type.IsSubclassOf(typeof(EntitySystem)))
+            if (SystemBlacklist.Contains(type) || type.IsAbstract || !type.IsSubclassOf(typeof(EntitySystem)))
                 continue;
             
             var ignore = type.GetCustomAttribute<IgnoreSystemRegistryAttribute>();
