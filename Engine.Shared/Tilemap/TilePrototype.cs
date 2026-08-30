@@ -1,7 +1,7 @@
 using Engine.Shared.Assets;
 using Engine.Shared.Prototypes;
 
-namespace Engine.Client.Tilemap;
+namespace Engine.Shared.Tilemap;
 
 [Prototype("tile")]
 public sealed class TilePrototype : IPrototype

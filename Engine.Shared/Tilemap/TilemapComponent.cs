@@ -1,10 +1,9 @@
 using System.Collections.Generic;
-using Engine.Client.Graphics.Shaders;
+using Engine.Shared.Assets;
 using Engine.Shared.GameObjects;
 using Microsoft.Xna.Framework.Graphics;
-using static Engine.Client.Tilemap.TilemapSystem;
 
-namespace Engine.Client.Tilemap;
+namespace Engine.Shared.Tilemap;
 
 [RegisterComponent("Tilemap")]
 public sealed class TilemapComponent : Component
@@ -12,10 +11,14 @@ public sealed class TilemapComponent : Component
     public int TileSize { get; set; } = 128;
     public int ChunkSize { get; set; } = 16;
     public int Layer { get; set; } = 0;
+
+    #region  Client-Side
     public SamplerState? SamplerState { get; set; }
     public bool TileBlending { get; set; } = true;
-
-    public ShaderPath Shader { get; set; }
+    
+    [ShaderKey]
+    public string? Shader { get; set; }
+    #endregion
 
     public Dictionary<(int, int), TilemapChunk> Chunks { get; } = new();
 }
@@ -35,13 +38,9 @@ public sealed class TilemapChunk
     /// The tilemap has been modified and the renderable chunk must be recreated.
     /// </summary>
     public bool Dirty { get; internal set; } = true;
-    internal RenderableChunk? CachedRenderable;
 
     /// <summary>
     /// Solid tiles in this chunk, so collision queries can skip it whole.
-    /// Null means "not counted yet"; invalidated by
-    /// <see cref="TilemapSystem.SetTile"/>, so writes straight into
-    /// <see cref="Tiles"/> won't be picked up.
     /// </summary>
     internal int? SolidTileCount;
 

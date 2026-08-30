@@ -13,7 +13,7 @@ internal static class EntityManagerExtensions
     {
         foreach (var system in entityManager.OrderedSystems)
         {
-            if (system is not EntityDrawSystem eds)
+            if (system is not IEntityDrawSystem eds)
                 continue;
 
             if (eds.FreezeDraw)

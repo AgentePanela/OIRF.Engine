@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Engine.Client.Assets;
 using Engine.Shared.GameObjects;
 using Engine.Shared.Prototypes;
+using Engine.Shared.Tilemap;
 using Engine.Client.Scenes;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;

@@ -5,7 +5,7 @@ using Engine.Shared.Physics;
 using Engine.Shared.Physics.Fixtures;
 using Microsoft.Xna.Framework;
 
-namespace Engine.Client.Tilemap;
+namespace Engine.Shared.Tilemap;
 
 /// <summary>
 /// Resolves entity-vs-tile collisions every frame
@@ -13,7 +13,7 @@ namespace Engine.Client.Tilemap;
 /// </summary>
 public sealed class TileCollisionSystem : EntitySystem
 {
-    [Dependency] private readonly TilemapSystem _tilemap = default!;
+    [Dependency] private readonly SharedTilemapSystem _tilemap = default!;
 
     // reused per-frame to avoid allocations
     private readonly List<Rectangle> _solidTiles = new();
