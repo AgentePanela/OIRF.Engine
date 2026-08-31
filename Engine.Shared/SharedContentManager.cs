@@ -6,6 +6,7 @@ using Engine.Shared.Configuration;
 using Engine.Shared.GameObjects;
 using Engine.Shared.IoC;
 using Engine.Shared.Locale;
+using Engine.Shared.Networking;
 using Engine.Shared.Prototypes;
 using Engine.Shared.Timing;
 
@@ -16,7 +17,7 @@ namespace Engine.Shared;
 /// </summary>
 public sealed class SharedContentManager
 {
-    public ContentType Type { get; private set; } = ContentType.Shared;
+    public ContentSide Type { get; private set; } = ContentSide.Shared;
     private List<Assembly> _assemblies = new();
     private bool _inited = false;
 
@@ -25,7 +26,7 @@ public sealed class SharedContentManager
         if (_inited)
             throw new System.Exception("Shared Content manager is already inited!");
 
-        Type = ContentType.Server;
+        Type = ContentSide.Server;
         _assemblies.AddRange(assemblies);
         Init();
     }
@@ -35,7 +36,7 @@ public sealed class SharedContentManager
         if (_inited)
             throw new System.Exception("Shared Content manager is already inited!");
 
-        Type = ContentType.Client;
+        Type = ContentSide.Client;
         _assemblies.AddRange(assemblies);
         Init();
     }
@@ -50,6 +51,7 @@ public sealed class SharedContentManager
         IoCManager.Register<IPrototypeManager, PrototypeManager>();
         IoCManager.Register<IGameTiming, GameTiming>();
         IoCManager.Register<EntityManager>();
+        IoCManager.Register<INetManager, NetManager>();
         // add here ioc things
 
         IoCManager.AutoRegister(Assembly.GetExecutingAssembly());
@@ -65,25 +67,25 @@ public sealed class SharedContentManager
 
     public bool IsServer()
     {
-        if (Type == ContentType.Server)
+        if (Type == ContentSide.Server)
             return true;
         return false;
     }
 
     public bool IsClient()
     {
-        if (Type == ContentType.Client)
+        if (Type == ContentSide.Client)
             return true;
         return false;
     }
 
     public List<Assembly> GetAssemblies()
         => _assemblies;
+}
 
-    public enum ContentType
-    {
-        Server,
-        Shared,
-        Client,
-    }
+public enum ContentSide
+{
+    Server,
+    Shared,
+    Client,
 }

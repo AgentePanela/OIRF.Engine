@@ -12,10 +12,12 @@ using Engine.Shared.GameObjects;
 using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.IoC;
 using Engine.Shared.Locale;
+using Engine.Shared.Networking;
 using Engine.Shared.Prototypes;
 using Engine.Shared.Storage;
 using Engine.Shared.Threading;
 using Engine.Shared.Timing;
+using Lidgren.Network;
 
 namespace Engine.Server;
 
@@ -67,6 +69,7 @@ public class GameServer : IDisposable
     public IPrototypeManager Prototypes { get; private set; } = default!;
     public ILocalizationManager LocalizationManager { get; private set; } = default!;
     public IGameTiming Timing { get; private set; } = default!;
+    public INetManager Networking { get; private set; } = default!;
 
     private readonly Stopwatch _tickWatch = new();
     private bool _running;
@@ -105,6 +108,7 @@ public class GameServer : IDisposable
         LocalizationManager = IoCManager.Resolve<ILocalizationManager>();
         Timing = IoCManager.Resolve<IGameTiming>();
         Timing.SetTickRate(Options.TickRate);
+        Networking = IoCManager.Resolve<INetManager>();
 
         IoCManager.AutoRegister(Assembly.GetExecutingAssembly());
 
@@ -120,6 +124,8 @@ public class GameServer : IDisposable
         
         _room = new EntityRoom(); // todo: RoomManager
         EntityManager.ForceScene(_room);
+
+        Networking.StartServer(Options.Port);
 
         State = ServerState.Running;
         Log.Debug("ServerState: Loading > Running!");
@@ -164,8 +170,10 @@ public class GameServer : IDisposable
         var tickInterval = TimeSpan.FromSeconds(1.0 / Options.TickRate);
         long lastTickMs = 0;
 
+        var endpoint = Networking.Server.Socket?.RemoteEndPoint ?? Networking.Server.Socket?.LocalEndPoint;
+
         Log.Debug("============================================");
-        Log.Debug("Server is now running! Press Ctrl+C to stop.");
+        Log.Debug($"Server is now running on {endpoint?.ToString() ?? "unknown"}! Press Ctrl+C to stop.");
 
         _tickWatch.Start();
 
@@ -201,6 +209,8 @@ public class GameServer : IDisposable
         Timing.UpdateDeltaTime(deltaTime);
         Timing.UpdateFPS(deltaTime); // no separate draw phase server-side, so this doubles as "actual ticks/sec"
 
+        Networking.Update();
+
         // Advance the tick before simulating
         Timing.AdvanceTick();
 
@@ -229,6 +239,9 @@ public class GameServer : IDisposable
         Log.Debug("Server shutting down...");
 
         EntityManager.OnShutdown();
+
+        if (Networking.IsRunning)
+            Networking.Shutdown(Loc.GetString("internal-net-server-shutdown"));
 
         if (Options.SaveConfigOnExit)
             ConfigManager.SaveConfig();

@@ -28,6 +28,7 @@ using Engine.Shared.Locale;
 using Engine.Shared.Threading;
 using Engine.Shared.Timing;
 using System.IO;
+using Engine.Shared.Networking;
 
 namespace Engine.Client;
 
@@ -103,6 +104,7 @@ public class GameClient : Game
     public static UIManager InterfaceManager { get; private set; }
     public static WindowManager WindowManager { get; private set; }
     public static ILocalizationManager LocalizationManager { get; private set; }
+    public static INetManager Networking { get; private set; }
     
     public static IGameTiming Timing { get; private set; }
     public static GameState GameState = GameState.Booting;
@@ -124,6 +126,9 @@ public class GameClient : Game
         s_instance = this;
 
         Graphics = new GraphicsDeviceManager(this);
+
+        Graphics.PreparingDeviceSettings += (_, e) => // stop cleaning the backbuffer everytime we change the rendertarget
+            e.GraphicsDeviceInformation.PresentationParameters.RenderTargetUsage = RenderTargetUsage.PreserveContents;
 
         Window.Title = options.Title;
         Window.AllowUserResizing = options.WindowResizing;
@@ -180,6 +185,7 @@ public class GameClient : Game
         WindowManager = IoCManager.Resolve<WindowManager>();
         ConfigManager = IoCManager.Resolve<IConfigurationManager>();
         LocalizationManager = IoCManager.Resolve<ILocalizationManager>();
+        Networking = IoCManager.Resolve<INetManager>();
 
         ConfigManager.ForceDefaultValue(GameCVars.GameVersion, Options.Version);
         ConfigManager.ForceDefaultValue(GameCVars.ResolutionWidth, Options.Width);
@@ -239,6 +245,9 @@ public class GameClient : Game
     private void OnClientShutdown(object? sender, ExitingEventArgs e)
     {
         EntityManager.OnShutdown();
+        if (Networking.IsRunning)
+            Networking.Shutdown(Loc.GetString("internal-net-client-shutdown"));
+        
         if (Options.SaveConfigOnExit)
             ConfigManager.SaveConfig();
     }
@@ -315,6 +324,7 @@ public class GameClient : Game
         GCMeter.gen2 = agen2 - _gen2;
 
         Timing.UpdateDeltaTime((float)gameTime.ElapsedGameTime.TotalSeconds);
+        Networking.Update();
         InputManager.Update(IsActive);
         base.Update(gameTime);
         Assets.Update(gameTime);
