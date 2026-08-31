@@ -61,7 +61,7 @@ public sealed class ProfilerOverlay : Overlay
         var left = new BoxContainer
         {
             Orientation = Orientation.Vertical,
-            _separation = 4,
+            Separation = 4,
             Background = PanelBg,
             Padding = new(8, 6),
             HorizontalAlignment = HorizontalAlignment.Left,
@@ -94,7 +94,7 @@ public sealed class ProfilerOverlay : Overlay
         var right = new BoxContainer
         {
             Orientation = Orientation.Vertical,
-            _separation = 4,
+            Separation = 4,
             Background = PanelBg,
             Padding = new(8, 6),
             MinWidth = 350,
@@ -193,7 +193,7 @@ public sealed class ProfilerOverlay : Overlay
         var rows = new List<ProfilerRow>(count);
         for (var i = 0; i < count; i++)
         {
-            var row = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 6, Visible = false };
+            var row = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 6, Visible = false };
             var name = new Label { Width = 120, FontSize = 18f, Color = Color.White, AutoWrap = false  };
             var bar = new ProgressBar { Width = 100, BarThickness = 12f, FillColor = barColor };
             var value = new Label { MinWidth = 55, FontSize = 18f, Color = Color.White, TextAlign = HorizontalAlignment.Right };

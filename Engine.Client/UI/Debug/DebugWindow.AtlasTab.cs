@@ -23,14 +23,14 @@ public sealed class AtlasDebugTab
 
     public AtlasDebugTab(IAssetManager asset)
     {
-        var row = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 8 };
+        var row = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 8 };
         Root = row;
 
         _list = new ItemList { MinWidth = 200, MinHeight = 500 };
         _list.OnSelectionChanged += OnAtlasSelected;
         row.AddChild(_list);
 
-        var rightPanel = new BoxContainer { Orientation = Orientation.Vertical, _separation = 6 };
+        var rightPanel = new BoxContainer { Orientation = Orientation.Vertical, Separation = 6 };
         row.AddChild(rightPanel);
 
         var previewPanel = new PanelContainer { Background = Color.Black, Width = 500, Height = 500 };
@@ -38,7 +38,7 @@ public sealed class AtlasDebugTab
         previewPanel.AddChild(_preview);
         rightPanel.AddChild(previewPanel);
 
-        var footer = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 8 };
+        var footer = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 8 };
         var saveButton = new Button("Save Atlas As PNG");
         saveButton.OnClick += _ => SaveSelectedAtlas();
         _info = new Label { Text = "..." };

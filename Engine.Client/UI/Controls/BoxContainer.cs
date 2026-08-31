@@ -20,7 +20,7 @@ public partial class BoxContainer : PanelContainer
     /// Gap in pixels between consecutive children. Not applied before the first or after the last.
     /// </summary>
     [StyleField("separation", 0f)]
-    public float? _separation;
+    private float? _separation;
 
     protected override Vector2 MeasureCore(Vector2 availableSize)
     {

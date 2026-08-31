@@ -20,12 +20,12 @@ public sealed class DebugToolsTab
     {
         _cfg = cfg;
 
-        var box = new BoxContainer { Orientation = Orientation.Vertical, _separation = 8 };
+        var box = new BoxContainer { Orientation = Orientation.Vertical, Separation = 8 };
         Root = box;
 
         box.AddChild(new Label { Text = "CVars" });
 
-        var saveLoadRow = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 8 };
+        var saveLoadRow = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 8 };
         var saveBtn = new Button("Save CVars");
         saveBtn.OnClick += _ => _cfg.SaveConfig();
         var loadBtn = new Button("Load CVars");

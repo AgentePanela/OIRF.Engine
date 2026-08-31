@@ -38,10 +38,10 @@ public sealed class EntityDebugTab
         _sceneManager = sceneManager;
         _entManager = entManager;
 
-        var root = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 8 };
+        var root = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 8 };
         Root = root;
 
-        var left = new BoxContainer { Orientation = Orientation.Vertical, _separation = 6, MinWidth = 260 };
+        var left = new BoxContainer { Orientation = Orientation.Vertical, Separation = 6, MinWidth = 260 };
         root.AddChild(left);
 
         _searchBox = new LineEdit { PlaceholderText = "Search entity..." };
@@ -52,7 +52,7 @@ public sealed class EntityDebugTab
         _entityList.OnSelectionChanged += OnEntitySelected;
         left.AddChild(_entityList);
 
-        var leftToolbar = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 6 };
+        var leftToolbar = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 6 };
         var refreshBtn = new Button("Refresh");
         refreshBtn.OnClick += _ => RefreshEntityList();
         var deleteBtn = new Button("Delete");
@@ -61,7 +61,7 @@ public sealed class EntityDebugTab
         leftToolbar.AddChild(deleteBtn);
         left.AddChild(leftToolbar);
 
-        var right = new BoxContainer { Orientation = Orientation.Vertical, _separation = 8, HorizontalExpand = true };
+        var right = new BoxContainer { Orientation = Orientation.Vertical, Separation = 8, HorizontalExpand = true };
         root.AddChild(right);
 
         right.AddChild(new Label { Text = "Entity Inspector" });
@@ -75,7 +75,7 @@ public sealed class EntityDebugTab
 
         right.AddChild(new Label { Text = "Component Inspector (read-only)" });
         var scroll = new ScrollContainer { MinHeight = 240, HorizontalExpand = true };
-        _propPanel = new BoxContainer { Orientation = Orientation.Vertical, _separation = 4, Margin = new(6) };
+        _propPanel = new BoxContainer { Orientation = Orientation.Vertical, Separation = 4, Margin = new(6) };
         scroll.AddChild(_propPanel);
         right.AddChild(scroll);
 
