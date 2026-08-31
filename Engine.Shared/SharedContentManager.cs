@@ -7,6 +7,7 @@ using Engine.Shared.GameObjects;
 using Engine.Shared.IoC;
 using Engine.Shared.Locale;
 using Engine.Shared.Prototypes;
+using Engine.Shared.Timing;
 
 namespace Engine.Shared;
 
@@ -47,6 +48,7 @@ public sealed class SharedContentManager
         IoCManager.Register<IConfigurationManager, ConfigurationManager>();
         IoCManager.Register<ILocalizationManager, LocalizationManager>();
         IoCManager.Register<IPrototypeManager, PrototypeManager>();
+        IoCManager.Register<IGameTiming, GameTiming>();
         IoCManager.Register<EntityManager>();
         // add here ioc things
 

@@ -129,7 +129,7 @@ public sealed class ProfilerOverlay : Overlay
 
     private void RefreshStats()
     {
-        var time = GameClient.GameTime;
+        var time = GameClient.Timing;
         var gfx = GameClient.Graphics;
         var builtDate = File.GetLastWriteTime(Assembly.GetExecutingAssembly().Location);
 

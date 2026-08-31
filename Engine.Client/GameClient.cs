@@ -26,6 +26,7 @@ using Engine.Shared.GameObjects;
 using Engine.Client.Graphics.Lighting;
 using Engine.Shared.Locale;
 using Engine.Shared.Threading;
+using Engine.Shared.Timing;
 using System.IO;
 
 namespace Engine.Client;
@@ -102,10 +103,11 @@ public class GameClient : Game
     public static UIManager InterfaceManager { get; private set; }
     public static WindowManager WindowManager { get; private set; }
     public static ILocalizationManager LocalizationManager { get; private set; }
+    
+    public static IGameTiming Timing { get; private set; }
     public static GameState GameState = GameState.Booting;
 
     public static ClientOptions Options = new ClientOptions();
-    public static GTime GameTime = new GTime();
     public GCMeter GCMeter = new();
 
     private bool _paused = false;
@@ -171,6 +173,7 @@ public class GameClient : Game
         Scenes = IoCManager.Resolve<SceneManager>();
         EntityManager = IoCManager.Resolve<EntityManager>();
         InputManager = IoCManager.Resolve<InputManager>();
+        Timing = IoCManager.Resolve<IGameTiming>();
         Viewport = IoCManager.Resolve<ViewportAdapter>();
         Camera = IoCManager.Resolve<Camera2D>();
         InterfaceManager = IoCManager.Resolve<UIManager>();
@@ -311,16 +314,16 @@ public class GameClient : Game
         GCMeter.gen1 = agen1 - _gen1;
         GCMeter.gen2 = agen2 - _gen2;
 
-        GameTime.UpdateDelta(gameTime);
+        Timing.UpdateDeltaTime((float)gameTime.ElapsedGameTime.TotalSeconds);
         InputManager.Update(IsActive);
         base.Update(gameTime);
         Assets.Update(gameTime);
         Prototypes.Update();
         LocalizationManager.Update();
-        float uiScreenDeltaTime = _paused ? 0f : GameTime.DeltaTime;
+        float uiScreenDeltaTime = _paused ? 0f : Timing.DeltaTime;
 
         InterfaceManager.Update(uiScreenDeltaTime);
-        WindowManager.Update(GameTime.DeltaTime);
+        WindowManager.Update(Timing.DeltaTime);
 
         // why do we even use this
         if (GameState == GameState.Booting)
@@ -329,9 +332,9 @@ public class GameClient : Game
         if (GameState != GameState.Running)
             return;
 
-        float simulationDeltaTime = _paused ? 0f : GameTime.DeltaTime;
+        float simulationDeltaTime = _paused ? 0f : Timing.DeltaTime;
         EntityManager.Update(simulationDeltaTime);
-        Audio.Update(GameTime.DeltaTime); // after ECS so AudioSystem sees FinishedStreaming before packages get disposed here
+        Audio.Update(Timing.DeltaTime); // after ECS so AudioSystem sees FinishedStreaming before packages get disposed here
 
         _gen0 = GC.CollectionCount(0);
         _gen1 = GC.CollectionCount(1);
@@ -345,7 +348,7 @@ public class GameClient : Game
             return;
 
         GraphicsDevice.Clear(Scenes.CurrentScene?.BackgroundColor ?? Options.BackgroundColor);
-        GameTime.UpdateFps(gameTime);
+        Timing.UpdateFPS((float)gameTime.ElapsedGameTime.TotalSeconds);
 
         /// estou passando isso pra cá, nao sei se é correto e está muito
         /// de tarde no momento q to escrevendo pra procurar,
@@ -388,7 +391,7 @@ public class GameClient : Game
                 : (Viewport.VirtualWidth, Viewport.VirtualHeight);
             Renderer.EnsureSceneTarget(sceneTargetWidth, sceneTargetHeight);
 
-            EntityManager.Draw(GameTime.DeltaTime);
+            EntityManager.Draw(Timing.DeltaTime);
         }
 
         Renderer.DrawQueue();
@@ -414,7 +417,7 @@ public class GameClient : Game
         // A captured frame (Renderer.FinalTarget set) shouldn't bake in Myra UI.
         if (Renderer.FinalTarget is null)
         {
-            InterfaceManager.Draw(GameTime.DeltaTime);
+            InterfaceManager.Draw(Timing.DeltaTime);
         }
 
         //base.Draw(gameTime);

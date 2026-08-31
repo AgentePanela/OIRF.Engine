@@ -62,13 +62,13 @@ public sealed class SceneManager : DrawableGameComponent
         if (_nextScene is not null)
             TransitionScene();
 
-        CurrentScene?.Update(GameClient.GameTime.DeltaTime);
+        CurrentScene?.Update(GameClient.Timing.DeltaTime);
         base.Update(gameTime);
     }
 
     public override void Draw(GameTime gameTime)
     {
-        CurrentScene?.Draw(GameClient.GameTime.DeltaTime);
+        CurrentScene?.Draw(GameClient.Timing.DeltaTime);
         base.Draw(gameTime);
     }
 

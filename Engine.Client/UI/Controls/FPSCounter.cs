@@ -30,9 +30,9 @@ public class FPSCounter : Label
             return;
 
         _timer = _timer - 0.1f;
-        Text = GameClient.GameTime.Fps.ToString();
+        Text = GameClient.Timing.Fps.ToString();
 
-        var newColor = GameClient.GameTime.Fps switch
+        var newColor = GameClient.Timing.Fps switch
         {
             <= 10 => Color.Red,
             <= 30 => Color.Yellow,

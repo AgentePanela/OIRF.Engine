@@ -323,7 +323,7 @@ public sealed partial class RenderManager
                         shaderToUse.Parameters["ViewportOffset"]?.SetValue(viewportOffset);
                         shaderToUse.Parameters["LightMapFlipY"]?.SetValue(!writeStencil);
                         shaderToUse.Parameters["PixelatedLighting"]?.SetValue(_lighting.PixelatedLighting);
-                        shaderToUse.Parameters["Time"]?.SetValue((float)GameClient.GameTime.TotalTime);
+                        shaderToUse.Parameters["Time"]?.SetValue((float)GameClient.Timing.TotalTime);
                     }
 
                     // Sprites always self-light or self-bypass now, so the

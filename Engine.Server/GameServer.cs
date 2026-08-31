@@ -15,6 +15,7 @@ using Engine.Shared.Locale;
 using Engine.Shared.Prototypes;
 using Engine.Shared.Storage;
 using Engine.Shared.Threading;
+using Engine.Shared.Timing;
 
 namespace Engine.Server;
 
@@ -65,6 +66,7 @@ public class GameServer : IDisposable
     public IConfigurationManager ConfigManager { get; private set; } = default!;
     public IPrototypeManager Prototypes { get; private set; } = default!;
     public ILocalizationManager LocalizationManager { get; private set; } = default!;
+    public IGameTiming Timing { get; private set; } = default!;
 
     private readonly Stopwatch _tickWatch = new();
     private bool _running;
@@ -101,6 +103,8 @@ public class GameServer : IDisposable
         ConfigManager = IoCManager.Resolve<IConfigurationManager>();
         Prototypes = IoCManager.Resolve<IPrototypeManager>();
         LocalizationManager = IoCManager.Resolve<ILocalizationManager>();
+        Timing = IoCManager.Resolve<IGameTiming>();
+        Timing.SetTickRate(Options.TickRate);
 
         IoCManager.AutoRegister(Assembly.GetExecutingAssembly());
 
@@ -194,6 +198,12 @@ public class GameServer : IDisposable
     /// </summary>
     protected virtual void Update(float deltaTime)
     {
+        Timing.UpdateDeltaTime(deltaTime);
+        Timing.UpdateFPS(deltaTime); // no separate draw phase server-side, so this doubles as "actual ticks/sec"
+
+        // Advance the tick before simulating
+        Timing.AdvanceTick();
+
         // Update all entity systems
         EntityManager.Update(deltaTime);
         Prototypes.Update();
