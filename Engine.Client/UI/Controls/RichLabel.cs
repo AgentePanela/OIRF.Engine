@@ -93,9 +93,9 @@ public sealed partial class RichLabel : Control
                 _ => Bounds.X, // left, stretch
             };
 
-            var y = blockY + line.OffsetY;
             foreach (var run in line.Runs)
             {
+                var y = blockY + line.OffsetY + (line.Height - LineHeight(run.Font));
                 sb.DrawString(run.Font, run.Text, new Vector2(x, y), run.Color, textStyle: run.Style);
                 x += run.Width;
             }

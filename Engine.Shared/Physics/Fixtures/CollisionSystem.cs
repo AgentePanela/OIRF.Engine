@@ -12,7 +12,7 @@ namespace Engine.Shared.Physics.Fixtures;
 /// Detects overlaps between CollisionComponents, computes the MTV (Minimum Translation Vector)
 /// and fires CollisionStartEvent / CollisionEndEvent.
 /// </summary>
-[SystemPriority(-998)]
+[SystemPriority(-800)]
 public sealed class CollisionSystem : EntitySystem
 {
     [Dependency] private readonly IConfigurationManager _cfg = default!;
