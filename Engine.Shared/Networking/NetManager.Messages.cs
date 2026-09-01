@@ -9,15 +9,15 @@ namespace Engine.Shared.Networking;
 internal sealed partial class NetManager : INetManager
 {
     private readonly Dictionary<string, Func<INetMessage>> _factories = new();
-    private readonly Dictionary<string, List<Action<INetMessage>>> _handlers = new();
+    private readonly Dictionary<string, List<Action<INetMessage, INetSession?>>> _handlers = new();
 
-    public void RegisterNetMessage<T>(Action<T>? rxCallback = null) where T : INetMessage, new()
+    public void RegisterNetMessage<T>(Action<T, INetSession?>? rxCallback = null) where T : INetMessage, new()
     {
-        var name = typeof(T).Name;
+        var name = typeof(T).FullName!;
         _factories[name] = () => new T();
         if (rxCallback != null)
             (_handlers.TryGetValue(name, out var list) ? list : _handlers[name] = new())
-                .Add(msg => rxCallback((T)msg));
+                .Add((msg, session) => rxCallback((T)msg, session));
     }
 
     private void PollPeer(NetPeer? peer, NetworkSide side)
@@ -57,10 +57,15 @@ internal sealed partial class NetManager : INetManager
 
                     var netMessage = factory();
                     netMessage.ReadFromBuffer(msg);
+
+                    NetSession? senderSession = null;
+                    if (msg.SenderConnection is not null)
+                        _sessions.TryGetValue(msg.SenderConnection, out senderSession);
+
                     if (_handlers.TryGetValue(msgType, out var handlers))
                     {
                         foreach (var handler in handlers)
-                            handler(netMessage);
+                            handler(netMessage, senderSession);
                     }
 
                     break;
