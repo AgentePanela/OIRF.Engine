@@ -28,9 +28,6 @@ internal sealed partial class NetManager : INetManager
 
     public IReadOnlyList<INetSession> Sessions => _sessions.Values.ToList();
 
-    public INetSession? GetSessionById(string sessionId)
-        => _sessions.Values.FirstOrDefault(s => s.SessionId == sessionId);
-
     public NetManager()
     {
         RegisterNetMessage<ClientHandshakeMessage>(ClientHandshakeCompleted);
@@ -54,19 +51,8 @@ internal sealed partial class NetManager : INetManager
         IsRunning = true;
     }
 
-    public void ConnectClient(string host, int port)
-    {
-        if (IsClient)
-            throw new InvalidOperationException("Already connected (or connecting) to a server.");
-
-        Log.Debug($"Attempting to connect to {host} port {port}...");
-        var config = BuildConfig();
-        Client = new(config);
-        Client.Start();
-        Client.Connect(host, port);
-        IsClient = true;
-        IsRunning = true;
-    }
+    public INetSession? GetSessionById(string sessionId)
+        => _sessions.Values.FirstOrDefault(s => s.SessionId == sessionId);
 
     private NetPeerConfiguration BuildConfig()
     {
@@ -99,14 +85,10 @@ internal sealed partial class NetManager : INetManager
                 {
                     session.SendMessage(new ClientHandshakeMessage(session.SessionId));
                     OnConnected?.Invoke(this, new NetSessionArgs(session)); // client connection invoke is sent when handshake is received
-                    Log.Debug($"");
                 }
                 break;
 
             case NetConnectionStatus.Disconnected:
-                if (peer == Client)
-                        OnClientDisconnect();
-
                 if (connection is not null)
                 {
                     if (_sessions.Remove(connection, out var removed))
@@ -114,6 +96,9 @@ internal sealed partial class NetManager : INetManager
                 } // ts or c# nukes my else if
                 else if (peer == Client)// client connection failed
                     OnDisconnected?.Invoke(this, new NetDisconnectedArgs(default, reason));
+
+                if (peer == Client)
+                        OnClientDisconnect();
                 break;
         }
     }

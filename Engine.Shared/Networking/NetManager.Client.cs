@@ -28,4 +28,18 @@ internal sealed partial class NetManager : INetManager
         Client = null;
         IsClient = false;
     }
+
+    public void ConnectClient(string host, int port)
+    {
+        if (IsClient)
+            throw new InvalidOperationException("Already connected (or connecting) to a server.");
+
+        Log.Debug($"Attempting to connect to {host} port {port}...");
+        var config = BuildConfig();
+        Client = new(config);
+        Client.Start();
+        Client.Connect(host, port);
+        IsClient = true;
+        IsRunning = true;
+    }
 }

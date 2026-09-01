@@ -65,7 +65,16 @@ internal sealed partial class NetManager : INetManager
                     if (_handlers.TryGetValue(msgType, out var handlers))
                     {
                         foreach (var handler in handlers)
-                            handler(netMessage, senderSession);
+                        {
+                            try
+                            {
+                                handler(netMessage, senderSession);
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Error($"[Net:{side}] Handler for '{msgType}' threw: {ex}");
+                            }
+                        }
                     }
 
                     break;
