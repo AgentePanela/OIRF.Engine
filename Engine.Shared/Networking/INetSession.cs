@@ -5,16 +5,16 @@ using Lidgren.Network;
 namespace Engine.Shared.Networking;
 
 /// <summary>
-/// 
+/// Represents a user (or the server) connection.
 /// </summary>
 public interface INetSession
 {
     public bool IsConnected { get; }
-    public string UserName { get; }
+    public string Username { get; }
     public IPEndPoint RemoteEndPoint { get; }
     public short Ping { get; }
 
-    public void SendMessage(NetMessage message);
+    public void SendMessage(INetMessage message);
     public void Disconnect(string reason);
 }
 
@@ -27,11 +27,14 @@ internal sealed class NetSession : INetSession
     public bool IsConnected => _connection.Status == NetConnectionStatus.Connected;
     public IPEndPoint RemoteEndPoint => _connection.RemoteEndPoint;
     public short Ping => (short)(_connection.AverageRoundtripTime * 1000);
-    public string UserName { get; set; } = "";
+    public string Username { get; set; } = "";
 
-    public void SendMessage(NetMessage message)
+    public void SendMessage(INetMessage message)
     {
-        
+        var outgoing = _connection.Peer.CreateMessage();
+        outgoing.Write(message.GetType().FullName); // message header
+        message.WriteToBuffer(outgoing);
+        _connection.Peer.SendMessage(outgoing, _connection, NetDeliveryMethod.ReliableOrdered);
     }
     public void Disconnect(string reason) => _connection.Disconnect(reason);
 }

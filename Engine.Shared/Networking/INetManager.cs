@@ -20,14 +20,14 @@ public interface INetManager
     /// All current connected sessions.
     /// </summary>
     /// <remarks>
-    /// Client will only have the <seealso cref="ServerSession"/>!
+    /// Client will only have the <seealso cref="MySession"/>!
     /// </remarks>
     public IReadOnlyList<INetSession> Sessions { get; }
     
     /// <summary>
-    /// Get the server sessions (CLIENT-SIDE)
+    /// Get the connected client session (CLIENT-SIDE)
     /// </summary>
-    public INetSession? ServerSession { get; }
+    public INetSession? MySession { get; }
 
     // public void Init(bool isServer);
 
@@ -49,7 +49,12 @@ public interface INetManager
 
     internal void Update();
 
-    //public void RegisterNetMessage<T>(Action<T>? rxCallback = null) where T : NetMessage;
+    /// <summary>
+    /// Register a callback for a message receiving event.
+    /// </summary>
+    /// <typeparam name="T">MessageType.</typeparam>
+    /// <param name="rxCallback">Callback function.</param>
+    public void RegisterNetMessage<T>(Action<T>? rxCallback = null) where T : INetMessage, new();
 
     public event EventHandler<NetSessionArgs> OnConnected;
     public event EventHandler<NetDisconnectedArgs> OnDisconnected;

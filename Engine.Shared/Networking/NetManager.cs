@@ -24,7 +24,7 @@ internal sealed partial class NetManager : INetManager
 
     public IReadOnlyList<INetSession> Sessions => _sessions.Values.ToList();
 
-    public INetSession? ServerSession => Client is not null 
+    public INetSession? MySession => Client is not null 
         ? _sessions.Values.FirstOrDefault() : throw new InvalidNetworkSideException("This operation is client-only!");
 
     // public void Init(bool isServer)
@@ -66,42 +66,6 @@ internal sealed partial class NetManager : INetManager
     {
         PollPeer(Server, NetworkSide.Server);
         PollPeer(Client, NetworkSide.Client);
-    }
-    
-    private void PollPeer(NetPeer? peer, NetworkSide side)
-    {
-        if (peer is null)
-            return;
-
-        NetIncomingMessage? msg;
-        while ((msg = peer.ReadMessage()) != null)
-        {
-            switch (msg.MessageType)
-            {
-                case NetIncomingMessageType.StatusChanged:
-                    var status = (NetConnectionStatus)msg.ReadByte();
-                    var reason = msg.ReadString();
-                    var connection = msg.SenderConnection;
-                        
-                    AlertClientNewStatus(peer, connection, status, reason);
-                    //Log.Debug($"[Net:{side}] ({msg.SenderConnection?.RemoteEndPoint}) {status} ({reason})");
-                    break;
-
-                case NetIncomingMessageType.WarningMessage:
-                    Log.Warn($"[Net:{side}] {msg.ReadString()}");
-                    break;
-
-                case NetIncomingMessageType.ErrorMessage:
-                    Log.Error($"[Net:{side}] {msg.ReadString()}");
-                    break;
-
-                case NetIncomingMessageType.Data:
-                    // todo: game msgs
-                    break;
-            }
-
-            peer.Recycle(msg);
-        }
     }
 
     private void AlertClientNewStatus(NetPeer peer, NetConnection? connection, NetConnectionStatus status, string? reason)
