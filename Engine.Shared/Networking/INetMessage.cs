@@ -11,5 +11,10 @@ public interface INetMessage
 
 public sealed partial class ClientHandshakeMessage2 : INetMessage
 {
-    public int Foo { get; set; }
+    public EntityUid Foo { get; set; }
+
+    public void Foo2()
+    {
+        WriteToBuffer();
+    }
 }

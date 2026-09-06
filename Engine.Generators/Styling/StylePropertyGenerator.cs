@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 
-namespace Engine.Generators;
+namespace Engine.Generators.Styling;
 
 [Generator]
 public sealed class StylePropertyGenerator : IIncrementalGenerator

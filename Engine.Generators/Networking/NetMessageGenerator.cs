@@ -4,21 +4,16 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 
-namespace Engine.Generators;
+namespace Engine.Generators.Networking;
 
+/// <summary>
+/// Generates WriteToBuffer/ReadFromBuffer for every partial class implementing
+/// INetMessage, from its public settable properties.
+/// </summary>
 [Generator]
 public sealed class NetMessageGenerator : IIncrementalGenerator
 {
     private const string InterfaceFullName = "Engine.Shared.Networking.INetMessage";
-    private const string IgnoreAttributeFullName = "Engine.Shared.Networking.NetIgnoreAttribute";
-
-    private static readonly DiagnosticDescriptor UnsupportedType = new(
-        id: Diagnostics.NetFieldUnsupportedTypeID,
-        title: "Unsupported INetMessage property type",
-        messageFormat: "Type {0} in {1} isn't serializable - Try adding [NetSerializable] or write WriteToBuffer/ReadFromBuffer by hand instead",
-        category: "Engine.Generators",
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor UnpartialClass = new(
         id: Diagnostics.MessageNotPartialID,
@@ -45,16 +40,31 @@ public sealed class NetMessageGenerator : IIncrementalGenerator
                 return;
             }
 
-            foreach (var bad in msg.Fields.Where(f => f.ReadMethod is null))
-                spc.ReportDiagnostic(Diagnostic.Create(UnsupportedType, bad.Location ?? Location.None, bad.TypeName, bad.PropertyName));
+            var writeLines = new List<string>();
+            var readLines = new List<string>();
+            var anyBad = false;
 
-            var ok = msg.Fields.Where(f => f.ReadMethod is not null).ToList();
+            foreach (var prop in msg.Properties)
+            {
+                var plan = NetSerializableResolver.Resolve(prop.Type, prop.Name, new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default), prop.Location, spc);
+                if (plan is null)
+                {
+                    anyBad = true;
+                    continue;
+                }
+
+                writeLines.AddRange(plan.WriteLines);
+                readLines.Add($"{prop.Name} = {plan.ReadExpr};");
+            }
+
+            if (anyBad)
+                return;
 
             var hintName = msg.Namespace.Length == 0
                 ? $"{msg.ClassName}.NetMessage.g.cs"
                 : $"{msg.Namespace}.{msg.ClassName}.NetMessage.g.cs";
 
-            spc.AddSource(hintName, GenerateClass(msg.Namespace, msg.ClassName, ok, msg.NeedsParameterlessCtor));
+            spc.AddSource(hintName, GenerateClass(msg.Namespace, msg.ClassName, writeLines, readLines, msg.NeedsParameterlessCtor));
         });
     }
 
@@ -75,18 +85,17 @@ public sealed class NetMessageGenerator : IIncrementalGenerator
         if (!classDecl.Modifiers.Any(SyntaxKind.PartialKeyword))
             return MessageData.NotPartial(fullNameForWarning, classDecl.Identifier.GetLocation());
 
-        var fields = new List<FieldData>();
+        var properties = new List<PropertyData>();
         foreach (var member in classSymbol.GetMembers().OfType<IPropertySymbol>())
         {
-            // No setter. nothing for ReadFromBuffer to assign into
+            // No setter - nothing for ReadFromBuffer to assign into.
             if (member.IsStatic || member.SetMethod is null)
                 continue;
 
-            if (member.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == IgnoreAttributeFullName))
+            if (NetSerializableResolver.HasAttribute(member, NetSerializableResolver.IgnoreAttributeFullName))
                 continue;
 
-            var typeName = member.Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
-            fields.Add(new FieldData(member.Name, typeName, GetReadMethod(typeName), member.Locations.FirstOrDefault()));
+            properties.Add(new PropertyData(member.Name, member.Type, member.Locations.FirstOrDefault()));
         }
 
         var containingNamespace = classSymbol.ContainingNamespace;
@@ -95,32 +104,13 @@ public sealed class NetMessageGenerator : IIncrementalGenerator
         var needsParameterlessCtor = !classSymbol.InstanceConstructors.Any(c =>
             c.Parameters.Length == 0 && c.DeclaredAccessibility == Accessibility.Public);
 
-        return new MessageData(classSymbol.Name, namespaceName, fullName, fields, needsParameterlessCtor);
+        return new MessageData(classSymbol.Name, namespaceName, fullName, properties, needsParameterlessCtor);
     }
 
-    // Every supported type shares the same Write() - only Read differs per type.
-    private static string? GetReadMethod(string typeName) => typeName switch
+    private static string GenerateClass(string @namespace, string className, List<string> writeLines, List<string> readLines, bool needsParameterlessCtor)
     {
-        "bool" => "ReadBoolean",
-        "byte" => "ReadByte",
-        "sbyte" => "ReadSByte",
-        "short" => "ReadInt16",
-        "ushort" => "ReadUInt16",
-        "int" => "ReadInt32",
-        "uint" => "ReadUInt32",
-        "long" => "ReadInt64",
-        "ulong" => "ReadUInt64",
-        "float" => "ReadSingle",
-        "double" => "ReadDouble",
-        "string" => "ReadString",
-        "System.Net.IPEndPoint" => "ReadIPEndPoint",
-        _ => null,
-    };
-
-    private static string GenerateClass(string @namespace, string className, List<FieldData> fields, bool needsParameterlessCtor)
-    {
-        var writes = fields.Count == 0 ? "" : string.Join("\n            ", fields.Select(f => $"buffer.Write({f.PropertyName});"));
-        var reads = fields.Count == 0 ? "" : string.Join("\n            ", fields.Select(f => $"{f.PropertyName} = buffer.{f.ReadMethod}();"));
+        var writes = writeLines.Count == 0 ? "" : string.Join("\n            ", writeLines);
+        var reads = readLines.Count == 0 ? "" : string.Join("\n            ", readLines);
 
         var namespaceDecl = @namespace.Length == 0 ? "" : $"namespace {@namespace};\n\n";
         var ctor = needsParameterlessCtor ? $"public {className}() {{ }}\n\n    " : "";
@@ -144,18 +134,16 @@ public sealed class NetMessageGenerator : IIncrementalGenerator
             """;
     }
 
-    private sealed class FieldData
+    private sealed class PropertyData
     {
-        public readonly string PropertyName;
-        public readonly string TypeName;
-        public readonly string? ReadMethod;
+        public readonly string Name;
+        public readonly ITypeSymbol Type;
         public readonly Location? Location;
 
-        public FieldData(string propertyName, string typeName, string? readMethod, Location? location)
+        public PropertyData(string name, ITypeSymbol type, Location? location)
         {
-            PropertyName = propertyName;
-            TypeName = typeName;
-            ReadMethod = readMethod;
+            Name = name;
+            Type = type;
             Location = location;
         }
     }
@@ -165,17 +153,17 @@ public sealed class NetMessageGenerator : IIncrementalGenerator
         public readonly string ClassName;
         public readonly string Namespace;
         public readonly string FullName;
-        public readonly List<FieldData> Fields;
+        public readonly List<PropertyData> Properties;
         public readonly bool NeedsParameterlessCtor;
         public readonly bool IsPartial;
         public readonly Location? ClassLocation;
 
-        public MessageData(string className, string @namespace, string fullName, List<FieldData> fields, bool needsParameterlessCtor)
+        public MessageData(string className, string @namespace, string fullName, List<PropertyData> properties, bool needsParameterlessCtor)
         {
             ClassName = className;
             Namespace = @namespace;
             FullName = fullName;
-            Fields = fields;
+            Properties = properties;
             NeedsParameterlessCtor = needsParameterlessCtor;
             IsPartial = true;
         }
@@ -185,7 +173,7 @@ public sealed class NetMessageGenerator : IIncrementalGenerator
             ClassName = fullName;
             Namespace = "";
             FullName = fullName;
-            Fields = new List<FieldData>();
+            Properties = new List<PropertyData>();
             IsPartial = false;
             ClassLocation = classLocation;
         }

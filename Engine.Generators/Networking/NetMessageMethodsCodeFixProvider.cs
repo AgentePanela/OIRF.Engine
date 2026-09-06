@@ -10,7 +10,7 @@ using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace Engine.Generators;
+namespace Engine.Generators.Networking;
 
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(NetMessageMethodsCodeFixProvider)), Shared]
 public sealed class NetMessageMethodsCodeFixProvider : CodeFixProvider
@@ -53,7 +53,7 @@ public sealed class NetMessageMethodsCodeFixProvider : CodeFixProvider
         if (!hasWrite)
         {
             newMembers.Add(SyntaxFactory.ParseMemberDeclaration(
-                "public void WriteToBuffer(global::Lidgren.Network.NetOutgoingMessage buffer)\n" +
+                "public void WriteToBuffer(Lidgren.Network.NetOutgoingMessage buffer)\n" +
                 "{\n" +
                 "    throw new System.NotImplementedException();\n" +
                 "}\n")!);
@@ -62,7 +62,7 @@ public sealed class NetMessageMethodsCodeFixProvider : CodeFixProvider
         if (!hasRead)
         {
             newMembers.Add(SyntaxFactory.ParseMemberDeclaration(
-                "public void ReadFromBuffer(global::Lidgren.Network.NetIncomingMessage buffer)\n" +
+                "public void ReadFromBuffer(Lidgren.Network.NetIncomingMessage buffer)\n" +
                 "{\n" +
                 "    throw new System.NotImplementedException();\n" +
                 "}\n")!);

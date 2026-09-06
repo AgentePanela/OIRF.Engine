@@ -8,3 +8,5 @@ Rule ID | Category | Severity | Notes
 EA001 | Engine.Generators | Error | No matching constructor for [StyleField] default
 EA002 | Engine.Generators | Error | Unsupported type on a networked message property. Try use [NetSerializable]?
 EA003 | Engine.Generators | Warning | The message should be a partial class.
+EA004 | Engine.Generators | Error | No constructor on a [NetSerializable] type matches its public fields.
+EA005 | Engine.Generators | Error | A [NetSerializable] type contains itself, directly or indirectly.
