@@ -67,6 +67,14 @@ internal static class NetSerializableResolver
         if (primitiveMethod is not null)
             return new FieldPlan($"buffer.{primitiveMethod}()", new List<string> { $"buffer.Write({accessPath});" });
 
+        var collectionPlan = TryResolveCollection(type, accessPath, visiting, location, spc, out var isCollection);
+        if (isCollection)
+            return collectionPlan; // null means the element type already reported its own diagnostic
+
+        var dictionaryPlan = TryResolveDictionary(type, accessPath, visiting, location, spc, out var isDictionary);
+        if (isDictionary)
+            return dictionaryPlan;
+
         if (!HasAttribute(type, SerializableAttributeFullName))
         {
             spc.ReportDiagnostic(Diagnostic.Create(UnsupportedType, location ?? Location.None, typeName, accessPath));
@@ -118,6 +126,89 @@ internal static class NetSerializableResolver
 
         visiting.Remove(type);
         return new FieldPlan($"new {typeName}({string.Join(", ", readArgs)})", writeLines);
+    }
+
+    /// <summary>
+    /// List&lt;T&gt; or T[]: resolves the element type T (recursively - same
+    /// rules as anything else) and wraps it in a call to NetCollectionHelpers,
+    /// which is what actually keeps this a single expression on the read
+    /// side - required so a collection can be nested as a constructor
+    /// argument inside another [NetSerializable] type, not just live directly
+    /// on a message.
+    /// </summary>
+    private static FieldPlan? TryResolveCollection(ITypeSymbol type, string accessPath, HashSet<ITypeSymbol> visiting, Location? location, SourceProductionContext spc, out bool isCollection)
+    {
+        ITypeSymbol elementType;
+        string readHelper;
+
+        if (type is IArrayTypeSymbol arrayType)
+        {
+            elementType = arrayType.ElementType;
+            readHelper = "ReadArray";
+        }
+        else if (type is INamedTypeSymbol { TypeArguments.Length: 1 } namedType &&
+                 namedType.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.List<T>")
+        {
+            elementType = namedType.TypeArguments[0];
+            readHelper = "ReadList";
+        }
+        else
+        {
+            isCollection = false;
+            return null;
+        }
+
+        isCollection = true;
+        var elementPlan = Resolve(elementType, "item", visiting, location, spc);
+        if (elementPlan is null)
+            return null;
+
+        var elementTypeName = elementType.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
+        var writeBody = string.Join(" ", elementPlan.WriteLines);
+
+        var writeLine = $"global::Engine.Shared.Networking.NetCollectionHelpers.WriteCollection(buffer, {accessPath}, (buffer, item) => {{ {writeBody} }});";
+        var readExpr = $"global::Engine.Shared.Networking.NetCollectionHelpers.{readHelper}<{elementTypeName}>(buffer, buffer => {elementPlan.ReadExpr})";
+
+        return new FieldPlan(readExpr, new List<string> { writeLine });
+    }
+
+    /// <summary>
+    /// Dictionary&lt;TKey, TValue&gt;: same idea as TryResolveCollection, just
+    /// resolving both the key and value types and wrapping them in their own
+    /// lambdas passed to NetCollectionHelpers.WriteDictionary/ReadDictionary.
+    /// </summary>
+    private static FieldPlan? TryResolveDictionary(ITypeSymbol type, string accessPath, HashSet<ITypeSymbol> visiting, Location? location, SourceProductionContext spc, out bool isDictionary)
+    {
+        if (type is not INamedTypeSymbol { TypeArguments.Length: 2 } namedType ||
+            namedType.OriginalDefinition.ToDisplayString() != "System.Collections.Generic.Dictionary<TKey, TValue>")
+        {
+            isDictionary = false;
+            return null;
+        }
+
+        isDictionary = true;
+        var keyType = namedType.TypeArguments[0];
+        var valueType = namedType.TypeArguments[1];
+
+        var keyPlan = Resolve(keyType, "key", visiting, location, spc);
+        if (keyPlan is null)
+            return null;
+
+        var valuePlan = Resolve(valueType, "value", visiting, location, spc);
+        if (valuePlan is null)
+            return null;
+
+        var keyTypeName = keyType.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
+        var valueTypeName = valueType.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
+        var keyWriteBody = string.Join(" ", keyPlan.WriteLines);
+        var valueWriteBody = string.Join(" ", valuePlan.WriteLines);
+
+        var writeLine = $"global::Engine.Shared.Networking.NetCollectionHelpers.WriteDictionary(buffer, {accessPath}, " +
+            $"(buffer, key) => {{ {keyWriteBody} }}, (buffer, value) => {{ {valueWriteBody} }});";
+        var readExpr = $"global::Engine.Shared.Networking.NetCollectionHelpers.ReadDictionary<{keyTypeName}, {valueTypeName}>(buffer, " +
+            $"buffer => {keyPlan.ReadExpr}, buffer => {valuePlan.ReadExpr})";
+
+        return new FieldPlan(readExpr, new List<string> { writeLine });
     }
 
     // Every supported primitive shares the same Write() overload - only Read differs per type.

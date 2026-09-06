@@ -109,8 +109,8 @@ public sealed class NetMessageGenerator : IIncrementalGenerator
 
     private static string GenerateClass(string @namespace, string className, List<string> writeLines, List<string> readLines, bool needsParameterlessCtor)
     {
-        var writes = writeLines.Count == 0 ? "" : string.Join("\n            ", writeLines);
-        var reads = readLines.Count == 0 ? "" : string.Join("\n            ", readLines);
+        var writes = writeLines.Count == 0 ? "" : string.Join("\n        ", writeLines);
+        var reads = readLines.Count == 0 ? "" : string.Join("\n        ", readLines);
 
         var namespaceDecl = @namespace.Length == 0 ? "" : $"namespace {@namespace};\n\n";
         var ctor = needsParameterlessCtor ? $"public {className}() {{ }}\n\n    " : "";
