@@ -170,7 +170,7 @@ public class GameServer : IDisposable
         var tickInterval = TimeSpan.FromSeconds(1.0 / Options.TickRate);
         long lastTickMs = 0;
 
-        var endpoint = Networking.Server.Socket?.RemoteEndPoint ?? Networking.Server.Socket?.LocalEndPoint;
+        var endpoint = Networking.Server?.Socket?.RemoteEndPoint ?? Networking.Server?.Socket?.LocalEndPoint;
 
         Log.Debug("============================================");
         Log.Debug($"Server is now running on {endpoint?.ToString() ?? "unknown"}! Press Ctrl+C to stop.");

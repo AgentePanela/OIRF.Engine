@@ -1,6 +1,6 @@
 using Engine.Shared.Configuration;
 using Engine.Shared.Configuration.CVars;
-using Engine.Shared.Physics.Configuration;
+using Engine.Shared.Physics;
 
 namespace Engine.Client.UI.Debug;
 

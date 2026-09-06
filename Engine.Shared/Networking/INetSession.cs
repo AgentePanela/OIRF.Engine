@@ -53,11 +53,11 @@ internal sealed class NetSession : INetSession
 
 public class NetSessionArgs : EventArgs
 {
-    public INetSession? Channel { get; }
+    public INetSession? Session { get; }
 
-    public NetSessionArgs(INetSession? channel)
+    public NetSessionArgs(INetSession? session)
     {
-        Channel = channel;
+        Session = session;
     }
 }
 

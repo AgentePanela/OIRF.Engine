@@ -2,7 +2,7 @@ using Engine.Shared.Configuration;
 using System;
 using System.Collections.Generic;
 using Engine.Shared.GameObjects;
-using Engine.Shared.Physics.Configuration;
+using Engine.Shared.Physics;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 

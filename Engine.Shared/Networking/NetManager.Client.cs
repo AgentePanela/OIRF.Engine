@@ -42,4 +42,10 @@ internal sealed partial class NetManager : INetManager
         IsClient = true;
         IsRunning = true;
     }
+
+    public void DisconnectClient(string reason)
+    {
+        AssertNetSide(NetworkSide.Client);
+        MySession?.Disconnect(reason);
+    }
 }

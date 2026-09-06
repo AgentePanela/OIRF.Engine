@@ -34,6 +34,10 @@ public interface INetManager
     /// </summary>
     public INetSession? GetSessionById(string sessionId);
 
+    /// <summary>
+    /// Starts a server.
+    /// </summary>
+    public void StartServer(int port);
 
     /// <summary>
     /// Get the connected client session (CLIENT-SIDE)
@@ -42,23 +46,20 @@ public interface INetManager
 
     /// <summary>
     /// The SessionId the server assigned to this connection (CLIENT-SIDE).
-    /// Null until <see cref="ClientHandshakeMessage"/> arrives, right after connecting -
-    /// this is the id that will key you into replicated game state later on,
-    /// not <c>MySession.SessionId</c> (that one's just a local artifact).
     /// </summary>
     public string? MySessionId { get; }
 
     // public void Init(bool isServer);
 
     /// <summary>
-    /// Starts a server.
-    /// </summary>
-    public void StartServer(int port);
-
-    /// <summary>
     /// Opens a connection to the desired server (CLIENT-SIDE)
     /// </summary>
     public void ConnectClient(string host, int port);
+
+    /// <summary>
+    /// Disconnects the client with a reason. (CLIENT-SIDE)
+    /// </summary>
+    public void DisconnectClient(string reason);
 
     /// <summary>
     /// Disconnects the client from the server or the server from all clients.

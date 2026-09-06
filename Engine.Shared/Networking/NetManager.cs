@@ -106,11 +106,20 @@ internal sealed partial class NetManager : INetManager
     public void Shutdown(string reason)
     {
         IsRunning = false;
+
         if (IsServer)
+        {
             Server.Shutdown(reason);
+            Server = null;
+            IsServer = false;
+        }
 
         if (IsClient)
+        {
             Client.Shutdown(reason);
+            // Client = null;
+            // IsClient = false;
+        }
     }
 
     public bool AssertNetSide(NetworkSide side, string reason = "This operation is client-only!")

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
 using Engine.Shared.IoC;
+using Engine.Shared.Networking;
 using Engine.Shared.Storage;
 
 namespace Engine.Shared.Configuration;
@@ -54,6 +55,8 @@ public interface IConfigurationManager
 public sealed class ConfigurationManager : IConfigurationManager
 {
     [Dependency] private UserStorageManager _storage = default!;
+    [Dependency] private SharedContentManager _sharedContent = default!;
+    [Dependency] private INetManager _netMan = default!;
     private readonly Dictionary<string, object> _values = new();
     private readonly Dictionary<string, CVarDef> _defs = new(); // default values
     private readonly Dictionary<string, List<Delegate>> _subscribers = new();
@@ -68,11 +71,53 @@ public sealed class ConfigurationManager : IConfigurationManager
         IoCManager.ResolveDependencies(this);
         LoadCVars();
         LoadConfig();
+
+        _netMan.RegisterNetMessage<MsgReplicateCvar>((msg, _) => ApplyReplicatedValue(msg.Name, msg.Value));
+        _netMan.OnConnected += OnSessionConnected;
+    }
+
+    // sync current cvars state
+    private void OnSessionConnected(object? sender, NetSessionArgs args)
+    {
+        if (!_sharedContent.IsServer() || args.Session is null)
+            return;
+
+        foreach (var (name, def) in _defs)
+        {
+            if (!def.Flags.HasFlag(CVar.REPLICATED))
+                continue;
+
+            args.Session.SendMessage(new MsgReplicateCvar(name, FormatToml(_values[name])));
+        }
+    }
+
+    /// <summary>
+    /// Applies a cvar value that came from the network (CLIENT-SIDE)
+    /// </summary>
+    private void ApplyReplicatedValue(string name, string rawValue)
+    {
+        if (_sharedContent.IsServer())
+        {
+            Log.Warn($"Received a MsgReplicateCvar for '{name}' on the server - ignoring.");
+            return;
+        }
+
+        if (!_defs.TryGetValue(name, out var def))
+            return;
+
+        var value = ParseTomlValue(rawValue, def);
+        _values[name] = value;
+
+        if (_subscribers.TryGetValue(name, out var list))
+            def.FireSubscribers(value, list);
+
+        Log.Warn($"Updated REPLCIATED cvar {name} to new value ({rawValue})!");
     }
 
     void IConfigurationManager.ForceDefaultValue<T>(CVarDef<T> cvar, T value)
     {
         cvar.DefaultValue = value;
+        BroadcastCvarChange(cvar, value);
     }
 
     internal void LoadCVars()
@@ -87,7 +132,13 @@ public sealed class ConfigurationManager : IConfigurationManager
     {
         if (def is null)
             return;
-        
+
+        if (def.Flags.HasFlag(CVar.SERVERONLY) && !_sharedContent.IsServer())
+            return;
+
+        if (def.Flags.HasFlag(CVar.CLIENTONLY) && !_sharedContent.IsClient())
+            return;
+
         var type = def.GetType();
         var prop = type.GetProperty("DefaultValue");
 
@@ -95,6 +146,7 @@ public sealed class ConfigurationManager : IConfigurationManager
 
         _defs[def.Name] = def;
         _values[def.Name] = value!;
+        Log.Debug($"New cvar! {def.Name}");
     }
 
     public T Get<T>(CVarDef<T> cvar)
@@ -104,6 +156,9 @@ public sealed class ConfigurationManager : IConfigurationManager
 
     public void Set<T>(CVarDef<T> cvar, T value)
     {
+        if (cvar.Flags.HasFlag(CVar.SERVER) && !_sharedContent.IsServer())
+            throw new InvalidOperationException($"Cvar '{cvar.Name}' can only be set by the server.");
+
         _values[cvar.Name] = value!;
 
         if (_subscribers.TryGetValue(cvar.Name, out var list))
@@ -112,6 +167,19 @@ public sealed class ConfigurationManager : IConfigurationManager
             {
                 ((Action<T>)sub)(value);
             }
+        }
+
+        // replicate to all connected clients if is server.
+        BroadcastCvarChange(cvar, value);
+    }
+
+    private void BroadcastCvarChange<T>(CVarDef<T> cvar, T value)
+    {
+        if (cvar.Flags.HasFlag(CVar.REPLICATED) && _netMan.IsServer)
+        {
+            var serialized = FormatToml(value!);
+            foreach (var session in _netMan.Sessions)
+                session.SendMessage(new MsgReplicateCvar(cvar.Name, serialized));
         }
     }
 
