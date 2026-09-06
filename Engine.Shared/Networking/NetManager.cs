@@ -116,8 +116,8 @@ internal sealed partial class NetManager : INetManager
 
         if (IsClient)
         {
-            Client.Shutdown(reason);
-            // Client = null;
+            Client.Shutdown(reason); 
+            // Client = null; //already resolved by client-side disconnected event.
             // IsClient = false;
         }
     }

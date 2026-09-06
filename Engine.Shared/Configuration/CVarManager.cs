@@ -117,7 +117,8 @@ public sealed class ConfigurationManager : IConfigurationManager
     void IConfigurationManager.ForceDefaultValue<T>(CVarDef<T> cvar, T value)
     {
         cvar.DefaultValue = value;
-        BroadcastCvarChange(cvar, value);
+        if (cvar.Flags.HasFlag(CVar.REPLICATED) && _netMan.IsServer)
+            BroadcastCvarChange(cvar, value);
     }
 
     internal void LoadCVars()

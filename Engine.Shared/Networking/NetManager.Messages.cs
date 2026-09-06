@@ -86,4 +86,14 @@ internal sealed partial class NetManager : INetManager
         }
     }
 
+    public void Broadcast(INetMessage message, List<INetSession>? specifcSessions = default)
+    {
+        AssertNetSide(NetworkSide.Server, "This operation is server-side only!");
+        if (specifcSessions is null)
+            specifcSessions = Sessions.ToList();
+        
+        foreach (var session in specifcSessions)
+            session.SendMessage(message);
+    }
+
 }
