@@ -61,6 +61,14 @@ internal static class NetSerializableResolver
 
     public static FieldPlan? Resolve(ITypeSymbol type, string accessPath, HashSet<ITypeSymbol> visiting, Location? location, SourceProductionContext spc)
     {
+        // Nullable<T> (int?, EntityUid?
+        if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullableValueType)
+            return ResolveNullable(nullableValueType.TypeArguments[0], accessPath, visiting, location, spc, isValueType: true);
+
+        // Nullable reference type (string?, SomeClass?)
+        if (type.IsReferenceType && type.NullableAnnotation == NullableAnnotation.Annotated)
+            return ResolveNullable(type.WithNullableAnnotation(NullableAnnotation.NotAnnotated), accessPath, visiting, location, spc, isValueType: false);
+
         var typeName = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
 
         var primitiveMethod = GetReadMethod(typeName);
@@ -128,14 +136,31 @@ internal static class NetSerializableResolver
         return new FieldPlan($"new {typeName}({string.Join(", ", readArgs)})", writeLines);
     }
 
-    /// <summary>
-    /// List&lt;T&gt; or T[]: resolves the element type T (recursively - same
-    /// rules as anything else) and wraps it in a call to NetCollectionHelpers,
-    /// which is what actually keeps this a single expression on the read
-    /// side - required so a collection can be nested as a constructor
-    /// argument inside another [NetSerializable] type, not just live directly
-    /// on a message.
-    /// </summary>
+    private static FieldPlan? ResolveNullable(ITypeSymbol underlying, string accessPath, HashSet<ITypeSymbol> visiting, Location? location, SourceProductionContext spc, bool isValueType)
+    {
+        var valueAccessPath = isValueType ? $"{accessPath}.Value" : accessPath;
+        var innerPlan = Resolve(underlying, valueAccessPath, visiting, location, spc);
+        if (innerPlan is null)
+            return null;
+
+        var hasValueCheck = isValueType ? $"{accessPath}.HasValue" : $"{accessPath} is not null";
+        var writeBody = string.Join("\n            ", innerPlan.WriteLines);
+        var writeLines = new List<string>
+        {
+            $"buffer.Write({hasValueCheck});",
+            $"if ({hasValueCheck})",
+            "{",
+            $"    {writeBody}",
+            "}",
+        };
+
+        var underlyingName = underlying.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
+        var castPrefix = isValueType ? $"({underlyingName}?)" : "";
+        var readExpr = $"(buffer.ReadBoolean() ? {castPrefix}{innerPlan.ReadExpr} : null)";
+
+        return new FieldPlan(readExpr, writeLines);
+    }
+
     private static FieldPlan? TryResolveCollection(ITypeSymbol type, string accessPath, HashSet<ITypeSymbol> visiting, Location? location, SourceProductionContext spc, out bool isCollection)
     {
         ITypeSymbol elementType;
@@ -172,11 +197,6 @@ internal static class NetSerializableResolver
         return new FieldPlan(readExpr, new List<string> { writeLine });
     }
 
-    /// <summary>
-    /// Dictionary&lt;TKey, TValue&gt;: same idea as TryResolveCollection, just
-    /// resolving both the key and value types and wrapping them in their own
-    /// lambdas passed to NetCollectionHelpers.WriteDictionary/ReadDictionary.
-    /// </summary>
     private static FieldPlan? TryResolveDictionary(ITypeSymbol type, string accessPath, HashSet<ITypeSymbol> visiting, Location? location, SourceProductionContext spc, out bool isDictionary)
     {
         if (type is not INamedTypeSymbol { TypeArguments.Length: 2 } namedType ||
