@@ -4,6 +4,8 @@ using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net;
+using Engine.Shared.Configuration;
+using Engine.Shared.Configuration.CVars;
 using Engine.Shared.IoC;
 using Engine.Shared.Serializer;
 using Lidgren.Network;
@@ -13,6 +15,8 @@ namespace Engine.Shared.Networking;
 internal sealed partial class NetManager : INetManager
 {
     [Dependency] private readonly ISerializationManager _seriMan = default!;
+    [Dependency] private readonly IConfigurationManager _configMan = default!; // registered before INetManager (see SharedContentManager.Init) - safe to resolve here
+    [Dependency] private readonly SharedContentManager _sharedContent = default!; // registered even earlier, by GameServer/GameClient - also safe here
     
     public NetServer? Server { get; private set; }= default;
     public NetClient? Client { get; private set; } = default;
@@ -36,6 +40,25 @@ internal sealed partial class NetManager : INetManager
     {
         IoCManager.ResolveDependencies(this);
         RegisterNetMessage<ClientHandshakeMessage>(ClientHandshakeCompleted);
+
+        SubscribeLiveConfig(NetworkingCvars.NetFakeLoss, (c, v) => c.SimulatedLoss = v);
+        SubscribeLiveConfig(NetworkingCvars.NetFakeLagMin, (c, v) => c.SimulatedMinimumLatency = v);
+        SubscribeLiveConfig(NetworkingCvars.NetFakeLagRandom, (c, v) => c.SimulatedRandomLatency = v);
+        SubscribeLiveConfig(NetworkingCvars.NetFakeDuplicates, (c, v) => c.SimulatedDuplicatesChance = v);
+        SubscribeLiveConfig(NetworkingCvars.NetPingInterval, (c, v) => c.PingInterval = v);
+        SubscribeLiveConfig(NetworkingCvars.NetConnectionTimeout, (c, v) => c.ConnectionTimeout = v);
+    }
+
+    private void SubscribeLiveConfig<T>(CVarDef<T> cvar, Action<NetPeerConfiguration, T> apply)
+    {
+        _configMan.Subs(cvar, value =>
+        {
+            if (Server is not null)
+                apply(Server.Configuration, value);
+
+            if (Client is not null)
+                apply(Client.Configuration, value);
+        }, invokeImmediately: false);
     }
 
     // public void Init(bool isServer)
@@ -66,6 +89,20 @@ internal sealed partial class NetManager : INetManager
         config.EnableMessageType(NetIncomingMessageType.WarningMessage);
         config.EnableMessageType(NetIncomingMessageType.ErrorMessage);
         config.EnableMessageType(NetIncomingMessageType.ConnectionApproval);
+
+        config.ConnectionTimeout = _configMan.Get(NetworkingCvars.NetConnectionTimeout);
+        config.MaximumConnections = _configMan.Get(NetworkingCvars.NetMaxConnections);
+
+        config.SimulatedLoss = _configMan.Get(NetworkingCvars.NetFakeLoss);
+        config.SimulatedMinimumLatency = _configMan.Get(NetworkingCvars.NetFakeLagMin);
+        config.SimulatedRandomLatency = _configMan.Get(NetworkingCvars.NetFakeLagRandom);
+        config.SimulatedDuplicatesChance = _configMan.Get(NetworkingCvars.NetFakeDuplicates);
+
+        config.PingInterval = _configMan.Get(NetworkingCvars.NetPingInterval);
+
+        // SERVERONLY
+        if (_sharedContent.IsServer())
+            config.EnableUPnP = _configMan.Get(NetworkingCvars.NetUPnP);
 
         return config;
     }

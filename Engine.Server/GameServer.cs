@@ -107,14 +107,12 @@ public class GameServer : IDisposable
         Prototypes = IoCManager.Resolve<IPrototypeManager>();
         LocalizationManager = IoCManager.Resolve<ILocalizationManager>();
         Timing = IoCManager.Resolve<IGameTiming>();
-        Timing.SetTickRate(Options.TickRate);
         Networking = IoCManager.Resolve<INetManager>();
 
         IoCManager.AutoRegister(Assembly.GetExecutingAssembly());
 
         // Force default CVars
         ConfigManager.ForceDefaultValue(GameCVars.GameVersion, Options.Version);
-        ConfigManager.ForceDefaultValue(ServerCVars.Port, Options.Port);
         ConfigManager.ForceDefaultValue(ServerCVars.ServerName, Options.ServerName);
 
         // Post-init shared systems
@@ -125,10 +123,16 @@ public class GameServer : IDisposable
         _room = new EntityRoom(); // todo: RoomManager
         EntityManager.ForceScene(_room);
 
-        Networking.StartServer(Options.Port);
+#pragma warning disable CS0618 // remove in 2027
+        Timing.SetTickRate(Options.TickRate ?? ConfigManager.Get(NetworkingCvars.Tickrate));
+
+        Networking.StartServer(Options.Port ?? ConfigManager.Get(NetworkingCvars.ServerPort));
+#pragma warning restore CS0618
 
         State = ServerState.Running;
         Log.Debug("ServerState: Loading > Running!");
+
+        ConfigManager.Subs(NetworkingCvars.Tickrate, (v) => Timing.SetTickRate(v), false);
     }
 
     /// <summary>
@@ -167,7 +171,7 @@ public class GameServer : IDisposable
             _cts.Cancel();
         };
 
-        var tickInterval = TimeSpan.FromSeconds(1.0 / Options.TickRate);
+        var tickInterval = TimeSpan.FromSeconds(1.0 / Timing.TickRate);
         long lastTickMs = 0;
 
         var endpoint = Networking.Server?.Socket?.RemoteEndPoint ?? Networking.Server?.Socket?.LocalEndPoint;
