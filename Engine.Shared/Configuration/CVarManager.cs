@@ -179,8 +179,7 @@ public sealed class ConfigurationManager : IConfigurationManager
         if (cvar.Flags.HasFlag(CVar.REPLICATED) && _netMan.IsServer)
         {
             var serialized = FormatToml(value!);
-            foreach (var session in _netMan.Sessions)
-                session.SendMessage(new MsgReplicateCvar(cvar.Name, serialized));
+            _netMan.Broadcast(new MsgReplicateCvar(cvar.Name, serialized));
         }
     }
 

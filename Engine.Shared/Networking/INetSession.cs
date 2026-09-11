@@ -14,9 +14,10 @@ public interface INetSession
     public IPEndPoint RemoteEndPoint { get; }
     public short Ping { get; }
 
-    public void SendMessage(INetMessage message);
+    public void SendMessage(NetMessage message);
     public void Disconnect(string reason);
     internal void ForceSessionId(string id);
+    internal NetConnection Connection { get; }
 }
 
 internal sealed class NetSession : INetSession
@@ -34,14 +35,17 @@ internal sealed class NetSession : INetSession
     public IPEndPoint RemoteEndPoint => _connection.RemoteEndPoint;
     public short Ping => (short)(_connection.AverageRoundtripTime * 1000);
 
-    public void SendMessage(INetMessage message)
+    public void SendMessage(NetMessage message)
     {
         var outgoing = _connection.Peer.CreateMessage();
         outgoing.Write(message.GetType().FullName); // message header
-        message.WriteToBuffer(outgoing);
-        _connection.Peer.SendMessage(outgoing, _connection, NetDeliveryMethod.ReliableOrdered);
+        message.WriteToBuffer(outgoing); // generatedd
+        _connection.Peer.SendMessage(outgoing, _connection, message.DeliveryMethod.ToLidgren());
     }
+
     public void Disconnect(string reason) => _connection.Disconnect(reason);
+
+    NetConnection INetSession.Connection => _connection;
 
     public override string ToString() => $"{SessionId}";
 

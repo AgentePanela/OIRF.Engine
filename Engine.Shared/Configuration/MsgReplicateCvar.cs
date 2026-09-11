@@ -5,7 +5,7 @@ namespace Engine.Shared.Configuration;
 /// <summary>
 /// Sent by the server to sync replicated cvars.
 /// </summary>
-public sealed partial class MsgReplicateCvar : INetMessage
+public sealed partial class MsgReplicateCvar : NetMessage
 {
     public string Name { get; private set; } = "";
     public string Value { get; private set; } = "";

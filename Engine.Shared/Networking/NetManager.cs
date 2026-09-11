@@ -4,6 +4,7 @@ using System.Data;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net;
+using Engine.Shared.IoC;
 using Lidgren.Network;
 
 namespace Engine.Shared.Networking;
@@ -30,6 +31,7 @@ internal sealed partial class NetManager : INetManager
 
     public NetManager()
     {
+        IoCManager.ResolveDependencies(this);
         RegisterNetMessage<ClientHandshakeMessage>(ClientHandshakeCompleted);
     }
 

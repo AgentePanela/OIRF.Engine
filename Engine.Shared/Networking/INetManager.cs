@@ -73,14 +73,14 @@ public interface INetManager
     /// Send a message to all (or specific) connected clients in the server. (SERVER-SIDE)
     /// </summary>
     /// <param name="specifcSessions">Optional list of clients to broadcast the message.</param>
-    public void Broadcast(INetMessage message, List<INetSession>? specifcSessions = default);
+    public void Broadcast(NetMessage message, List<INetSession>? specifcSessions = default);
 
     /// <summary>
     /// Register a callback for a message receiving event.
     /// </summary>
     /// <typeparam name="T">MessageType.</typeparam>
     /// <param name="rxCallback">Callback function. The session is whoever the message physically arrived from - never trust a session id the message payload itself might claim.</param>
-    public void RegisterNetMessage<T>(Action<T, INetSession?>? rxCallback = null) where T : INetMessage, new();
+    public void RegisterNetMessage<T>(Action<T, INetSession?>? rxCallback = null) where T : NetMessage, new();
 
     public event EventHandler<NetSessionArgs> OnConnected;
     public event EventHandler<NetDisconnectedArgs> OnDisconnected;

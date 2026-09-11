@@ -8,6 +8,7 @@ using Engine.Shared.IoC;
 using Engine.Shared.Locale;
 using Engine.Shared.Networking;
 using Engine.Shared.Prototypes;
+using Engine.Shared.Serializer;
 using Engine.Shared.Timing;
 
 namespace Engine.Shared;
@@ -51,6 +52,7 @@ public sealed class SharedContentManager
         IoCManager.Register<IPrototypeManager, PrototypeManager>();
         IoCManager.Register<IGameTiming, GameTiming>();
         IoCManager.Register<EntityManager>();
+        IoCManager.Register<ISerializationManager, SerializerManager>(); // must come before INetManager - NetManager resolves it in its own ctor
         IoCManager.Register<INetManager, NetManager>();
         // add here ioc things
 
@@ -63,6 +65,10 @@ public sealed class SharedContentManager
         IoCManager.Resolve<IConfigurationManager>().Init();
         IoCManager.Resolve<IPrototypeManager>().Load();
         IoCManager.Resolve<SharedAudioManifest>().Load();
+
+        var serializerMan = IoCManager.Resolve<ISerializationManager>();
+        serializerMan.Init(_assemblies);
+        serializerMan.SelfTest();
     }
 
     public bool IsServer()
