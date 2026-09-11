@@ -49,6 +49,24 @@ internal sealed partial class NetManager : INetManager
                     Log.Error($"[Net:{side}] {msg.ReadString()}");
                     break;
 
+                case NetIncomingMessageType.ConnectionApproval:
+                {
+                    if (msg.SenderConnection is null)
+                        break; //wtf bro :sob:ÇsboS:bo:sob:
+
+                    var args = new NetConnectingArgs(msg.SenderConnection.RemoteEndPoint, msg);
+                    if (EngineAuth(args))
+                        OnConnecting?.Invoke(this, args); // only invoke if the connection is valid by engine
+                                                        // (serialization hash match)
+
+                    if (args.IsDenied)
+                        msg.SenderConnection.Deny(args.DenyReason ?? "Connection denied.");
+                    else
+                        msg.SenderConnection.Approve();
+
+                    break;
+                }
+
                 case NetIncomingMessageType.Data:
                 {
                     var msgType = msg.ReadString();

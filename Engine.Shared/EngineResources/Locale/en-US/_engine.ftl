@@ -10,3 +10,6 @@ engine-loading-flavour-asset =
         [one] Texture
        *[other] Textures
     }
+
+# netman
+engine-netman-server-hail-fail-hash-not-sync-reason = Network hashmap does not match! Please contact developers or update your app.

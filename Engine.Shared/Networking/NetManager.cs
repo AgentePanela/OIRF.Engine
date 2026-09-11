@@ -5,12 +5,15 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Net;
 using Engine.Shared.IoC;
+using Engine.Shared.Serializer;
 using Lidgren.Network;
 
 namespace Engine.Shared.Networking;
 
 internal sealed partial class NetManager : INetManager
 {
+    [Dependency] private readonly ISerializationManager _seriMan = default!;
+    
     public NetServer? Server { get; private set; }= default;
     public NetClient? Client { get; private set; } = default;
 
@@ -62,6 +65,7 @@ internal sealed partial class NetManager : INetManager
         config.EnableMessageType(NetIncomingMessageType.StatusChanged);
         config.EnableMessageType(NetIncomingMessageType.WarningMessage);
         config.EnableMessageType(NetIncomingMessageType.ErrorMessage);
+        config.EnableMessageType(NetIncomingMessageType.ConnectionApproval);
 
         return config;
     }
@@ -95,8 +99,10 @@ internal sealed partial class NetManager : INetManager
                 {
                     if (_sessions.Remove(connection, out var removed))
                         OnDisconnected?.Invoke(this, new NetDisconnectedArgs(removed, reason));
-                } // ts or c# nukes my else if
-                else if (peer == Client)// client connection failed
+                    else if (peer == Client) // connection never finished handshaking (e.g. denied on approval)
+                        OnDisconnected?.Invoke(this, new NetDisconnectedArgs(default, reason));
+                }
+                else if (peer == Client) // client connection failed outright (unreachable host, etc.)
                     OnDisconnected?.Invoke(this, new NetDisconnectedArgs(default, reason));
 
                 if (peer == Client)

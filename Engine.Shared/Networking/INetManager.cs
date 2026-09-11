@@ -54,7 +54,7 @@ public interface INetManager
     /// <summary>
     /// Opens a connection to the desired server (CLIENT-SIDE)
     /// </summary>
-    public void ConnectClient(string host, int port);
+    public void ConnectClient(string host, int port, NetMessage? authMessage = null);
 
     /// <summary>
     /// Disconnects the client with a reason. (CLIENT-SIDE)
@@ -84,4 +84,11 @@ public interface INetManager
 
     public event EventHandler<NetSessionArgs> OnConnected;
     public event EventHandler<NetDisconnectedArgs> OnDisconnected;
+
+    /// <summary>
+    /// Raised server-side when a client attempts to connect, before its approved.
+    /// Any subscriber can call <see cref="NetConnectingArgs.Deny"/> to reject it.
+    /// </summary>
+    public event EventHandler<NetConnectingArgs>? OnConnecting;
+
 }
