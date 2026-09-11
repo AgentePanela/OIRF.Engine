@@ -1,7 +1,6 @@
 using Engine.Client.Graphics;
 using Engine.Shared.Configuration;
 using Engine.Shared.GameObjects;
-using Engine.Shared.Physics.Configuration;
 using Engine.Shared.Physics.Fixtures;
 using Microsoft.Xna.Framework;
 

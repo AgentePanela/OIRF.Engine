@@ -94,7 +94,7 @@ GameClient.Viewport        // ViewportAdapter
 GameClient.InterfaceManager // UIManager
 GameClient.WindowManager   // WindowManager
 GameClient.ConfigManager   // IConfigurationManager
-GameClient.GameTime        // GTime  (delta time, FPS, etc.)
+GameClient.Timing          // IGameTiming (delta time, FPS, tick, etc.)
 GameClient.GameState       // Current GameState enum value
 ```
 

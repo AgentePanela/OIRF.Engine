@@ -63,11 +63,11 @@ public static class UIProfiler
     public static string LogSnapshot(bool shortVersion = false)
     {
         var sb = new StringBuilder();
-        var frameBudget = 1000.0 / MathHelper.Max(1, GameClient.GameTime.Fps);
+        var frameBudget = 1000.0 / MathHelper.Max(1, GameClient.Timing.Fps);
         var uiTotal = _updateMs + _frameMs;
 
         sb.AppendLine(
-            $"{GameClient.GameTime.Fps}FPS ({frameBudget:0.0}ms/frame) - UI costs {uiTotal:0.000}ms, " +
+            $"{GameClient.Timing.Fps}FPS ({frameBudget:0.0}ms/frame) - UI costs {uiTotal:0.000}ms, " +
             $"{uiTotal / frameBudget * 100:0.0}% of the frame");
         sb.AppendLine(
             $"  update {_updateMs:0.000}ms | draw {_frameMs:0.000}ms over {_controlCount} controls | " +

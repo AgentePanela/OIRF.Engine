@@ -4,6 +4,7 @@ using Engine.Shared.Prototypes;
 /// <summary>
 /// The unique ID a entity can have. Used as indentifier to almost every ECS function.
 /// </summary>
+[Serializable]
 public readonly struct EntityUid : IEquatable<EntityUid>, IComparable<EntityUid>, ISpanFormattable
 {
     public readonly int Id;
@@ -87,8 +88,10 @@ public readonly struct EntityUid : IEquatable<EntityUid>, IComparable<EntityUid>
     }
 }
 
+[Serializable]
 public readonly record struct ProtoId(string Value);
 
+[Serializable]
 public readonly struct ProtoId<T> : IEquatable<ProtoId<T>> where T : IPrototype
 {
     public readonly string Id;

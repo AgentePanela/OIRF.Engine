@@ -1,7 +1,6 @@
 using System;
-using Engine.Shared.Configuration;
 
-namespace Engine.Shared.Threading;
+namespace Engine.Shared.Configuration;
 
 [CVarDefs]
 public static class ThreadingCvars

@@ -23,12 +23,14 @@ public sealed class ServerOptions
     /// Server tick rate in ticks per second.
     /// Default: 60 TPS (~16.6ms per tick).
     /// </summary>
-    public int TickRate = 60; //todo cvar
+    [Obsolete("Use net.tickrate cvar instead!")]
+    public int? TickRate;
 
     /// <summary>
     /// Network port to listen on.
     /// </summary>
-    public int Port = 1212;
+    [Obsolete("Use net.port cvar instead!")]
+    public int? Port;
 
     public string DataPath = "data";
 

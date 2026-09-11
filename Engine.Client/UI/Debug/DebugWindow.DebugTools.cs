@@ -1,6 +1,6 @@
 using Engine.Shared.Configuration;
 using Engine.Shared.Configuration.CVars;
-using Engine.Shared.Physics.Configuration;
+using Engine.Shared.Physics;
 
 namespace Engine.Client.UI.Debug;
 
@@ -20,12 +20,12 @@ public sealed class DebugToolsTab
     {
         _cfg = cfg;
 
-        var box = new BoxContainer { Orientation = Orientation.Vertical, _separation = 8 };
+        var box = new BoxContainer { Orientation = Orientation.Vertical, Separation = 8 };
         Root = box;
 
         box.AddChild(new Label { Text = "CVars" });
 
-        var saveLoadRow = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 8 };
+        var saveLoadRow = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 8 };
         var saveBtn = new Button("Save CVars");
         saveBtn.OnClick += _ => _cfg.SaveConfig();
         var loadBtn = new Button("Load CVars");
@@ -39,7 +39,7 @@ public sealed class DebugToolsTab
         box.AddChild(_collisionCheck);
 
         _scaleCheck = new CheckBox { Text = "Scale outer" };
-        _scaleCheck.OnToggled += pressed => _cfg.Set(GameCVars.ScaleOuter, pressed);
+        _scaleCheck.OnToggled += pressed => _cfg.Set(GameCVars.FitScaleOuter, pressed);
         box.AddChild(_scaleCheck);
 
         ReloadCvars();
@@ -56,6 +56,6 @@ public sealed class DebugToolsTab
     private void ReloadCvars()
     {
         _collisionCheck.Pressed = _cfg.Get(PhysicsCvars.CollisionMask);
-        _scaleCheck.Pressed = _cfg.Get(GameCVars.ScaleOuter);
+        _scaleCheck.Pressed = _cfg.Get(GameCVars.FitScaleOuter);
     }
 }

@@ -12,9 +12,12 @@ using Engine.Shared.GameObjects;
 using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.IoC;
 using Engine.Shared.Locale;
+using Engine.Shared.Networking;
 using Engine.Shared.Prototypes;
 using Engine.Shared.Storage;
 using Engine.Shared.Threading;
+using Engine.Shared.Timing;
+using Lidgren.Network;
 
 namespace Engine.Server;
 
@@ -65,6 +68,8 @@ public class GameServer : IDisposable
     public IConfigurationManager ConfigManager { get; private set; } = default!;
     public IPrototypeManager Prototypes { get; private set; } = default!;
     public ILocalizationManager LocalizationManager { get; private set; } = default!;
+    public IGameTiming Timing { get; private set; } = default!;
+    public INetManager Networking { get; private set; } = default!;
 
     private readonly Stopwatch _tickWatch = new();
     private bool _running;
@@ -101,12 +106,13 @@ public class GameServer : IDisposable
         ConfigManager = IoCManager.Resolve<IConfigurationManager>();
         Prototypes = IoCManager.Resolve<IPrototypeManager>();
         LocalizationManager = IoCManager.Resolve<ILocalizationManager>();
+        Timing = IoCManager.Resolve<IGameTiming>();
+        Networking = IoCManager.Resolve<INetManager>();
 
         IoCManager.AutoRegister(Assembly.GetExecutingAssembly());
 
         // Force default CVars
         ConfigManager.ForceDefaultValue(GameCVars.GameVersion, Options.Version);
-        ConfigManager.ForceDefaultValue(ServerCVars.Port, Options.Port);
         ConfigManager.ForceDefaultValue(ServerCVars.ServerName, Options.ServerName);
 
         // Post-init shared systems
@@ -117,8 +123,16 @@ public class GameServer : IDisposable
         _room = new EntityRoom(); // todo: RoomManager
         EntityManager.ForceScene(_room);
 
+#pragma warning disable CS0618 // remove in 2027
+        Timing.SetTickRate(Options.TickRate ?? ConfigManager.Get(NetworkingCvars.Tickrate));
+
+        Networking.StartServer(Options.Port ?? ConfigManager.Get(NetworkingCvars.ServerPort));
+#pragma warning restore CS0618
+
         State = ServerState.Running;
         Log.Debug("ServerState: Loading > Running!");
+
+        ConfigManager.Subs(NetworkingCvars.Tickrate, (v) => Timing.SetTickRate(v), false);
     }
 
     /// <summary>
@@ -157,11 +171,13 @@ public class GameServer : IDisposable
             _cts.Cancel();
         };
 
-        var tickInterval = TimeSpan.FromSeconds(1.0 / Options.TickRate);
+        var tickInterval = TimeSpan.FromSeconds(1.0 / Timing.TickRate);
         long lastTickMs = 0;
 
+        var endpoint = Networking.Server?.Socket?.RemoteEndPoint ?? Networking.Server?.Socket?.LocalEndPoint;
+
         Log.Debug("============================================");
-        Log.Debug("Server is now running! Press Ctrl+C to stop.");
+        Log.Debug($"Server is now running on {endpoint?.ToString() ?? "unknown"}! Press Ctrl+C to stop.");
 
         _tickWatch.Start();
 
@@ -194,6 +210,14 @@ public class GameServer : IDisposable
     /// </summary>
     protected virtual void Update(float deltaTime)
     {
+        Timing.UpdateDeltaTime(deltaTime);
+        Timing.UpdateFPS(deltaTime); // no separate draw phase server-side, so this doubles as "actual ticks/sec"
+
+        Networking.Update();
+
+        // Advance the tick before simulating
+        Timing.AdvanceTick();
+
         // Update all entity systems
         EntityManager.Update(deltaTime);
         Prototypes.Update();
@@ -219,6 +243,9 @@ public class GameServer : IDisposable
         Log.Debug("Server shutting down...");
 
         EntityManager.OnShutdown();
+
+        if (Networking.IsRunning)
+            Networking.Shutdown(Loc.GetString("internal-net-server-shutdown"));
 
         if (Options.SaveConfigOnExit)
             ConfigManager.SaveConfig();

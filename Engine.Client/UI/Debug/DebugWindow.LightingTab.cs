@@ -43,7 +43,7 @@ public sealed class LightingDebugTab
     {
         IoCManager.ResolveDependencies(this);
 
-        var layout = new BoxContainer { Orientation = Orientation.Vertical, _separation = 5 };
+        var layout = new BoxContainer { Orientation = Orientation.Vertical, Separation = 5 };
         Root = layout;
 
         layout.AddChild(new Label { Text = "Lighting System" });
@@ -133,7 +133,7 @@ public sealed class LightingDebugTab
 
     private static BoxContainer SliderRow(Label label, Slider slider)
     {
-        var row = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 8 };
+        var row = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 8 };
         row.AddChild(label);
         row.AddChild(slider);
         return row;

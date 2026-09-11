@@ -84,7 +84,7 @@ public sealed partial class ItemList : ScrollContainer
             iconLabel = new Label { Text = text, VerticalAlignment = VerticalAlignment.Center };
             iconLabel.StyleAliasses.Add("button");
 
-            var content = new BoxContainer { Orientation = Orientation.Horizontal, _separation = 6 };
+            var content = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 6 };
             content.AddChild(new TextureRect { Key = iconKey, Stretch = true, Width = 24, Height = 24 });
             content.AddChild(iconLabel);
             row.Content = content;

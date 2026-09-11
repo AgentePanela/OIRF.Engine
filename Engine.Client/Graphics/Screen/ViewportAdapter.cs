@@ -22,7 +22,7 @@ public class ViewportAdapter
         IoCManager.ResolveDependencies(this);
         VirtualWidth = GameClient.Options.Width;
         VirtualHeight = GameClient.Options.Height;
-        _cfg.Subs(GameCVars.ScaleOuter, v => 
+        _cfg.Subs(GameCVars.FitScaleOuter, v => 
         {
             scaleOuter = v;
             if (GameClient.GraphicsDevice is not null)
