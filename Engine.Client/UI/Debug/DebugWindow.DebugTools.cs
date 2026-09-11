@@ -39,7 +39,7 @@ public sealed class DebugToolsTab
         box.AddChild(_collisionCheck);
 
         _scaleCheck = new CheckBox { Text = "Scale outer" };
-        _scaleCheck.OnToggled += pressed => _cfg.Set(GameCVars.ScaleOuter, pressed);
+        _scaleCheck.OnToggled += pressed => _cfg.Set(GameCVars.FitScaleOuter, pressed);
         box.AddChild(_scaleCheck);
 
         ReloadCvars();
@@ -56,6 +56,6 @@ public sealed class DebugToolsTab
     private void ReloadCvars()
     {
         _collisionCheck.Pressed = _cfg.Get(PhysicsCvars.CollisionMask);
-        _scaleCheck.Pressed = _cfg.Get(GameCVars.ScaleOuter);
+        _scaleCheck.Pressed = _cfg.Get(GameCVars.FitScaleOuter);
     }
 }

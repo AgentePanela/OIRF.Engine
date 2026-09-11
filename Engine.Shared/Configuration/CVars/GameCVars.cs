@@ -12,8 +12,8 @@ public static class GameCVars
     public static CVarDef<int> ResolutionHeight
         = CVarDef.Create("game.resolution-height", 0, CVar.CLIENTONLY);
 
-    public static CVarDef<bool> ScaleOuter
-        = CVarDef.Create("game.scale", true, CVar.CLIENTONLY);
+    public static CVarDef<bool> FitScaleOuter
+        = CVarDef.Create("game.fit-outer", true, CVar.CLIENTONLY);
 
     public static CVarDef<bool> Vsync
         = CVarDef.Create("game.vsync", true, CVar.CLIENTONLY);
