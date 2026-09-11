@@ -161,23 +161,40 @@ public abstract class EntitySystem
         where T1 : Component where T2 : Component where T3 : Component
         => _entManager.ParallelQuery(body);
 
-    // ==== entities
-    
+    // ==== entities (global by default - see the IEntityScene? owner overloads to tie one
+    // to a specific scene/room)
+
     /// <inheritdoc cref="EntityManager.CreateEmptyEntity(string?)"/>
     protected EntityUid CreateEmptyEntity(string? name = default)
         => _entManager.CreateEmptyEntity(name);
+
+    /// <inheritdoc cref="EntityManager.CreateEmptyEntity(string?, IEntityScene?)"/>
+    protected EntityUid CreateEmptyEntity(string? name, IEntityScene? owner)
+        => _entManager.CreateEmptyEntity(name, owner);
 
     /// <inheritdoc cref="EntityManager.CreateEntity(ProtoId{Prototypes.EntityPrototype}, string?)"/>
     protected EntityUid CreateEntity(ProtoId<EntityPrototype> protoId, string? nameOverride = null)
         => _entManager.CreateEntity(protoId, nameOverride);
 
+    /// <inheritdoc cref="EntityManager.CreateEntity(ProtoId{EntityPrototype}, IEntityScene?, string?)"/>
+    protected EntityUid CreateEntity(ProtoId<EntityPrototype> protoId, IEntityScene? owner, string? nameOverride = null)
+        => _entManager.CreateEntity(protoId, owner, nameOverride);
+
     /// <inheritdoc cref="EntityManager.CreateEntity(ProtoId{EntityPrototype}, Microsoft.Xna.Framework.Vector2, string?)"/>
     protected EntityUid CreateEntity(ProtoId<EntityPrototype> protoId, Vector2 pos, string? nameOverride = null)
         => _entManager.CreateEntity(protoId, pos, nameOverride);
 
+    /// <inheritdoc cref="EntityManager.CreateEntity(ProtoId{EntityPrototype}, IEntityScene?, Microsoft.Xna.Framework.Vector2, string?)"/>
+    protected EntityUid CreateEntity(ProtoId<EntityPrototype> protoId, IEntityScene? owner, Vector2 pos, string? nameOverride = null)
+        => _entManager.CreateEntity(protoId, owner, pos, nameOverride);
+
     /// <inheritdoc cref="EntityManager.CloneEntity(EntityUid)"/>
     protected EntityUid CloneEntity(EntityUid source)
         => _entManager.CloneEntity(source);
+
+    /// <inheritdoc cref="EntityManager.RestoreEntity(string, IReadOnlyList{Component}, ProtoId{EntityPrototype}?, IEntityScene?)"/>
+    protected EntityUid RestoreEntity(string name, IReadOnlyList<Component> snapshot, ProtoId<EntityPrototype>? proto = null, IEntityScene? owner = null)
+        => _entManager.RestoreEntity(name, snapshot, proto, owner);
     
     /// <inheritdoc cref="EntityManager.GetEntity(EntityUid)"/>
     protected Entity? GetEntity(EntityUid uid)
@@ -190,4 +207,12 @@ public abstract class EntitySystem
     /// <inheritdoc cref="EntityManager.DeleteEntity(EntityUid)"/>
     protected void DeleteEntity(EntityUid uid)
         => _entManager.DeleteEntity(uid);
+
+    /// <inheritdoc cref="EntityManager.GetEntitiesInScene(IEntityScene)"/>
+    protected IReadOnlyCollection<EntityUid> GetEntitiesInScene(IEntityScene scene)
+        => _entManager.GetEntitiesInScene(scene);
+
+    /// <inheritdoc cref="EntityManager.WipeEntities(IEntityScene?)"/>
+    protected void WipeEntities(IEntityScene? scene = null)
+        => _entManager.WipeEntities(scene);
 }

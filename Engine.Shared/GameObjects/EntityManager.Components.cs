@@ -10,7 +10,7 @@ public sealed partial class EntityManager
 {
     private Dictionary<EntityUid, Component>? TryGetPool(Type type)
     {
-        if (_scene.Components.TryGetValue(type, out var pool))
+        if (_components.TryGetValue(type, out var pool))
             return pool;
 
         return null;
@@ -122,7 +122,7 @@ public sealed partial class EntityManager
     /// </summary>
     public bool HasComp<T>(EntityUid uid) where T : Component
     {
-        if (!_scene.Components.TryGetValue(typeof(T), out var pool))
+        if (!_components.TryGetValue(typeof(T), out var pool))
             return false;
 
         return pool.ContainsKey(uid);
@@ -156,7 +156,7 @@ public sealed partial class EntityManager
     
         var result = new List<Component>();
 
-        foreach (var pool in _scene.Components.Values)
+        foreach (var pool in _components.Values)
         {
             if (!pool.TryGetValue(uid, out var comp))
                 continue;

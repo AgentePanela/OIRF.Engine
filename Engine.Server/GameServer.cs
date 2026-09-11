@@ -121,7 +121,6 @@ public class GameServer : IDisposable
         Initialize();
         
         _room = new EntityRoom(); // todo: RoomManager
-        EntityManager.ForceScene(_room);
 
 #pragma warning disable CS0618 // remove in 2027
         Timing.SetTickRate(Options.TickRate ?? ConfigManager.Get(NetworkingCvars.Tickrate));

@@ -12,33 +12,42 @@ namespace Engine.Shared.GameObjects;
 public sealed partial class EntityManager
 {
     /// <summary>
-    /// Get the current entity count.
+    /// Get the current entity count (every entity - global and scene/room-owned alike).
     /// </summary>
     public int GetEntityCount()
     {
-        return _scene.Entities.Count;
+        return _entities.Count;
     }
 
     /// <summary>
-    /// Create an empty entity in the current scene. <para/>
+    /// Create a global empty entity, not owned by any scene/room. <para/>
     /// "i" exists just to shutup the compiler.
     /// </summary>
     internal Entity CreateEmptyEntity(string? name = default, bool i = true)
+        => CreateEmptyEntityOwned(name, null);
+
+    private Entity CreateEmptyEntityOwned(string? name, IEntityScene? owner)
     {
         MainThread.AssertMainThread();
 
-        var uid = new EntityUid(_scene.EntUidIndex);
+        var uid = new EntityUid(_nextUid++);
         var ent = new Entity(uid, name ?? string.Empty);
-        ent.SetScene(_scene);
-        if (!_scene.Entities.TryAdd(uid, ent))
+        if (owner is not null)
+        {
+            ent.SetScene(owner);
+            owner.OwnedEntities.Add(uid);
+        }
+
+        if (!_entities.TryAdd(uid, ent))
             throw new Exception($"Entity {uid} already exists.");
-        _scene.EntUidIndex++;
+
         EventBus.RaiseEvent(uid, new EntityInitEvent());
         return ent;
     }
 
     /// <summary>
-    /// Create an empty entity in the current scene.
+    /// Create a global empty entity, not owned by any scene/room. Use the
+    /// <see cref="CreateEmptyEntity(string?, IEntityScene?)"/> overload to tie it to one.
     /// </summary>
     public EntityUid CreateEmptyEntity(string? name = default)
     {
@@ -48,16 +57,35 @@ public sealed partial class EntityManager
     }
 
     /// <summary>
-    /// Create a entity using a prototype as reference.
+    /// Create an empty entity owned by <paramref name="owner"/>, or global if null.
+    /// </summary>
+    public EntityUid CreateEmptyEntity(string? name, IEntityScene? owner)
+    {
+        Entity ent = CreateEmptyEntityOwned(name, owner);
+        EventBus.RaiseEvent(ent.Uid, new EntityAddedEvent());
+        return ent.Uid;
+    }
+
+    /// <summary>
+    /// Create a global entity (not owned by any scene/room) using a prototype as reference.
+    /// Use the <see cref="CreateEntity(ProtoId{EntityPrototype}, IEntityScene?, string?)"/>
+    /// overload to tie it to one.
     /// </summary>
     public EntityUid CreateEntity(ProtoId<EntityPrototype> protoId, string? nameOverride = null)
+        => CreateEntity(protoId, null, nameOverride);
+
+    /// <summary>
+    /// Create a entity using a prototype as reference, owned by <paramref name="owner"/>
+    /// (or global if null).
+    /// </summary>
+    public EntityUid CreateEntity(ProtoId<EntityPrototype> protoId, IEntityScene? owner, string? nameOverride = null)
     {
         var proto = _proto.Index(protoId);
 
         if (proto is IInheritingPrototype inh && inh.Abstract)
             throw new Exception($"Prototype '{proto.ID}' is abstract and cannot be spawned.");
 
-        var ent = CreateEmptyEntity(nameOverride ?? proto.Name ?? proto.ID, true);
+        var ent = CreateEmptyEntityOwned(nameOverride ?? proto.Name ?? proto.ID, owner);
         ent.SetId(protoId);
 
         foreach (var entry in proto.Components.Values)
@@ -79,8 +107,12 @@ public sealed partial class EntityManager
 
     /// <inheritdoc cref="CreateEntity(ProtoId{EntityPrototype}, string?)"/>
     public EntityUid CreateEntity(ProtoId<EntityPrototype> protoId, Vector2 pos, string? nameOverride = null)
+        => CreateEntity(protoId, null, pos, nameOverride);
+
+    /// <inheritdoc cref="CreateEntity(ProtoId{EntityPrototype}, IEntityScene?, string?)"/>
+    public EntityUid CreateEntity(ProtoId<EntityPrototype> protoId, IEntityScene? owner, Vector2 pos, string? nameOverride = null)
     {
-        var uid = CreateEntity(protoId, nameOverride);
+        var uid = CreateEntity(protoId, owner, nameOverride);
         var trans = EnsureComp<TransformComponent>(uid);
         trans.Position = pos;
         return uid;
@@ -93,7 +125,7 @@ public sealed partial class EntityManager
     public bool HasEntity(EntityUid uid, [NotNullWhen(true)]out Entity? ent)
     {
         ent = default;
-        if (!_scene.Entities.TryGetValue(uid, out ent))
+        if (!_entities.TryGetValue(uid, out ent))
             return false;
 
         return true;
@@ -104,7 +136,7 @@ public sealed partial class EntityManager
     /// </summary>
     public Entity? GetEntity(EntityUid uid)
     {
-        if (!_scene.Entities.TryGetValue(uid, out var ent))
+        if (!_entities.TryGetValue(uid, out var ent))
             return null;
 
         return ent;
@@ -115,7 +147,15 @@ public sealed partial class EntityManager
     /// </summary>
     public List<EntityUid> GetEntities()
     {
-        return _scene.Entities.Keys.ToList();
+        return _entities.Keys.ToList();
+    }
+
+    /// <summary>
+    /// Get the entities owned by a specific scene/room.
+    /// </summary>
+    public IReadOnlyCollection<EntityUid> GetEntitiesInScene(IEntityScene scene)
+    {
+        return scene.OwnedEntities.ToList();
     }
 
     /// <summary>
@@ -130,22 +170,26 @@ public sealed partial class EntityManager
     }
 
     /// <summary>
-    /// Creates a copy of an existing entity, copying its metadata and compononents
+    /// Creates a copy of an existing entity, copying its metadata and compononents. The
+    /// clone is owned by the same scene/room as <paramref name="source"/> (global if
+    /// <paramref name="source"/> is global).
     /// </summary>
     public EntityUid CloneEntity(EntityUid source)
     {
         if (!HasEntity(source, out var srcEnt))
             return EntityUid.Empty;
 
-        return RestoreEntity(srcEnt.Name, GetEntityComps(source) ?? [], srcEnt.Id);
+        return RestoreEntity(srcEnt.Name, GetEntityComps(source) ?? [], srcEnt.Id, srcEnt.Scene);
     }
 
     /// <summary>
-    /// Creates a new entity from a list of components and them copy their values via reflection.
+    /// Creates a new entity from a list of components and them copy their values via
+    /// reflection. Global (not owned by any scene/room) unless <paramref name="owner"/>
+    /// is given.
     /// </summary>
-    public EntityUid RestoreEntity(string name, IReadOnlyList<Component> snapshot, ProtoId<EntityPrototype>? proto = null)
+    public EntityUid RestoreEntity(string name, IReadOnlyList<Component> snapshot, ProtoId<EntityPrototype>? proto = null, IEntityScene? owner = null)
     {
-        var newEnt = CreateEmptyEntity(name, true);
+        var newEnt = CreateEmptyEntityOwned(name, owner);
         if (proto is not null)
             newEnt.SetId(proto.Value);
 
@@ -164,10 +208,19 @@ public sealed partial class EntityManager
     }
 
     /// <summary>
-    /// This will wipe all entities in the end of the frame.
+    /// Wipes entities through the same deferred path as a normal <see cref="DeleteEntity"/> -
+    /// queued, on the next Update.
     /// </summary>
-    public void WipeAllEntities()
+    public void WipeEntities(IEntityScene? scene = null)
     {
-        WipeEntities = true; // wil wipe everyhing in the end of the frame.
+        if (scene is null)
+        {
+            _wipeAllQueued = true;
+            return;
+        }
+
+        foreach (var uid in scene.OwnedEntities.ToList())
+            DeleteEntity(uid);
     }
+
 }

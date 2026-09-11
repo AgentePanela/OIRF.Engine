@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.Prototypes;
 using Engine.Shared;
@@ -15,14 +16,17 @@ public sealed partial class EntityManager
     [Dependency] private readonly IPrototypeManager _proto = default!;
     [Dependency] private readonly SharedContentManager _contentMan = default!;
     public EventBus EventBus;
-    private IEntityScene _scene;
+
+    private readonly ConcurrentDictionary<EntityUid, Entity> _entities = new();
+    private readonly ConcurrentDictionary<Type, Dictionary<EntityUid, Component>> _components = new();
+    private int _nextUid = 1;
 
     internal readonly List<EntityUid> EntitiesToRemove = new();
     internal readonly HashSet<Component> CompsPendingAdd = new();
     internal readonly HashSet<Component> CompsPendingRemove = new();
     private readonly List<Component> _tempComps = new();
     private readonly List<EntityUid> _tempUids = new();
-    private bool WipeEntities = false;
+    private bool _wipeAllQueued = false;
 
     public void Init()
     {
@@ -31,22 +35,11 @@ public sealed partial class EntityManager
         EventBus.Init();
     }
 
-    internal void ForceScene(IEntityScene scene)
-    {
-        if (_scene == scene)
-            return;
-        
-        _scene = scene;
-        Log.Debug("Entity manager current scene updated.");
-    }
-
     internal void Update(float dt)
     {
         UpdateSystems(dt);
-        if (_scene is null)
-            return;
 
-        if (WipeEntities)
+        if (_wipeAllQueued)
         {
             var ents = GetEntities();
             Log.Debug($"Wiping all {ents.Count} entities...");
@@ -90,7 +83,7 @@ public sealed partial class EntityManager
                 foreach (var comp in snapshot)
                 {
                     EventBus.RaiseEvent(comp.Owner, new CompRemovedEvent() { Component = comp });
-                    if (_scene.Components.TryGetValue(comp.GetType(), out var pool))
+                    if (_components.TryGetValue(comp.GetType(), out var pool))
                         pool.Remove(comp.Owner);
                 }
                 snapshot.Clear();
@@ -120,27 +113,27 @@ public sealed partial class EntityManager
             foreach (var uid in snapshot)
             {
                 EventBus.RaiseEvent(uid, new EntityRemovedEvent());
-                _scene.Entities.TryRemove(uid, out _);
+                if (_entities.TryRemove(uid, out var removedEnt))
+                    removedEnt.Scene?.OwnedEntities.Remove(uid);
             }
             snapshot.Clear();
         }
 
-        if (WipeEntities)
+        if (_wipeAllQueued)
         {
-            _scene.EntUidIndex = 0;
-            WipeEntities = false;
+            _wipeAllQueued = false;
             Log.Debug("All entities has been deleted.");
         }
     }
 
     private Dictionary<EntityUid, Component> GetPool(Type type)
     {
-        return _scene.Components.GetOrAdd(type, static _ => new Dictionary<EntityUid, Component>());
+        return _components.GetOrAdd(type, static _ => new Dictionary<EntityUid, Component>());
     }
 
     private Dictionary<EntityUid, Component> GetPool<T>() where T : Component
     {
         return GetPool(typeof(T));
     }
-    
+
 }

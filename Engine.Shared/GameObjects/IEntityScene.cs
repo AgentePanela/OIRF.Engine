@@ -1,12 +1,14 @@
-using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace Engine.Shared.GameObjects;
 
+/// <summary>
+/// A world that can own entities.
+/// </summary>
 public interface IEntityScene
 {
-    public ConcurrentDictionary<EntityUid, Entity> Entities { get; }
-    public int EntUidIndex { get; set; }
-    public ConcurrentDictionary<Type, Dictionary<EntityUid, Component>> Components { get; }
+    /// <summary>
+    /// EntityUids currently owned by this scene.
+    /// </summary>
+    public HashSet<EntityUid> OwnedEntities { get; }
 }
