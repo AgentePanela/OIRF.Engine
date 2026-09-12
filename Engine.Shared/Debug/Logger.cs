@@ -7,6 +7,12 @@ using System.Collections.Generic;
 public static class Log
 {
     internal static bool ExceptOnWarn = false;
+
+    /// <summary>
+    /// Fired for every log line written, after the terminal write it
+    /// </summary>
+    public static event Action<string, string, ConsoleColor>? OnLog;
+
     public static void Debug(object? log) => Write(log, 11, "DEBUG");
     public static void Warn(object? log) => Write(log, 14, "WARN ", true);
     public static void Error(object? log) => Write(log, 12, "ERROR", true);
@@ -47,11 +53,12 @@ public static class Log
 
         Console.Write("] ");
 
-        if (LevelColor.TryGetValue(prefix, out var contentColor))
-            Console.ForegroundColor = contentColor;
+        var contentColor = LevelColor.TryGetValue(prefix, out var levelColor) ? levelColor : ConsoleColor.Gray;
+        Console.ForegroundColor = contentColor;
 
         Console.WriteLine(output);
         Console.ResetColor();
+        OnLog?.Invoke(prefix, output, contentColor);
         if (warningOrError && ExceptOnWarn)
             throw new Exception(output);
     }
