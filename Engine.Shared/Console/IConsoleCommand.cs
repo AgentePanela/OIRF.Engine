@@ -11,8 +11,14 @@ public interface IConsoleCommand
     string Description { get; }
 
     bool RequireServerOrSingleplayer => false;
-    
+
     void Execute(IConsoleShell shell, string[] args);
+
+    /// <summary>
+    /// Completion options for the argument currently being typed. <paramref name="args"/> is
+    /// every argument already fully typed (not including the partial one)
+    /// </summary>
+    CompletionResult GetCompletion(IConsoleShell shell, string[] args) => CompletionResult.Empty;
 }
 
 /// <summary>

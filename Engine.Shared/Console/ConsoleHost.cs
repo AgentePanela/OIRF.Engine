@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using Engine.Shared.IoC;
 using Engine.Shared.Networking;
 
@@ -69,6 +70,43 @@ internal sealed class ConsoleHost : IConsoleHost
 
     public bool TryGetCommand(string name, [NotNullWhen(true)] out IConsoleCommand? command)
         => _commands.TryGetValue(name, out command);
+
+    public CompletionResult GetCompletions(string line)
+    {
+        var endsWithSpace = line.Length == 0 || char.IsWhiteSpace(line[^1]);
+        var args = ConsoleShell.Tokenize(line);
+
+        CompletionResult raw;
+        string partial;
+
+        if (args.Length == 0 || (args.Length == 1 && !endsWithSpace))
+        {
+            // still typing the command name itself
+            partial = args.Length == 0 ? "" : args[0];
+            raw = new CompletionResult(_commands.Values
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(c => new CompletionOption(c.Name, c.Description))
+                .ToList());
+        }
+        else
+        {
+            if (!TryGetCommand(args[0], out var cmd))
+                return CompletionResult.Empty;
+
+            var commandArgs = args[1..];
+            if (!endsWithSpace && commandArgs.Length > 0)
+                commandArgs = commandArgs[..^1]; // drop the inprogress partial token
+
+            partial = endsWithSpace ? "" : args[^1];
+            raw = cmd.GetCompletion(LocalShell, commandArgs);
+        }
+
+        var filtered = raw.Options
+            .Where(o => o.Value.StartsWith(partial, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return new CompletionResult(filtered, raw.Hint);
+    }
 
     public IConsoleShell GetSessionShell(INetSession session)
     {

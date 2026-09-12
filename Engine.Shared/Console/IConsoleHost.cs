@@ -7,7 +7,7 @@ namespace Engine.Shared.Console;
 
 /// <summary>
 /// Owns the registry of known console commands and hands out IConsoleShell -
-/// One instance per process (client or server), resolved via IoC.
+/// One instance per process (client or server)
 /// </summary>
 public interface IConsoleHost
 {
@@ -31,28 +31,27 @@ public interface IConsoleHost
     bool TryGetCommand(string name, [NotNullWhen(true)] out IConsoleCommand? command);
 
     /// <summary>
+    /// Autocomplete for a command line as currently typed
+    /// </summary>
+    CompletionResult GetCompletions(string line);
+
+    /// <summary>
     /// Gets (creating if needed) the shell used to talk to a specific connected client (SERVER-SIDE).
     /// </summary>
     IConsoleShell GetSessionShell(INetSession session);
 
     /// <summary>
-    /// Raised (CLIENT-SIDE) when the local shell output should be cleared. Output itself doesn't
-    /// get a dedicated event - <see cref="IConsoleShell.WriteLine"/>/<c>WriteError</c> just go
-    /// through <see cref="Log"/> like anything else, and <see cref="OnEngineLog"/>/<see cref="LogBacklog"/>
-    /// below are the one channel a console window needs to mirror it.
+    /// Raised (CLIENT-SIDE) when the local shell output should be cleared.
     /// </summary>
     event Action? OnLocalClear;
 
     /// <summary>
-    /// Recent engine log lines (prefix, message, terminal color), oldest first, capped to a fixed
-    /// size. Lets a console window opened mid-session show what already happened before it existed
-    /// - most Log calls (cvars, prototypes, components...) fire during boot.
+    /// Recent engine log lines
     /// </summary>
     IReadOnlyList<(string Prefix, string Text, ConsoleColor Color)> LogBacklog { get; }
 
     /// <summary>
-    /// Raised (CLIENT-SIDE) for every Log line written from here on, mirroring the terminal - use
-    /// alongside <see cref="LogBacklog"/> to also show new lines as they happen.
+    /// Raised (CLIENT-SIDE) for every Log line written from here on, mirroring the terminal
     /// </summary>
     event Action<string, string, ConsoleColor>? OnEngineLog;
 }
