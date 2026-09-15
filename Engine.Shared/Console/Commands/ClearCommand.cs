@@ -7,6 +7,7 @@ public sealed class ClearCommand : IConsoleCommand
 {
     public string Name => "clear";
     public string Description => "Clears the console output.";
+    public string Help => "clear";
 
     public void Execute(IConsoleShell shell, string[] args) => shell.Clear();
 }

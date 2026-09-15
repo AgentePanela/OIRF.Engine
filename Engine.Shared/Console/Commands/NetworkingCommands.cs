@@ -9,6 +9,7 @@ public sealed class ConnectCommand : IConsoleCommand
 
     public string Name => "connect";
     public string Description => "Connects to a server: connect <host> [port]";
+    public string Help => "connect <host> [port]";
 
     [Dependency] private readonly INetManager _netMan = default!;
 
@@ -38,6 +39,7 @@ public sealed class DisconnectCommand : IConsoleCommand
 {
     public string Name => "disconnect";
     public string Description => "Disconnects from the current server: disconnect [reason]";
+    public string Help => "disconnect [reason]";
 
     [Dependency] private readonly INetManager _netMan = default!;
 
@@ -58,7 +60,8 @@ public sealed class DisconnectCommand : IConsoleCommand
 public sealed class PingCommand : IConsoleCommand
 {
     public string Name => "ping";
-    public string Description => "Replies with Pong!, plus the current connection's latency if there is one.";
+    public string Description => "Replies with Pong! (and the latency)";
+    public string Help => "ping";
 
     [Dependency] private readonly INetManager _netMan = default!;
 

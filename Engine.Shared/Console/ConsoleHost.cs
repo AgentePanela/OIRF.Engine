@@ -106,6 +106,9 @@ internal sealed class ConsoleHost : IConsoleHost
 
             partial = endsWithSpace ? "" : args[^1];
             raw = cmd.GetCompletion(LocalShell, commandArgs);
+
+            if (raw.Options.Count == 0 && raw.Hint is null)
+                raw = new CompletionResult(raw.Options, cmd.Help); // show help if theres nothing to show
         }
 
         var filtered = raw.Options

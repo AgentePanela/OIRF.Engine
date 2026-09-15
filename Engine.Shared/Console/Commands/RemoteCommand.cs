@@ -9,6 +9,7 @@ public sealed class RemoteCommand : IConsoleCommand
 {
     public string Name => ">";
     public string Description => "Runs the rest of the line on the server: > <command> [args...]";
+    public string Help => "> <command> [args...]";
 
     public void Execute(IConsoleShell shell, string[] args)
     {

@@ -58,7 +58,7 @@ public static class Log
 
         Console.WriteLine(output);
         Console.ResetColor();
-        OnLog?.Invoke(prefix, output, contentColor);
+        OnLog?.Invoke(prefix, output, color);
         if (warningOrError && ExceptOnWarn)
             throw new Exception(output);
     }

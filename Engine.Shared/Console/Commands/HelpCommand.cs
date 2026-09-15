@@ -9,6 +9,7 @@ public sealed class HelpCommand : IConsoleCommand
 {
     public string Name => "help";
     public string Description => "Lists every command, or describes one: help <command>";
+    public string Help => "help <command>";
 
     public void Execute(IConsoleShell shell, string[] args)
     {

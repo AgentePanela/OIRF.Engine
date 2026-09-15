@@ -8,7 +8,8 @@ namespace Engine.Shared.Console.Commands;
 public sealed class CvarCommand : IConsoleCommand
 {
     public string Name => "cvar";
-    public string Description => "Gets or sets a cvar: cvar <name> [value] - use \"> cvar ...\" to force it onto the server";
+    public string Description => "Gets or sets a cvar: cvar <name> [value]";
+    public string Help => "cvar <name> [value]";
 
     [Dependency] private readonly IConfigurationManager _cfg = default!;
 
@@ -45,18 +46,37 @@ public sealed class CvarCommand : IConsoleCommand
 
     public CompletionResult GetCompletion(IConsoleShell shell, string[] args)
     {
-        if (args.Length > 0)
-            return CompletionResult.Empty;
+        if (args.Length == 0)
+        {
+            var options = _cfg.AllCVarNames
+                .Select(name =>
+                {
+                    _cfg.TryGetByName(name, out var value);
+                    return new CompletionOption(name, $"{value}");
+                })
+                .ToList();
 
-        var options = _cfg.AllCVarNames
-            .Select(name =>
+            return new CompletionResult(options);
+        }
+
+        // completing the value for a cvar we already know the name of
+        if (args.Length == 1 && _cfg.TryGetByName(args[0], out var current))
+        {
+            if (current is bool)
+                return CompletionResult.FromOptions(["true", "false"]);
+
+            var typeName = current switch
             {
-                _cfg.TryGetByName(name, out var value);
-                return new CompletionOption(name, $"{value}");
-            })
-            .ToList();
+                int => "int",
+                float => "float",
+                string => "string",
+                _ => "value",
+            };
 
-        return new CompletionResult(options);
+            return new CompletionResult([], $"cvar {args[0]} <{typeName}> (current: {current})");
+        }
+
+        return CompletionResult.Empty;
     }
 }
 
@@ -64,6 +84,7 @@ public sealed class CvarListCommand : IConsoleCommand
 {
     public string Name => "cvars";
     public string Description => "Lists every registered cvar and its current value.";
+    public string Help => "cvars";
 
     [Dependency] private readonly IConfigurationManager _cfg = default!;
 

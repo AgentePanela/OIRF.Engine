@@ -44,6 +44,7 @@ public sealed class ConsoleOverlay : Overlay
     private readonly List<SuggestionRow> _suggestionRows = new();
     private int _windowStart;
     private int _suggestionIndex;
+    private RichLabel? _hintRow; // shown instead of rows when a command has nothing concrete to offer
 
     private readonly ConcurrentQueue<(string Prefix, string Text, ConsoleColor Color)> _pendingLogs = new();
     private bool _pendingScrollToBottom;
@@ -202,15 +203,18 @@ public sealed class ConsoleOverlay : Overlay
         }
 
         // please do not explode my game
-        _allMatches.AddRange(_consoleHost.GetCompletions(text).Options.Take(200));
-        _suggestions.Visible = _allMatches.Count > 0;
+        var result = _consoleHost.GetCompletions(text);
+        _allMatches.AddRange(result.Options.Take(200));
 
         if (_allMatches.Count == 0)
         {
             _windowStart = 0;
             _suggestionIndex = 0;
+            ShowHintOnly(result.Hint);
             return;
         }
+
+        _suggestions.Visible = true;
 
         var restored = previousValue is null ? -1 : _allMatches.FindIndex(o => o.Value == previousValue);
         _suggestionIndex = restored >= 0 ? restored : 0;
@@ -298,6 +302,33 @@ public sealed class ConsoleOverlay : Overlay
             _suggestions.RemoveChild(row, dispose: true);
 
         _suggestionRows.Clear();
+        ClearHintRow();
+    }
+
+    // A single non-interactive line reminding of the command's overall syntax (its Description),
+    // shown in place of the row list when there's nothing concrete to suggest for this argument.
+    private void ShowHintOnly(string? hint)
+    {
+        ClearHintRow();
+
+        if (string.IsNullOrEmpty(hint))
+        {
+            _suggestions.Visible = false;
+            return;
+        }
+
+        _hintRow = new RichLabel { Text = Colored(hint, HintColor) };
+        _suggestions.AddChild(_hintRow);
+        _suggestions.Visible = true;
+    }
+
+    private void ClearHintRow()
+    {
+        if (_hintRow is null)
+            return;
+
+        _suggestions.RemoveChild(_hintRow, dispose: true);
+        _hintRow = null;
     }
 
     private void OnLocalClear() => _lines.ClearChildren();
