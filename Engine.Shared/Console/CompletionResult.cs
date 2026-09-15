@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Engine.Shared.GameObjects.Factories;
+using Engine.Shared.IoC;
+using Engine.Shared.Prototypes;
 
 namespace Engine.Shared.Console;
 
@@ -32,4 +35,26 @@ public sealed class CompletionResult
 
     public static CompletionResult FromOptions(IEnumerable<string> values, string? hint = null)
         => new(values.Select(v => new CompletionOption(v)).ToList(), hint);
+
+    /// <summary>
+    /// Return a completion result from the list of prototypes from a list (local sided).
+    /// </summary>
+    public static CompletionResult FromProtoId<T>(string? hint = null) where T : class, IPrototype
+    {
+        var protos = IoCManager.Resolve<IPrototypeManager>();
+
+        var list = protos.GetAll<T>();
+        return FromOptions(list.Keys, hint);
+    }
+
+    /// <summary>
+    /// Return the list of local registred components.
+    /// </summary>
+    public static CompletionResult FromComps(string? hint = null)
+    {
+        var fac = IoCManager.Resolve<ComponentFactory>();
+
+        var list = fac.Components.Keys;
+        return FromOptions(list, hint);
+    }
 }
