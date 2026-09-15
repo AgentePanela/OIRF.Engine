@@ -120,6 +120,11 @@ public partial class ScrollContainer : PanelContainer
         _viewport.Arrange(new Rectangle(finalRect.X, finalRect.Y, viewportWidth, viewportHeight));
     }
 
+    /// <summary>
+    /// Scrolls all the way to the bottom
+    /// </summary>
+    public void ScrollToBottom() => _vScrollBar.Value = float.MaxValue;
+
     protected internal override bool MouseWheel(int delta)
     {
         var before = ScrollOffset;

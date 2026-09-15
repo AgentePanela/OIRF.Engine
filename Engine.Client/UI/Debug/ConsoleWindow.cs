@@ -1,0 +1,423 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+using Engine.Client.Inputs;
+using Engine.Shared.Configuration;
+using Engine.Shared.Configuration.CVars;
+using Engine.Shared.Console;
+using Engine.Shared.IoC;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
+
+namespace Engine.Client.UI.Debug;
+
+/// <summary>
+/// Debug console overlay.Types a command line, runs it through the local <see cref="IConsoleShell"/>,
+/// and prints whatever comes back.
+/// </summary>
+public sealed class ConsoleOverlay : Overlay
+{
+    private const int MaxLines = 500;
+    private int MaxSuggestions = 8;
+
+    private static readonly Color PanelBackground = new(10, 12, 20, 235);
+    private static readonly Color NormalColor = Color.White;
+    private static readonly Color ErrorColor = new(255, 85, 85);
+    private static readonly Color EchoColor = new(85, 255, 255);
+    private static readonly Color HintColor = new(144, 144, 144);
+    private static readonly Color HighlightBackground = new(51, 68, 102, 200);
+
+    [Dependency] private readonly IConsoleHost _consoleHost = default!;
+    [Dependency] private readonly UIManager _ui = default!;
+    [Dependency] private readonly InputManager _inputManager = default!;
+    [Dependency] private readonly IConfigurationManager _cfg = default!;
+
+    private readonly BoxContainer _lines;
+    private readonly ScrollContainer _scroll;
+    private readonly LineEdit _inputLine;
+    private readonly BoxContainer _suggestions;
+    private static readonly List<string> _history = new(); // must be static to keep per instances
+    private int _historyIndex;
+
+    private readonly List<CompletionOption> _allMatches = new();
+    private readonly List<SuggestionRow> _suggestionRows = new();
+    private int _windowStart;
+    private int _suggestionIndex;
+    private RichLabel? _hintRow; // shown instead of rows when a command has nothing concrete to offer
+
+    private readonly ConcurrentQueue<(string Prefix, string Text, ConsoleColor Color)> _pendingLogs = new();
+    private bool _pendingScrollToBottom;
+
+
+    public ConsoleOverlay()
+    {
+        IoCManager.ResolveDependencies(this);
+        _cfg.Subs(GameCVars.ConsoleSuggestions, (v) => MaxSuggestions = v, true);
+
+        HorizontalAlignment = HorizontalAlignment.Stretch;
+        VerticalAlignment = VerticalAlignment.Top;
+        Height = 420;
+        Padding = new Thickness(10);
+        Background = PanelBackground;
+        MouseFilter = MouseFilterMode.Stop;
+        ZIndex = 1000;
+
+        var root = new BoxContainer { Orientation = Orientation.Vertical, Separation = 4, VerticalExpand = true };
+        AddChild(root);
+
+        _lines = new BoxContainer { Orientation = Orientation.Vertical, Separation = 0 };
+
+        _scroll = new ScrollContainer { VerticalExpand = true, HorizontalExpand = true };
+        _scroll.AddChild(_lines);
+        root.AddChild(_scroll);
+
+        _suggestions = new BoxContainer { Orientation = Orientation.Vertical, Separation = 0, Visible = false };
+        root.AddChild(_suggestions);
+
+        _inputLine = new LineEdit
+        {
+            PlaceholderText = "Type a command...",
+            HorizontalExpand = true,
+        };
+        _inputLine.OnTextEntered += OnSubmit;
+        _inputLine.OnTextChanged += UpdateSuggestions;
+        root.AddChild(_inputLine);
+
+        _consoleHost.OnLocalClear += OnLocalClear;
+        foreach (var entry in _consoleHost.LogBacklog)
+            AddLogLine(entry.Prefix, entry.Text, MapConsoleColor(entry.Color));
+
+        _consoleHost.OnEngineLog += OnLog;
+        _consoleHost.OnRemoteCompletions += OnRemoteCompletions;
+
+        ResetHistoryCursor();
+        FocusInput();
+    }
+
+    /// <summary>
+    /// Puts keyboard focus on the input line
+    /// </summary>
+    public void FocusInput() => _ui.SetFocus(_inputLine);
+
+    protected override void Update(float dt)
+    {
+        base.Update(dt);
+
+        // apply last frame requested scroll now
+        if (_pendingScrollToBottom)
+        {
+            _scroll.ScrollToBottom();
+            _pendingScrollToBottom = false;
+        }
+
+        if (!_inputLine.IsFocused)
+            return;
+
+        var pressed = _inputManager.KeysPressedThisFrame().ToList();
+        bool WasPressed(Keys key) => pressed.Contains(key);
+
+        if (WasPressed(Keys.Tab) && _allMatches.Count > 0)
+        {
+            ApplySuggestion(_suggestionIndex);
+        }
+        else if (_allMatches.Count > 0)
+        {
+            if (WasPressed(Keys.Down))
+                HighlightSuggestion(_suggestionIndex + 1);
+            else if (WasPressed(Keys.Up))
+                HighlightSuggestion(_suggestionIndex - 1);
+            else if (WasPressed(Keys.Escape))
+                HideSuggestions();
+        }
+        else if (WasPressed(Keys.Up))
+        {
+            NavigateHistory(-1);
+        }
+        else if (WasPressed(Keys.Down))
+        {
+            NavigateHistory(1);
+        }
+        else if (WasPressed(Keys.Escape))
+        {
+            // Safe to dispose from here now
+            Dispose();
+            return;
+        }
+
+        while (_pendingLogs.TryDequeue(out var entry))
+            AddLogLine(entry.Prefix, entry.Text, MapConsoleColor(entry.Color));
+    }
+
+    protected override void OnDispose()
+    {
+        _consoleHost.OnLocalClear -= OnLocalClear;
+        _consoleHost.OnEngineLog -= OnLog;
+        _consoleHost.OnRemoteCompletions -= OnRemoteCompletions;
+        base.OnDispose();
+    }
+
+    private void OnRemoteCompletions(string line, CompletionResult result) => UpdateSuggestions(_inputLine.Text);
+
+    private void OnSubmit(string text)
+    {
+        var line = text.Trim();
+        _inputLine.Text = "";
+
+        if (line.Length == 0)
+            return;
+
+        _history.Add(line);
+        ResetHistoryCursor();
+
+        AddLine($"> {line}", EchoColor);
+        _consoleHost.LocalShell.ExecuteCommand(line);
+    }
+
+    private void NavigateHistory(int direction)
+    {
+        if (_history.Count == 0)
+            return;
+
+        _historyIndex = Math.Clamp(_historyIndex + direction, 0, _history.Count);
+        _inputLine.Text = _historyIndex < _history.Count ? _history[_historyIndex] : "";
+    }
+
+    private void ResetHistoryCursor() => _historyIndex = _history.Count;
+
+    private void UpdateSuggestions(string text)
+    {
+        // Remembered so a refresh that doesn't come from typing (the async ">" reply re-running
+        // this for the same text once it arrives) doesn't throw away where you'd arrowed to.
+        var previousValue = _suggestionIndex < _allMatches.Count ? _allMatches[_suggestionIndex].Value : null;
+
+        _allMatches.Clear();
+        ClearRows();
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            _windowStart = 0;
+            _suggestionIndex = 0;
+            _suggestions.Visible = false;
+            return;
+        }
+
+        // please do not explode my game
+        var result = _consoleHost.GetCompletions(text);
+        _allMatches.AddRange(result.Options.Take(200));
+
+        if (_allMatches.Count == 0)
+        {
+            _windowStart = 0;
+            _suggestionIndex = 0;
+            ShowHintOnly(result.Hint);
+            return;
+        }
+
+        _suggestions.Visible = true;
+
+        var restored = previousValue is null ? -1 : _allMatches.FindIndex(o => o.Value == previousValue);
+        _suggestionIndex = restored >= 0 ? restored : 0;
+        _windowStart = Math.Clamp(_windowStart, 0, Math.Max(0, _allMatches.Count - MaxSuggestions));
+        if (_suggestionIndex < _windowStart)
+            _windowStart = _suggestionIndex;
+        else if (_suggestionIndex >= _windowStart + MaxSuggestions)
+            _windowStart = _suggestionIndex - MaxSuggestions + 1;
+
+        RenderWindow();
+    }
+
+    private void RenderWindow()
+    {
+        ClearRows();
+
+        var end = Math.Min(_windowStart + MaxSuggestions, _allMatches.Count);
+        for (var i = _windowStart; i < end; i++)
+        {
+            var matchIndex = i;
+            var option = _allMatches[i];
+
+            var row = new SuggestionRow(option.Value, option.Hint, NormalColor, HintColor, HighlightBackground);
+            row.OnClicked += () => ApplySuggestion(matchIndex);
+            row.OnHovered += () => HighlightSuggestion(matchIndex);
+            row.Highlighted = matchIndex == _suggestionIndex;
+
+            _suggestions.AddChild(row);
+            _suggestionRows.Add(row);
+        }
+    }
+
+    /// <summary>
+    /// Moves the keyboard/hover highlight
+    /// </summary>
+    /// <param name="index"></param>
+    private void HighlightSuggestion(int index)
+    {
+        if (_allMatches.Count == 0)
+            return;
+
+        _suggestionIndex = ((index % _allMatches.Count) + _allMatches.Count) % _allMatches.Count;
+
+        var newWindowStart = _windowStart;
+        if (_suggestionIndex < _windowStart)
+            newWindowStart = _suggestionIndex;
+        else if (_suggestionIndex >= _windowStart + MaxSuggestions)
+            newWindowStart = _suggestionIndex - MaxSuggestions + 1;
+
+        if (newWindowStart != _windowStart)
+        {
+            _windowStart = newWindowStart;
+            RenderWindow();
+            return;
+        }
+
+        for (var i = 0; i < _suggestionRows.Count; i++)
+            _suggestionRows[i].Highlighted = (_windowStart + i) == _suggestionIndex;
+    }
+
+    private void ApplySuggestion(int index)
+    {
+        if (index < 0 || index >= _allMatches.Count)
+            return;
+
+        var text = _inputLine.Text;
+        var lastSpace = text.LastIndexOf(' ');
+        var head = lastSpace >= 0 ? text[..(lastSpace + 1)] : "";
+
+        _inputLine.Text = head + _allMatches[index].Value + " ";
+        _inputLine.MoveCaretToEnd();
+        _ui.SetFocus(_inputLine); // a row click steals focus from the input - take it back
+    }
+
+    private void HideSuggestions()
+    {
+        _allMatches.Clear();
+        ClearRows();
+        _suggestions.Visible = false;
+    }
+
+    private void ClearRows()
+    {
+        foreach (var row in _suggestionRows)
+            _suggestions.RemoveChild(row, dispose: true);
+
+        _suggestionRows.Clear();
+        ClearHintRow();
+    }
+
+    // A single non-interactive line reminding of the command's overall syntax (its Description),
+    // shown in place of the row list when there's nothing concrete to suggest for this argument.
+    private void ShowHintOnly(string? hint)
+    {
+        ClearHintRow();
+
+        if (string.IsNullOrEmpty(hint))
+        {
+            _suggestions.Visible = false;
+            return;
+        }
+
+        _hintRow = new RichLabel { Text = Colored(hint, HintColor) };
+        _suggestions.AddChild(_hintRow);
+        _suggestions.Visible = true;
+    }
+
+    private void ClearHintRow()
+    {
+        if (_hintRow is null)
+            return;
+
+        _suggestions.RemoveChild(_hintRow, dispose: true);
+        _hintRow = null;
+    }
+
+    private void OnLocalClear() => _lines.ClearChildren();
+
+    private void OnLog(string prefix, string text, ConsoleColor color) => _pendingLogs.Enqueue((prefix, text, color));
+
+    private static Color MapConsoleColor(ConsoleColor color) => color switch
+    {
+        ConsoleColor.Yellow => new Color(255, 225, 90),
+        ConsoleColor.Red => ErrorColor,
+        ConsoleColor.DarkMagenta => new Color(154, 77, 199),
+        ConsoleColor.Cyan => EchoColor,
+        _ => NormalColor,
+    };
+
+    private void AddLine(string text, Color color) => AddMarkupLine(Colored(text, color));
+
+    private void AddLogLine(string prefix, string text, Color prefixColor)
+        => AddMarkupLine($"{Colored($"[{prefix}]", prefixColor)} {Colored(text, NormalColor)}");
+
+    private void AddMarkupLine(string markup)
+    {
+        // only stick to the bottom if the user was already there
+        var stickToBottom = IsScrolledToBottom();
+
+        _lines.AddChild(new RichLabel { Text = markup });
+        while (_lines.Children.Count > MaxLines)
+            _lines.RemoveChild(_lines.Children[0], dispose: true);
+
+        if (stickToBottom)
+            _pendingScrollToBottom = true;
+    }
+
+    private bool IsScrolledToBottom()
+    {
+        const float Slack = 4f;
+        return _scroll.MaxScrollOffset.Y - _scroll.ScrollOffset.Y <= Slack;
+    }
+
+    private static string Colored(string text, Color color) => $"[color=#{Hex(color)}]{Escape(text)}[/color]";
+
+    private static string Hex(Color c) => $"{c.R:X2}{c.G:X2}{c.B:X2}";
+
+    private static string Escape(string text) => text.Replace("[", "[[").Replace("]", "]]");
+
+    /// <summary>
+    /// One row of the autocomplete dropdown
+    /// </summary>
+    private sealed class SuggestionRow : PanelContainer
+    {
+        public event Action? OnClicked;
+        public event Action? OnHovered;
+
+        private readonly Color _highlightBackground;
+        private bool _highlighted;
+
+        public bool Highlighted
+        {
+            get => _highlighted;
+            set
+            {
+                _highlighted = value;
+                Background = value ? _highlightBackground : null;
+            }
+        }
+
+        public SuggestionRow(string value, string? hint, Color valueColor, Color hintColor, Color highlightBackground)
+        {
+            _highlightBackground = highlightBackground;
+            MouseFilter = MouseFilterMode.Stop;
+            Padding = new Thickness(6, 3, 6, 3);
+
+            var markup = Colored(value, valueColor);
+            if (hint is not null)
+                markup += ": " + Colored(hint, hintColor);
+
+            AddChild(new RichLabel { Text = markup });
+        }
+
+        protected internal override void MouseEntered()
+        {
+            base.MouseEntered();
+            OnHovered?.Invoke();
+        }
+
+        protected internal override void Click(MouseButton button)
+        {
+            base.Click(button);
+            OnClicked?.Invoke();
+        }
+    }
+}

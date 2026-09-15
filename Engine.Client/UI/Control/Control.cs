@@ -105,6 +105,10 @@ public abstract partial class Control : IDisposable
             child.NotifyEffectiveVisibilityChanged();
     }
 
+    // Set for the duration of UpdateAll own foreach below
+    private bool _iteratingChildren;
+    private List<(Control Child, bool Dispose)>? _pendingRemovals;
+
     /// <summary>
     /// Removes a child from this control. Does nothing if the child is not parent of this control.
     /// </summary>
@@ -113,6 +117,17 @@ public abstract partial class Control : IDisposable
         if (child.Parent != this)
             return;
 
+        if (_iteratingChildren)
+        {
+            (_pendingRemovals ??= new()).Add((child, dispose));
+            return;
+        }
+
+        RemoveChildImmediate(child, dispose);
+    }
+
+    private void RemoveChildImmediate(Control child, bool dispose)
+    {
         _children.Remove(child);
         child.Parent = null;
         InvalidateLayout();
@@ -183,13 +198,20 @@ public abstract partial class Control : IDisposable
     {
         Update(dt);
 
-        // _children directly, not the Children property - Children is typed as
-        // IReadOnlyList<Control>, and foreach through that interface boxes List<T>'s
-        // own struct enumerator. This runs for every control in the tree, every
-        // frame, recursively - by far the largest remaining allocation source once
-        // the per-frame CollisionSystem/AutoTileSystem ones were fixed.
+        _iteratingChildren = true;
         foreach (var child in _children)
             child.UpdateAll(dt);
+
+        _iteratingChildren = false;
+
+        // Anything that tried to remove itself mid-loop above got queued instead
+        if (_pendingRemovals is { Count: > 0 } pending)
+        {
+            foreach (var (child, dispose) in pending)
+                RemoveChildImmediate(child, dispose);
+
+            pending.Clear();
+        }
     }
 
     protected virtual void Update(float dt)

@@ -124,6 +124,13 @@ public abstract partial class BaseTextInput : PanelContainer
     {
     }
 
+    /// <summary>
+    /// Puts the caret (and clears any selection) at the end of the current text - for after
+    /// setting <see cref="Text"/> programmatically (autocomplete, etc.), since that alone only
+    /// clamps the caret's old position rather than moving it.
+    /// </summary>
+    public void MoveCaretToEnd() => MoveCaret(Text.Length, extendSelection: false);
+
     protected void MoveCaret(int newCaret, bool extendSelection)
     {
         _caret = Math.Clamp(newCaret, 0, Text.Length);

@@ -3,6 +3,7 @@ using System.Reflection;
 using Engine.Shared.Assets;
 using Engine.Shared.Audio;
 using Engine.Shared.Configuration;
+using Engine.Shared.Console;
 using Engine.Shared.GameObjects;
 using Engine.Shared.IoC;
 using Engine.Shared.Locale;
@@ -47,13 +48,18 @@ public sealed class SharedContentManager
         _assemblies.Add(Assembly.GetExecutingAssembly());
         IoCManager.Register<SharedResourceManager>();
         IoCManager.Register<SharedAudioManifest>();
+        
         IoCManager.Register<IConfigurationManager, ConfigurationManager>();
         IoCManager.Register<ILocalizationManager, LocalizationManager>();
+
         IoCManager.Register<IPrototypeManager, PrototypeManager>();
         IoCManager.Register<IGameTiming, GameTiming>();
         IoCManager.Register<EntityManager>();
-        IoCManager.Register<ISerializationManager, SerializerManager>(); // must come before INetManager - NetManager resolves it in its own ctor
+
+        IoCManager.Register<ISerializationManager, SerializerManager>();
         IoCManager.Register<INetManager, NetManager>();
+
+        IoCManager.Register<IConsoleHost, ConsoleHost>();
         // add here ioc things
 
         IoCManager.AutoRegister(Assembly.GetExecutingAssembly());
@@ -63,6 +69,7 @@ public sealed class SharedContentManager
     internal void PostInit()
     {
         IoCManager.Resolve<IConfigurationManager>().Init();
+        IoCManager.Resolve<IConsoleHost>().Init();
         IoCManager.Resolve<IPrototypeManager>().Load();
         IoCManager.Resolve<SharedAudioManifest>().Load();
 
