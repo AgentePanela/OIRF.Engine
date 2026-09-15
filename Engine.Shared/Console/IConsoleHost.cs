@@ -36,6 +36,16 @@ public interface IConsoleHost
     CompletionResult GetCompletions(string line);
 
     /// <summary>
+    /// CLIENT-SIDE, for a command (like ">") whose own completions depend on the server
+    /// </summary>
+    CompletionResult GetOrRequestRemoteCompletions(string line);
+
+    /// <summary>
+    /// Raised (CLIENT-SIDE) with a server's reply to <see cref="GetOrRequestRemoteCompletions"/>
+    /// </summary>
+    event Action<string, CompletionResult>? OnRemoteCompletions;
+
+    /// <summary>
     /// Gets (creating if needed) the shell used to talk to a specific connected client (SERVER-SIDE).
     /// </summary>
     IConsoleShell GetSessionShell(INetSession session);

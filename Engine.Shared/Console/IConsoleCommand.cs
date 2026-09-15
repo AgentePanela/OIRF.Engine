@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Engine.Shared.Networking;
 
 namespace Engine.Shared.Console;
@@ -49,5 +50,50 @@ public sealed partial class MsgExecuteCommand : NetMessage
     public MsgExecuteCommand(string commandLine)
     {
         CommandLine = commandLine;
+    }
+}
+
+/// <summary>
+/// Sent client to server, to know the server completion list.
+/// </summary>
+public sealed partial class MsgCompletionRequest : NetMessage
+{
+    public string Line { get; private set; } = "";
+
+    public MsgCompletionRequest(string line)
+    {
+        Line = line;
+    }
+}
+
+/// <summary>
+/// Sent server to client with the answer to a <see cref="MsgCompletionRequest"/>.
+/// </summary>
+public sealed partial class MsgCompletionResponse : NetMessage
+{
+    public string Line { get; private set; } = "";
+    public List<string> Values { get; private set; } = new();
+    public List<string> Hints { get; private set; } = new();
+    public string Hint { get; private set; } = "";
+
+    public MsgCompletionResponse(string line, CompletionResult result)
+    {
+        Line = line;
+        Hint = result.Hint ?? "";
+
+        foreach (var option in result.Options)
+        {
+            Values.Add(option.Value);
+            Hints.Add(option.Hint ?? "");
+        }
+    }
+
+    public CompletionResult ToResult()
+    {
+        var options = new List<CompletionOption>(Values.Count);
+        for (var i = 0; i < Values.Count; i++)
+            options.Add(new CompletionOption(Values[i], Hints[i].Length == 0 ? null : Hints[i]));
+
+        return new CompletionResult(options, Hint.Length == 0 ? null : Hint);
     }
 }

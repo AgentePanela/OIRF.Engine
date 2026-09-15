@@ -29,6 +29,11 @@ internal sealed class ConsoleHost : IConsoleHost
 
     public event Action? OnLocalClear;
     public event Action<string, string, ConsoleColor>? OnEngineLog;
+    public event Action<string, CompletionResult>? OnRemoteCompletions;
+
+    // Only one remote completion request is ever relevant at a time
+    private string? _lastRemoteLine;
+    private CompletionResult _lastRemoteResult = CompletionResult.Empty;
 
     void IConsoleHost.Init()
     {
@@ -41,6 +46,8 @@ internal sealed class ConsoleHost : IConsoleHost
 
         _netMan.RegisterNetMessage<MsgExecuteCommand>(OnExecuteCommandReceived);
         _netMan.RegisterNetMessage<MsgConsoleReply>((msg, _) => OnConsoleReplyReceived(msg));
+        _netMan.RegisterNetMessage<MsgCompletionRequest>(OnCompletionRequestReceived);
+        _netMan.RegisterNetMessage<MsgCompletionResponse>((msg, _) => OnCompletionResponseReceived(msg));
         _netMan.OnDisconnected += (_, args) =>
         {
             if (args.Session is not null)
@@ -108,6 +115,17 @@ internal sealed class ConsoleHost : IConsoleHost
         return new CompletionResult(filtered, raw.Hint);
     }
 
+    public CompletionResult GetOrRequestRemoteCompletions(string line)
+    {
+        if (_lastRemoteLine == line)
+            return _lastRemoteResult;
+
+        if (_netMan.MySession is { } session)
+            session.SendMessage(new MsgCompletionRequest(line));
+
+        return CompletionResult.Empty;
+    }
+
     public IConsoleShell GetSessionShell(INetSession session)
     {
         if (!_sessionShells.TryGetValue(session.SessionId, out var shell))
@@ -145,7 +163,26 @@ internal sealed class ConsoleHost : IConsoleHost
             return;
         }
 
+        Log.Debug($"[{session.RemoteEndPoint}] > {msg.CommandLine}");
         GetSessionShell(session).ExecuteCommand(msg.CommandLine);
+    }
+
+    private void OnCompletionRequestReceived(MsgCompletionRequest msg, INetSession? session)
+    {
+        if (!_netMan.IsServer || session is null)
+            return;
+
+        session.SendMessage(new MsgCompletionResponse(msg.Line, GetCompletions(msg.Line)));
+    }
+
+    private void OnCompletionResponseReceived(MsgCompletionResponse msg)
+    {
+        if (_netMan.IsServer)
+            return;
+
+        _lastRemoteLine = msg.Line;
+        _lastRemoteResult = msg.ToResult();
+        OnRemoteCompletions?.Invoke(msg.Line, _lastRemoteResult);
     }
 
     private void OnConsoleReplyReceived(MsgConsoleReply msg)

@@ -11,9 +11,8 @@ using Microsoft.Xna.Framework.Input;
 namespace Engine.Client.UI.Debug;
 
 /// <summary>
-/// Debug console overlay (like RT's) - a borderless dark panel across the top of the screen, not
-/// a draggable Window. Types a command line, runs it through the local <see cref="IConsoleShell"/>,
-/// and prints whatever comes back (locally, or forwarded from the server).
+/// Debug console overlay.Types a command line, runs it through the local <see cref="IConsoleShell"/>,
+/// and prints whatever comes back.
 /// </summary>
 public sealed class ConsoleOverlay : Overlay
 {
@@ -22,10 +21,10 @@ public sealed class ConsoleOverlay : Overlay
 
     private static readonly Color PanelBackground = new(10, 12, 20, 235);
     private static readonly Color NormalColor = Color.White;
-    private static readonly Color ErrorColor = new(0xFF, 0x55, 0x55);
-    private static readonly Color EchoColor = new(0x55, 0xFF, 0xFF);
-    private static readonly Color HintColor = new(0x90, 0x90, 0x90);
-    private static readonly Color HighlightBackground = new(0x33, 0x44, 0x66, 200);
+    private static readonly Color ErrorColor = new(255, 85, 85);
+    private static readonly Color EchoColor = new(85, 255, 255);
+    private static readonly Color HintColor = new(144, 144, 144);
+    private static readonly Color HighlightBackground = new(51, 68, 102, 200);
 
     [Dependency] private readonly IConsoleHost _consoleHost = default!;
     [Dependency] private readonly UIManager _ui = default!;
@@ -35,8 +34,7 @@ public sealed class ConsoleOverlay : Overlay
     private readonly ScrollContainer _scroll;
     private readonly LineEdit _inputLine;
     private readonly BoxContainer _suggestions;
-
-    private readonly List<string> _history = new();
+    private static readonly List<string> _history = new(); // must be static to keep per instances
     private int _historyIndex;
 
     private readonly List<SuggestionRow> _suggestionRows = new();
@@ -57,6 +55,7 @@ public sealed class ConsoleOverlay : Overlay
         Padding = new Thickness(10);
         Background = PanelBackground;
         MouseFilter = MouseFilterMode.Stop;
+        ZIndex = 1000;
 
         var root = new BoxContainer { Orientation = Orientation.Vertical, Separation = 4, VerticalExpand = true };
         AddChild(root);
@@ -81,9 +80,10 @@ public sealed class ConsoleOverlay : Overlay
 
         _consoleHost.OnLocalClear += OnLocalClear;
         foreach (var entry in _consoleHost.LogBacklog)
-            AddLine($"[{entry.Prefix}] {entry.Text}", MapConsoleColor(entry.Color));
+            AddLogLine(entry.Prefix, entry.Text, MapConsoleColor(entry.Color));
 
         _consoleHost.OnEngineLog += OnLog;
+        _consoleHost.OnRemoteCompletions += OnRemoteCompletions;
 
         ResetHistoryCursor();
         FocusInput();
@@ -140,15 +140,18 @@ public sealed class ConsoleOverlay : Overlay
         }
 
         while (_pendingLogs.TryDequeue(out var entry))
-            AddLine($"[{entry.Prefix}] {entry.Text}", MapConsoleColor(entry.Color));
+            AddLogLine(entry.Prefix, entry.Text, MapConsoleColor(entry.Color));
     }
 
     protected override void OnDispose()
     {
         _consoleHost.OnLocalClear -= OnLocalClear;
         _consoleHost.OnEngineLog -= OnLog;
+        _consoleHost.OnRemoteCompletions -= OnRemoteCompletions;
         base.OnDispose();
     }
+
+    private void OnRemoteCompletions(string line, CompletionResult result) => UpdateSuggestions(_inputLine.Text);
 
     private void OnSubmit(string text)
     {
@@ -255,19 +258,24 @@ public sealed class ConsoleOverlay : Overlay
 
     private static Color MapConsoleColor(ConsoleColor color) => color switch
     {
-        ConsoleColor.Yellow => new Color(0xFF, 0xE1, 0x5A),
+        ConsoleColor.Yellow => new Color(255, 225, 90),
         ConsoleColor.Red => ErrorColor,
-        ConsoleColor.DarkMagenta => new Color(0x9A, 0x4D, 0xC7),
+        ConsoleColor.DarkMagenta => new Color(154, 77, 199),
         ConsoleColor.Cyan => EchoColor,
         _ => NormalColor,
     };
 
-    private void AddLine(string text, Color color)
+    private void AddLine(string text, Color color) => AddMarkupLine(Colored(text, color));
+
+    private void AddLogLine(string prefix, string text, Color prefixColor)
+        => AddMarkupLine($"{Colored($"[{prefix}]", prefixColor)} {Colored(text, NormalColor)}");
+
+    private void AddMarkupLine(string markup)
     {
         // only stick to the bottom if the user was already there
         var stickToBottom = IsScrolledToBottom();
 
-        _lines.AddChild(new RichLabel { Text = Colored(text, color) });
+        _lines.AddChild(new RichLabel { Text = markup });
         while (_lines.Children.Count > MaxLines)
             _lines.RemoveChild(_lines.Children[0], dispose: true);
 
@@ -316,7 +324,7 @@ public sealed class ConsoleOverlay : Overlay
 
             var markup = Colored(value, valueColor);
             if (hint is not null)
-                markup += "  " + Colored(hint, hintColor);
+                markup += ": " + Colored(hint, hintColor);
 
             AddChild(new RichLabel { Text = markup });
         }

@@ -100,6 +100,11 @@ internal sealed class ConsoleShell : IConsoleShell
         if (Session is not null)
         {
             Session.SendMessage(new MsgConsoleReply(text, isError, clear: false));
+
+            if (isError)
+                Log.Error($"[{Session.RemoteEndPoint}] {text}");
+            else
+                Log.Debug($"[{Session.RemoteEndPoint}] {text}");
             return;
         }
 
