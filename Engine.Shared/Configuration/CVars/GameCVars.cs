@@ -26,4 +26,7 @@ public static class GameCVars
 
     public static CVarDef<int> FramerateLimit
         = CVarDef.Create("game.framerate-limit", 60, CVar.CLIENTONLY);
+
+    public static CVarDef<int> ConsoleSuggestions
+        = CVarDef.Create("game.console-suggestions", 8, CVar.CLIENTONLY);
 }

@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Engine.Client.Inputs;
+using Engine.Shared.Configuration;
+using Engine.Shared.Configuration.CVars;
 using Engine.Shared.Console;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
@@ -17,7 +19,7 @@ namespace Engine.Client.UI.Debug;
 public sealed class ConsoleOverlay : Overlay
 {
     private const int MaxLines = 500;
-    private const int MaxSuggestions = 8;
+    private int MaxSuggestions = 8;
 
     private static readonly Color PanelBackground = new(10, 12, 20, 235);
     private static readonly Color NormalColor = Color.White;
@@ -29,6 +31,7 @@ public sealed class ConsoleOverlay : Overlay
     [Dependency] private readonly IConsoleHost _consoleHost = default!;
     [Dependency] private readonly UIManager _ui = default!;
     [Dependency] private readonly InputManager _inputManager = default!;
+    [Dependency] private readonly IConfigurationManager _cfg = default!;
 
     private readonly BoxContainer _lines;
     private readonly ScrollContainer _scroll;
@@ -37,8 +40,9 @@ public sealed class ConsoleOverlay : Overlay
     private static readonly List<string> _history = new(); // must be static to keep per instances
     private int _historyIndex;
 
+    private readonly List<CompletionOption> _allMatches = new();
     private readonly List<SuggestionRow> _suggestionRows = new();
-    private readonly List<string> _suggestionValues = new();
+    private int _windowStart;
     private int _suggestionIndex;
 
     private readonly ConcurrentQueue<(string Prefix, string Text, ConsoleColor Color)> _pendingLogs = new();
@@ -48,6 +52,7 @@ public sealed class ConsoleOverlay : Overlay
     public ConsoleOverlay()
     {
         IoCManager.ResolveDependencies(this);
+        _cfg.Subs(GameCVars.ConsoleSuggestions, (v) => MaxSuggestions = v, true);
 
         HorizontalAlignment = HorizontalAlignment.Stretch;
         VerticalAlignment = VerticalAlignment.Top;
@@ -111,11 +116,11 @@ public sealed class ConsoleOverlay : Overlay
         var pressed = _inputManager.KeysPressedThisFrame().ToList();
         bool WasPressed(Keys key) => pressed.Contains(key);
 
-        if (WasPressed(Keys.Tab) && _suggestionValues.Count > 0)
+        if (WasPressed(Keys.Tab) && _allMatches.Count > 0)
         {
             ApplySuggestion(_suggestionIndex);
         }
-        else if (_suggestionValues.Count > 0)
+        else if (_allMatches.Count > 0)
         {
             if (WasPressed(Keys.Down))
                 HighlightSuggestion(_suggestionIndex + 1);
@@ -181,75 +186,118 @@ public sealed class ConsoleOverlay : Overlay
 
     private void UpdateSuggestions(string text)
     {
-        ClearSuggestions();
+        // Remembered so a refresh that doesn't come from typing (the async ">" reply re-running
+        // this for the same text once it arrives) doesn't throw away where you'd arrowed to.
+        var previousValue = _suggestionIndex < _allMatches.Count ? _allMatches[_suggestionIndex].Value : null;
+
+        _allMatches.Clear();
+        ClearRows();
 
         if (string.IsNullOrWhiteSpace(text))
         {
+            _windowStart = 0;
+            _suggestionIndex = 0;
             _suggestions.Visible = false;
             return;
         }
 
-        var matches = _consoleHost.GetCompletions(text).Options.Take(MaxSuggestions).ToList();
+        // please do not explode my game
+        _allMatches.AddRange(_consoleHost.GetCompletions(text).Options.Take(200));
+        _suggestions.Visible = _allMatches.Count > 0;
 
-        for (var i = 0; i < matches.Count; i++)
+        if (_allMatches.Count == 0)
         {
-            var index = i;
-            var option = matches[i];
+            _windowStart = 0;
+            _suggestionIndex = 0;
+            return;
+        }
+
+        var restored = previousValue is null ? -1 : _allMatches.FindIndex(o => o.Value == previousValue);
+        _suggestionIndex = restored >= 0 ? restored : 0;
+        _windowStart = Math.Clamp(_windowStart, 0, Math.Max(0, _allMatches.Count - MaxSuggestions));
+        if (_suggestionIndex < _windowStart)
+            _windowStart = _suggestionIndex;
+        else if (_suggestionIndex >= _windowStart + MaxSuggestions)
+            _windowStart = _suggestionIndex - MaxSuggestions + 1;
+
+        RenderWindow();
+    }
+
+    private void RenderWindow()
+    {
+        ClearRows();
+
+        var end = Math.Min(_windowStart + MaxSuggestions, _allMatches.Count);
+        for (var i = _windowStart; i < end; i++)
+        {
+            var matchIndex = i;
+            var option = _allMatches[i];
 
             var row = new SuggestionRow(option.Value, option.Hint, NormalColor, HintColor, HighlightBackground);
-            row.OnClicked += () => ApplySuggestion(index);
-            row.OnHovered += () => HighlightSuggestion(index);
+            row.OnClicked += () => ApplySuggestion(matchIndex);
+            row.OnHovered += () => HighlightSuggestion(matchIndex);
+            row.Highlighted = matchIndex == _suggestionIndex;
 
             _suggestions.AddChild(row);
             _suggestionRows.Add(row);
-            _suggestionValues.Add(option.Value);
         }
-
-        _suggestions.Visible = _suggestionRows.Count > 0;
-
-        if (_suggestionRows.Count > 0)
-            HighlightSuggestion(0);
     }
 
-    // moves the keyboard/hover highlight only
+    /// <summary>
+    /// Moves the keyboard/hover highlight
+    /// </summary>
+    /// <param name="index"></param>
     private void HighlightSuggestion(int index)
     {
-        if (_suggestionRows.Count == 0)
+        if (_allMatches.Count == 0)
             return;
 
-        _suggestionIndex = ((index % _suggestionRows.Count) + _suggestionRows.Count) % _suggestionRows.Count;
+        _suggestionIndex = ((index % _allMatches.Count) + _allMatches.Count) % _allMatches.Count;
+
+        var newWindowStart = _windowStart;
+        if (_suggestionIndex < _windowStart)
+            newWindowStart = _suggestionIndex;
+        else if (_suggestionIndex >= _windowStart + MaxSuggestions)
+            newWindowStart = _suggestionIndex - MaxSuggestions + 1;
+
+        if (newWindowStart != _windowStart)
+        {
+            _windowStart = newWindowStart;
+            RenderWindow();
+            return;
+        }
 
         for (var i = 0; i < _suggestionRows.Count; i++)
-            _suggestionRows[i].Highlighted = i == _suggestionIndex;
+            _suggestionRows[i].Highlighted = (_windowStart + i) == _suggestionIndex;
     }
 
     private void ApplySuggestion(int index)
     {
-        if (index < 0 || index >= _suggestionValues.Count)
+        if (index < 0 || index >= _allMatches.Count)
             return;
 
         var text = _inputLine.Text;
         var lastSpace = text.LastIndexOf(' ');
         var head = lastSpace >= 0 ? text[..(lastSpace + 1)] : "";
 
-        _inputLine.Text = head + _suggestionValues[index] + " ";
+        _inputLine.Text = head + _allMatches[index].Value + " ";
         _inputLine.MoveCaretToEnd();
         _ui.SetFocus(_inputLine); // a row click steals focus from the input - take it back
     }
 
     private void HideSuggestions()
     {
-        ClearSuggestions();
+        _allMatches.Clear();
+        ClearRows();
         _suggestions.Visible = false;
     }
 
-    private void ClearSuggestions()
+    private void ClearRows()
     {
         foreach (var row in _suggestionRows)
             _suggestions.RemoveChild(row, dispose: true);
 
         _suggestionRows.Clear();
-        _suggestionValues.Clear();
     }
 
     private void OnLocalClear() => _lines.ClearChildren();
