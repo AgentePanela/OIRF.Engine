@@ -120,6 +120,9 @@ internal sealed class ConsoleHost : IConsoleHost
 
     public CompletionResult GetOrRequestRemoteCompletions(string line)
     {
+        if (!_netMan.IsRunning)
+            return CompletionResult.Empty;
+        
         if (_lastRemoteLine == line)
             return _lastRemoteResult;
 
