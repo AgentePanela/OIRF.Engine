@@ -128,6 +128,128 @@ public sealed class ViewVariablesResolver
         }
     }
 
+    public bool TryWrite(VVPath path, object? newValue, out string? error)
+    {
+        if (path.Steps.Count == 0)
+        {
+            error = "Cannot write to a root object directly.";
+            return false;
+        }
+
+        if (!TryResolveRoot(path.Root, out var root, out error) || root is null)
+            return false;
+
+        var lastIndex = path.Steps.Count - 1;
+        var chain = new object[path.Steps.Count];
+        chain[0] = root;
+
+        for (var i = 0; i < lastIndex; i++)
+        {
+            if (!TryGetStep(chain[i], path.Steps[i], out var next, out error))
+                return false;
+
+            if (next is null)
+            {
+                error = $"'{path.Steps[i]}' is null.";
+                return false;
+            }
+
+            chain[i + 1] = next;
+        }
+
+        // validate the whole chain before touching anything - an ancestor that turns out
+        // read-only should never leave the leaf mutated with nothing to show for it
+        if (!IsStepWritable(chain[lastIndex], path.Steps[lastIndex], out error))
+            return false;
+
+        for (var i = lastIndex - 1; i >= 0; i--)
+        {
+            if (!chain[i + 1].GetType().IsValueType)
+                break;
+
+            if (!IsStepWritable(chain[i], path.Steps[i], out error))
+            {
+                error = $"'{path.Steps[i]}' is read-only, so the change wouldn't be written back.";
+                return false;
+            }
+        }
+
+        if (!TrySetStep(chain[lastIndex], path.Steps[lastIndex], newValue, out error))
+            return false;
+
+        for (var i = lastIndex - 1; i >= 0; i--)
+        {
+            if (!chain[i + 1].GetType().IsValueType)
+                break;
+
+            if (!TrySetStep(chain[i], path.Steps[i], chain[i + 1], out error))
+                return false;
+        }
+
+        error = null;
+        return true;
+    }
+
+    private static bool IsStepWritable(object parent, VVStep step, out string? error)
+    {
+        error = null;
+
+        if (step is not MemberStep member)
+        {
+            error = $"Step '{step}' is not supported yet.";
+            return false;
+        }
+
+        var desc = ViewVariablesConvert.ScanMembers(parent.GetType())
+            .FirstOrDefault(m => m.Member.Name == member.Name);
+
+        if (desc.Member is null)
+        {
+            error = $"No member '{member.Name}' on {parent.GetType().Name}.";
+            return false;
+        }
+
+        if (!desc.CanWrite)
+        {
+            error = $"'{member.Name}' is read-only.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TrySetStep(object parent, VVStep step, object? value, out string? error)
+    {
+        error = null;
+
+        if (step is not MemberStep member)
+        {
+            error = $"Step '{step}' is not supported yet.";
+            return false;
+        }
+
+        try
+        {
+            var desc = ViewVariablesConvert.ScanMembers(parent.GetType())
+                .FirstOrDefault(m => m.Member.Name == member.Name);
+
+            if (desc.Member is null)
+            {
+                error = $"No member '{member.Name}' on {parent.GetType().Name}.";
+                return false;
+            }
+
+            DataFieldConverter.SetMemberValue(desc.Member, parent, value);
+            error = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
     public VVSnapshot Snapshot(VVPath path)
     {
         if (!TryResolve(path, out var obj, out var error) || obj is null)

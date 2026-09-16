@@ -1,18 +1,15 @@
+using System;
 using Engine.Shared.Debug.ViewVariables;
-using Microsoft.Xna.Framework;
 
 namespace Engine.Client.UI.Debug.ViewVariables;
 
-/// <summary>
-/// One name/value row in a VV window.
-/// </summary>
 public sealed class ViewVariablesRow : BoxContainer
 {
     public VVMemberInfo Member { get; }
 
-    private readonly Label _valueLabel;
+    private readonly VVEditorControl _editor;
 
-    public ViewVariablesRow(VVMemberInfo member)
+    public ViewVariablesRow(VVMemberInfo member, IViewVariablesAccess access, Action<string> setStatus)
     {
         Member = member;
 
@@ -28,13 +25,10 @@ public sealed class ViewVariablesRow : BoxContainer
             TextVerticalAlign = VerticalAlignment.Center,
         });
 
-        _valueLabel = new Label { HorizontalExpand = true, AutoWrap = false };
-        AddChild(_valueLabel);
+        var ctx = new VVEditorContext { Access = access, Member = member, SetStatus = setStatus };
+        _editor = VVEditorRegistry.Create(ctx);
+        AddChild(_editor);
     }
 
-    public void Refresh(VVValue value)
-    {
-        _valueLabel.Text = value.Text;
-        _valueLabel.Color = value.Kind == VVValueKind.Error ? Color.IndianRed : Color.LightGray;
-    }
+    public void Refresh(VVValue value) => _editor.Refresh(value);
 }

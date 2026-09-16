@@ -27,7 +27,7 @@ public sealed partial class ViewVariablesWindow
 
             foreach (var member in group.Members)
             {
-                var row = new ViewVariablesRow(member);
+                var row = new ViewVariablesRow(member, _access, text => _statusLabel.Text = text);
                 _rows.Add(row);
                 _body.AddChild(row);
             }

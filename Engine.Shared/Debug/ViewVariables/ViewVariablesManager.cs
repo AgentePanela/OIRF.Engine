@@ -16,6 +16,8 @@ public interface IViewVariablesAccess
     VVSnapshot Snapshot(VVPath path);
 
     bool TryRead(VVPath path, out VVValue value);
+
+    bool TryWrite(VVPath path, object? newValue, string text, out string? error);
 }
 
 public sealed class LocalViewVariablesAccess : IViewVariablesAccess
@@ -32,6 +34,9 @@ public sealed class LocalViewVariablesAccess : IViewVariablesAccess
     public VVSnapshot Snapshot(VVPath path) => _resolver.Snapshot(path);
 
     public bool TryRead(VVPath path, out VVValue value) => _resolver.TryRead(path, out value);
+
+    public bool TryWrite(VVPath path, object? newValue, string text, out string? error)
+        => _resolver.TryWrite(path, newValue, out error);
 }
 
 public sealed class RemoteViewVariablesAccess : IViewVariablesAccess
@@ -48,6 +53,12 @@ public sealed class RemoteViewVariablesAccess : IViewVariablesAccess
     public bool TryRead(VVPath path, out VVValue value)
     {
         value = VVValue.Error("VV remote is not implemented yet.");
+        return false;
+    }
+
+    public bool TryWrite(VVPath path, object? newValue, string text, out string? error)
+    {
+        error = "VV remote is not implemented yet.";
         return false;
     }
 }
