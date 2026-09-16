@@ -61,7 +61,11 @@ public sealed partial class ViewVariablesWindow : Window
         if (path.Root.Kind == VVRootKind.Entity)
             header.AddChild(new EntityView(new EntityUid(path.Root.Uid)) { MinWidth = 48, MinHeight = 48, MaxWidth = 128, MaxHeight = 128 });
 
-        var refreshButton = new Button("Refresh") { HorizontalAlignment = HorizontalAlignment.Right};
+        // pushes everything after it to the right edge - BoxContainer only splits leftover
+        // space among HorizontalExpand children, it has no float-right of its own
+        header.AddChild(new PanelContainer { HorizontalExpand = true });
+
+        var refreshButton = new Button("Refresh");
         refreshButton.OnClick += _ => Rebuild();
         header.AddChild(refreshButton);
 
