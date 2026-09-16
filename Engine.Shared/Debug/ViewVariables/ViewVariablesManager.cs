@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Engine.Shared.GameObjects;
 using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.IoC;
@@ -92,6 +93,56 @@ public sealed class ViewVariablesManager
     public void Unpin(int handle) => _pins.Remove(handle);
 
     private object? TryGetPinned(int handle) => _pins.GetValueOrDefault(handle);
+
+    public bool TryRemoveComponent(VVRoot root, out string? error)
+    {
+        if (root.Kind != VVRootKind.Component || root.ComponentTypeName is null)
+        {
+            error = "Not a component.";
+            return false;
+        }
+
+        var type = _compFac.GetTypeByString(root.ComponentTypeName);
+        if (type is null)
+        {
+            error = $"Unknown component type '{root.ComponentTypeName}'.";
+            return false;
+        }
+
+        _entMan.RemComp(new EntityUid(root.Uid), type);
+        error = null;
+        return true;
+    }
+
+    public bool TryAddComponent(EntityUid uid, string sanitizedName, out string? error)
+    {
+        if (!_compFac.ComponentsSanitized.TryGetValue(sanitizedName, out var type))
+        {
+            error = $"Unknown component '{sanitizedName}'.";
+            return false;
+        }
+
+        if (_entMan.TryComp(uid, type, out _))
+        {
+            error = $"Entity already has '{sanitizedName}'.";
+            return false;
+        }
+
+        _entMan.AddComponent(uid, type);
+        error = null;
+        return true;
+    }
+
+    public List<string> GetAddableComponents(EntityUid uid)
+    {
+        var existing = _entMan.GetEntityComps(uid)?.Select(c => c.GetType()).ToHashSet() ?? [];
+
+        return _compFac.ComponentsSanitized
+            .Where(kv => !existing.Contains(kv.Value))
+            .Select(kv => kv.Key)
+            .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
 
     // tells the client to open the vv window
     public event Action<VVPath>? OnOpenRequested;

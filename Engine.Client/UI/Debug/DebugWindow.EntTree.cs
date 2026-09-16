@@ -1,15 +1,13 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using Engine.Client.Scenes;
+using Engine.Client.UI.Debug.ViewVariables;
 using Engine.Shared.GameObjects;
-using Microsoft.Xna.Framework;
 
 namespace Engine.Client.UI.Debug;
 
 /// <summary>
-/// Search/select an entity, then browse its components
+/// Search/select an entity, then open it in vv
 /// </summary>
 public sealed class EntityDebugTab
 {
@@ -22,11 +20,7 @@ public sealed class EntityDebugTab
     private readonly ItemList _entityList;
     private readonly List<EntityUid> _entityRows = new();
     private readonly Label _entityInfo;
-
-    private readonly ItemList _componentList;
-    private readonly List<Component> _componentRows = new();
-    private readonly BoxContainer _propPanel;
-    private readonly Label _status;
+    private readonly Button _vvButton;
 
     private EntityUid? _selectedUid;
     private bool _dirty = true;
@@ -38,49 +32,35 @@ public sealed class EntityDebugTab
         _sceneManager = sceneManager;
         _entManager = entManager;
 
-        var root = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 8 };
+        var root = new BoxContainer { Orientation = Orientation.Vertical, Separation = 6, MinWidth = 260 };
         Root = root;
-
-        var left = new BoxContainer { Orientation = Orientation.Vertical, Separation = 6, MinWidth = 260 };
-        root.AddChild(left);
 
         _searchBox = new LineEdit { PlaceholderText = "Search entity..." };
         _searchBox.OnTextChanged += _ => _dirty = true;
-        left.AddChild(_searchBox);
+        root.AddChild(_searchBox);
 
         _entityList = new ItemList { MinHeight = 460 };
         _entityList.OnSelectionChanged += OnEntitySelected;
-        left.AddChild(_entityList);
+        root.AddChild(_entityList);
 
-        var leftToolbar = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 6 };
+        var toolbar = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 6 };
         var refreshBtn = new Button("Refresh");
         refreshBtn.OnClick += _ => RefreshEntityList();
         var deleteBtn = new Button("Delete");
         deleteBtn.OnClick += _ => DeleteSelectedEntity();
-        leftToolbar.AddChild(refreshBtn);
-        leftToolbar.AddChild(deleteBtn);
-        left.AddChild(leftToolbar);
+        _vvButton = new Button("View Variables") { Disabled = true };
+        _vvButton.OnClick += _ =>
+        {
+            if (_selectedUid is { } uid)
+                ViewVariablesWindow.OpenEntity(uid);
+        };
+        toolbar.AddChild(refreshBtn);
+        toolbar.AddChild(deleteBtn);
+        toolbar.AddChild(_vvButton);
+        root.AddChild(toolbar);
 
-        var right = new BoxContainer { Orientation = Orientation.Vertical, Separation = 8, HorizontalExpand = true };
-        root.AddChild(right);
-
-        right.AddChild(new Label { Text = "Entity Inspector" });
         _entityInfo = new Label { Text = "No entity selected" };
-        right.AddChild(_entityInfo);
-
-        right.AddChild(new Label { Text = "Components" });
-        _componentList = new ItemList { MinHeight = 150 };
-        _componentList.OnSelectionChanged += OnComponentSelected;
-        right.AddChild(_componentList);
-
-        right.AddChild(new Label { Text = "Component Inspector (read-only)" });
-        var scroll = new ScrollContainer { MinHeight = 240, HorizontalExpand = true };
-        _propPanel = new BoxContainer { Orientation = Orientation.Vertical, Separation = 4, Margin = new(6) };
-        scroll.AddChild(_propPanel);
-        right.AddChild(scroll);
-
-        _status = new Label { Text = "" };
-        right.AddChild(_status);
+        root.AddChild(_entityInfo);
 
         _sceneManager.OnSceneChanged += OnSceneChanged;
     }
@@ -147,22 +127,16 @@ public sealed class EntityDebugTab
         _selectedUid = null;
         _dirty = true;
 
-        _componentList.Clear();
-        _componentRows.Clear();
-        _propPanel.ClearChildren();
+        _vvButton.Disabled = true;
         _entityInfo.Text = "Entity deleted (or scheduled for deletion).";
     }
 
     private void OnEntitySelected(int index)
     {
-        _componentList.Clear();
-        _componentRows.Clear();
-        _propPanel.ClearChildren();
-        _status.Text = "";
-
         if (index < 0 || index >= _entityRows.Count)
         {
             _selectedUid = null;
+            _vvButton.Disabled = true;
             _entityInfo.Text = "Select an entity";
             return;
         }
@@ -173,64 +147,13 @@ public sealed class EntityDebugTab
 
         if (ent is null)
         {
+            _vvButton.Disabled = true;
             _entityInfo.Text = $"Entity ({uid.Id}) not found";
             return;
         }
 
         var comps = _entManager.GetEntityComps(uid);
         _entityInfo.Text = $"Name: {ent.Name}\nUID: {uid.Id}\nComponents: {comps?.Count ?? 0}";
-
-        if (comps is null || comps.Count == 0)
-        {
-            _componentList.AddItem("<No components>");
-            return;
-        }
-
-        foreach (var comp in comps)
-        {
-            _componentRows.Add(comp);
-            _componentList.AddItem(comp.GetType().Name);
-        }
-    }
-
-    private void OnComponentSelected(int index)
-    {
-        _propPanel.ClearChildren();
-        _status.Text = "";
-
-        if (index < 0 || index >= _componentRows.Count)
-            return;
-
-        BuildInspectorForComponent(_componentRows[index]);
-    }
-
-    private void BuildInspectorForComponent(Component comp)
-    {
-        var type = comp.GetType();
-        _propPanel.AddChild(new Label { Text = type.FullName ?? type.Name });
-
-        foreach (var p in type.GetProperties(BindingFlags.Public | BindingFlags.Instance).OrderBy(p => p.Name))
-            AddMemberRow(p.Name, p.PropertyType.Name, p.CanRead ? TryGetValue(() => p.GetValue(comp)) : "<non-readable>");
-
-        foreach (var f in type.GetFields(BindingFlags.Public | BindingFlags.Instance).OrderBy(f => f.Name))
-            AddMemberRow(f.Name, f.FieldType.Name, TryGetValue(() => f.GetValue(comp)));
-    }
-
-    private static string TryGetValue(Func<object?> getter)
-    {
-        try
-        {
-            return getter()?.ToString() ?? "null";
-        }
-        catch (Exception ex)
-        {
-            return $"<error: {ex.Message}>";
-        }
-    }
-
-    private void AddMemberRow(string name, string typeName, string value)
-    {
-        _propPanel.AddChild(new Label { Text = $"{name} ({typeName}):" });
-        _propPanel.AddChild(new Label { Text = value, Color = Color.Gray });
+        _vvButton.Disabled = false;
     }
 }

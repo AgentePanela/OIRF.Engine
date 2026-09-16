@@ -91,6 +91,14 @@ public sealed partial class ViewVariablesWindow : Window
         _componentsBody = new BoxContainer { Orientation = Orientation.Vertical, Separation = 4, Background = new (0, 0, 0, 0.5f) };
         _componentsScroll.AddChild(_componentsBody);
 
+        // only an entity has components to add to
+        if (path.Root.Kind == VVRootKind.Entity)
+        {
+            var addButton = new Button("Add Component");
+            addButton.OnClick += _ => ToggleAddComponentPopup(addButton);
+            root.AddChild(addButton);
+        }
+
         _statusLabel = new Label { Text = "" };
         root.AddChild(_statusLabel);
 
