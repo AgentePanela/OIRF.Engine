@@ -98,34 +98,99 @@ public sealed class ViewVariablesResolver
     private static bool TryGetStep(object parent, VVStep step, out object? value, out string? error)
     {
         value = null;
-
-        if (step is not MemberStep member)
-        {
-            // collection/dictionary drill-down arrives later
-            error = $"Step '{step}' is not supported yet.";
-            return false;
-        }
+        error = null;
 
         try
         {
-            var desc = ViewVariablesConvert.ScanMembers(parent.GetType())
-                .FirstOrDefault(m => m.Member.Name == member.Name);
-
-            if (desc.Member is null)
+            switch (step)
             {
-                error = $"No member '{member.Name}' on {parent.GetType().Name}.";
-                return false;
-            }
+                case MemberStep member:
+                {
+                    var desc = ViewVariablesConvert.ScanMembers(parent.GetType())
+                        .FirstOrDefault(m => m.Member.Name == member.Name);
 
-            value = DataFieldConverter.GetMemberValue(desc.Member, parent);
-            error = null;
-            return true;
+                    if (desc.Member is null)
+                    {
+                        error = $"No member '{member.Name}' on {parent.GetType().Name}.";
+                        return false;
+                    }
+
+                    value = DataFieldConverter.GetMemberValue(desc.Member, parent);
+                    return true;
+                }
+                case IndexStep index:
+                {
+                    if (parent is Array array)
+                    {
+                        if (index.Index < 0 || index.Index >= array.Length)
+                        {
+                            error = $"Index {index.Index} is out of range.";
+                            return false;
+                        }
+
+                        value = array.GetValue(index.Index);
+                        return true;
+                    }
+
+                    if (parent is System.Collections.IList list)
+                    {
+                        if (index.Index < 0 || index.Index >= list.Count)
+                        {
+                            error = $"Index {index.Index} is out of range.";
+                            return false;
+                        }
+
+                        value = list[index.Index];
+                        return true;
+                    }
+
+                    if (parent is System.Collections.IEnumerable seq)
+                    {
+                        value = seq.Cast<object?>().ElementAtOrDefault(index.Index);
+                        return true;
+                    }
+
+                    error = $"{parent.GetType().Name} is not indexable.";
+                    return false;
+                }
+                case KeyStep key:
+                {
+                    if (parent is not System.Collections.IDictionary dict)
+                    {
+                        error = $"{parent.GetType().Name} is not a dictionary.";
+                        return false;
+                    }
+
+                    if (!ViewVariablesConvert.TryParse(GetDictionaryKeyType(parent.GetType()), key.RawKey, out var keyObj, out error) || keyObj is null)
+                        return false;
+
+                    if (!dict.Contains(keyObj))
+                    {
+                        error = $"Key '{key.RawKey}' not found.";
+                        return false;
+                    }
+
+                    value = dict[keyObj];
+                    return true;
+                }
+                default:
+                    error = $"Step '{step}' is not supported.";
+                    return false;
+            }
         }
         catch (Exception ex)
         {
             error = ex.Message;
             return false;
         }
+    }
+
+    private static Type GetDictionaryKeyType(Type dictType)
+    {
+        var iface = dictType.GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>));
+
+        return iface?.GetGenericArguments()[0] ?? typeof(string);
     }
 
     public bool TryWrite(VVPath path, object? newValue, out string? error)
@@ -194,54 +259,102 @@ public sealed class ViewVariablesResolver
     {
         error = null;
 
-        if (step is not MemberStep member)
+        switch (step)
         {
-            error = $"Step '{step}' is not supported yet.";
-            return false;
+            case MemberStep member:
+            {
+                var desc = ViewVariablesConvert.ScanMembers(parent.GetType())
+                    .FirstOrDefault(m => m.Member.Name == member.Name);
+
+                if (desc.Member is null)
+                {
+                    error = $"No member '{member.Name}' on {parent.GetType().Name}.";
+                    return false;
+                }
+
+                if (!desc.CanWrite)
+                {
+                    error = $"'{member.Name}' is read-only.";
+                    return false;
+                }
+
+                return true;
+            }
+            case IndexStep:
+                if (parent is Array || parent is System.Collections.IList { IsReadOnly: false })
+                    return true;
+
+                error = $"{parent.GetType().Name} elements can't be written.";
+                return false;
+            case KeyStep:
+                if (parent is System.Collections.IDictionary { IsReadOnly: false })
+                    return true;
+
+                error = $"{parent.GetType().Name} entries can't be written.";
+                return false;
+            default:
+                error = $"Step '{step}' is not supported.";
+                return false;
         }
-
-        var desc = ViewVariablesConvert.ScanMembers(parent.GetType())
-            .FirstOrDefault(m => m.Member.Name == member.Name);
-
-        if (desc.Member is null)
-        {
-            error = $"No member '{member.Name}' on {parent.GetType().Name}.";
-            return false;
-        }
-
-        if (!desc.CanWrite)
-        {
-            error = $"'{member.Name}' is read-only.";
-            return false;
-        }
-
-        return true;
     }
 
     private static bool TrySetStep(object parent, VVStep step, object? value, out string? error)
     {
         error = null;
 
-        if (step is not MemberStep member)
-        {
-            error = $"Step '{step}' is not supported yet.";
-            return false;
-        }
-
         try
         {
-            var desc = ViewVariablesConvert.ScanMembers(parent.GetType())
-                .FirstOrDefault(m => m.Member.Name == member.Name);
-
-            if (desc.Member is null)
+            switch (step)
             {
-                error = $"No member '{member.Name}' on {parent.GetType().Name}.";
-                return false;
-            }
+                case MemberStep member:
+                {
+                    var desc = ViewVariablesConvert.ScanMembers(parent.GetType())
+                        .FirstOrDefault(m => m.Member.Name == member.Name);
 
-            DataFieldConverter.SetMemberValue(desc.Member, parent, value);
-            error = null;
-            return true;
+                    if (desc.Member is null)
+                    {
+                        error = $"No member '{member.Name}' on {parent.GetType().Name}.";
+                        return false;
+                    }
+
+                    DataFieldConverter.SetMemberValue(desc.Member, parent, value);
+                    return true;
+                }
+                case IndexStep index:
+                {
+                    if (parent is Array array)
+                    {
+                        array.SetValue(value, index.Index);
+                        return true;
+                    }
+
+                    if (parent is System.Collections.IList list)
+                    {
+                        list[index.Index] = value;
+                        return true;
+                    }
+
+                    error = $"{parent.GetType().Name} elements can't be written.";
+                    return false;
+                }
+                case KeyStep key:
+                {
+                    if (parent is not System.Collections.IDictionary dict)
+                    {
+                        error = $"{parent.GetType().Name} is not a dictionary.";
+                        return false;
+                    }
+
+                    if (!ViewVariablesConvert.TryParse(GetDictionaryKeyType(parent.GetType()), key.RawKey, out var keyObj, out error) || keyObj is null)
+                        return false;
+
+                    dict[keyObj] = value;
+                    return true;
+                }
+                default:
+                    error = $"Step '{step}' is not supported.";
+                    return false;
+            }
         }
         catch (Exception ex)
         {
@@ -262,9 +375,13 @@ public sealed class ViewVariablesResolver
             };
         }
 
-        // an entity root groups by component; everything else is one flat group
+        // an entity root groups by component; a collection/dict shows its elements;
+        // everything else is one flat group of members
         if (path.Steps.Count == 0 && path.Root.Kind == VVRootKind.Entity && obj is Entity ent)
             return SnapshotEntity(path, ent);
+
+        if (obj is not string && obj is System.Collections.IEnumerable)
+            return SnapshotCollection(path, obj);
 
         return new VVSnapshot
         {
@@ -275,18 +392,84 @@ public sealed class ViewVariablesResolver
         };
     }
 
+    private const int MaxDrillElements = 256;
+
+    private static VVSnapshot SnapshotCollection(VVPath path, object obj)
+    {
+        var members = new List<VVMemberInfo>();
+        var shown = 0;
+
+        if (obj is System.Collections.IDictionary dict)
+        {
+            var writable = !dict.IsReadOnly;
+            foreach (System.Collections.DictionaryEntry entry in dict)
+            {
+                if (shown >= MaxDrillElements)
+                    break;
+
+                var keyText = ViewVariablesConvert.ToText(entry.Key);
+                members.Add(DescribeElement($"[{keyText}]", entry.Value, path.At(keyText), writable));
+                shown++;
+            }
+
+            return new VVSnapshot
+            {
+                Path = path,
+                Title = $"{obj.GetType().Name} [{dict.Count}]",
+                Groups = [new VVGroup("", members)],
+                StructureVersion = dict.Count,
+            };
+        }
+
+        var writableList = obj is Array || obj is System.Collections.IList { IsReadOnly: false };
+        var index = 0;
+        foreach (var item in (System.Collections.IEnumerable)obj)
+        {
+            if (shown < MaxDrillElements)
+            {
+                members.Add(DescribeElement($"[{index}]", item, path.At(index), writableList));
+                shown++;
+            }
+
+            index++;
+        }
+
+        var title = shown < index
+            ? $"{obj.GetType().Name} [{shown}+ of {index}]"
+            : $"{obj.GetType().Name} [{index}]";
+
+        return new VVSnapshot { Path = path, Title = title, Groups = [new VVGroup("", members)], StructureVersion = index };
+    }
+
+    private static VVMemberInfo DescribeElement(string label, object? value, VVPath path, bool canWrite)
+    {
+        var declaredType = value?.GetType();
+        var kind = ClassifyKind(declaredType ?? typeof(object), value);
+        var enumNames = declaredType?.IsEnum == true ? Enum.GetNames(declaredType) : null;
+        var drillable = value is not null &&
+            kind is VVValueKind.Object or VVValueKind.Collection or VVValueKind.Dictionary or VVValueKind.EntityRef;
+
+        return new VVMemberInfo(label, declaredType?.Name ?? "object", declaredType, canWrite, kind, drillable, enumNames, path);
+    }
+
+    // shown before the component list, in this order, whichever of these Entity actually has
+    private static readonly string[] EntityInfoOrder = ["Uid", "Id", "Name", "Scene"];
+
     private VVSnapshot SnapshotEntity(VVPath path, Entity ent)
     {
+        var infoByName = BuildMembers(path, ent).ToDictionary(m => m.Name);
+        var infoMembers = EntityInfoOrder.Where(infoByName.ContainsKey).Select(n => infoByName[n]).ToList();
+
         var comps = _entMan.GetEntityComps(ent.Uid) ?? [];
-        var groups = new List<VVGroup>(comps.Count);
+        var groups = new List<VVGroup>(comps.Count + 1) { new("", infoMembers) };
         var structureHash = comps.Count;
 
+        // components only get a name + a drill button here - their fields show up once you
+        // open them, not dumped inline for every component at once
         foreach (var comp in comps.OrderBy(c => GetSanitizedName(c.GetType()), StringComparer.OrdinalIgnoreCase))
         {
             var compType = comp.GetType();
-            var compPath = VVPath.Of(VVRoot.Component(ent.Uid, compType));
-
-            groups.Add(new VVGroup(GetSanitizedName(compType), BuildMembers(compPath, comp)));
+            groups.Add(new VVGroup(GetSanitizedName(compType), [], VVPath.Of(VVRoot.Component(ent.Uid, compType))));
             structureHash = HashCode.Combine(structureHash, compType);
         }
 

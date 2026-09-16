@@ -10,7 +10,7 @@ public sealed class ReadOnlyTextEditor : VVEditorControl
 
     public ReadOnlyTextEditor(VVEditorContext ctx) : base(ctx)
     {
-        _label = new Label { HorizontalExpand = true, AutoWrap = false };
+        _label = new Label { HorizontalExpand = true, AutoWrap = false, TextVerticalAlign = VerticalAlignment.Center };
         AddChild(_label);
     }
 
@@ -35,7 +35,14 @@ public sealed class NullableEditorDecorator : VVEditorControl
         _hasValue = new CheckBox { Text = "set", Disabled = !ctx.Member.CanWrite };
         _hasValue.OnToggled += pressed =>
         {
-            if (!pressed)
+            if (_inner is not null)
+                return;
+            
+            _inner.Visible = pressed;
+
+            if (pressed)
+                MarkDirty(); // nothing was written yet - don't let the next refresh snap this back to unchecked
+            else
                 TryCommit(null, "null");
         };
 

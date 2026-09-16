@@ -50,7 +50,9 @@ public sealed record VVMemberInfo(
     IReadOnlyList<string>? EnumNames,
     VVPath Path);
 
-public sealed record VVGroup(string Name, IReadOnlyList<VVMemberInfo> Members);
+// Path is set when the group has its own standalone root (a component) - lets the window
+// offer "open just this" instead of only showing it inline.
+public sealed record VVGroup(string Name, IReadOnlyList<VVMemberInfo> Members, VVPath? Path = null);
 
 public sealed class VVSnapshot
 {

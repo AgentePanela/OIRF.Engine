@@ -52,6 +52,13 @@ public static class ViewVariablesConvert
         if (value is EntityUid uid)
             return uid.Id.ToString();
 
+        // ToString() returns the bare inner Id
+        if (value.GetType() is { IsGenericType: true } t && t.GetGenericTypeDefinition() == typeof(ProtoId<>))
+        {
+            var text = value.ToString();
+            return string.IsNullOrEmpty(text) ? "(none)" : text;
+        }
+ 
         if (value is IDictionary dict)
             return $"{{{dict.Count}}}";
 
@@ -66,7 +73,17 @@ public static class ViewVariablesConvert
 
         try
         {
-            return DataFieldConverter.ToRawValue(value)?.ToString() ?? "null";
+            // ToRawValue recurses into a Dictionary<string,object> for any plain object it has no
+            // string form for - that's meant for YAML round-tripping, not a UI label, so calling
+            // .ToString() on it just dumps the container type name. Show the object's own type
+            // name instead; drilling in is what shows the actual fields.
+            return DataFieldConverter.ToRawValue(value) switch
+            {
+                null => "null",
+                string s => s,
+                IDictionary or IEnumerable => value.GetType().Name,
+                var raw => raw.ToString() ?? "null",
+            };
         }
         catch (Exception ex)
         {

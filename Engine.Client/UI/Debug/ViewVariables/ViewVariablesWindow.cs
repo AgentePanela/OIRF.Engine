@@ -37,6 +37,9 @@ public sealed partial class ViewVariablesWindow : Window
     private readonly IViewVariablesAccess _access;
 
     private readonly BoxContainer _body;
+    private readonly Label _componentsLabel;
+    private readonly ScrollContainer _componentsScroll;
+    private readonly BoxContainer _componentsBody;
     private readonly Label _statusLabel;
     private readonly List<ViewVariablesRow> _rows = new();
 
@@ -54,20 +57,39 @@ public sealed partial class ViewVariablesWindow : Window
         var root = new BoxContainer { Orientation = Orientation.Vertical, Separation = 6 };
         AddChild(root);
 
-        var header = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 8 };
+        var header = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 8, Background = new (0, 0, 0, 0.5f) };
         if (path.Root.Kind == VVRootKind.Entity)
-            header.AddChild(new EntityView(new EntityUid(path.Root.Uid)) { MinWidth = 48, MinHeight = 48 });
+            header.AddChild(new EntityView(new EntityUid(path.Root.Uid)) { MinWidth = 48, MinHeight = 48, MaxWidth = 128, MaxHeight = 128 });
 
-        var refreshButton = new Button("Refresh");
+        var refreshButton = new Button("Refresh") { HorizontalAlignment = HorizontalAlignment.Right};
         refreshButton.OnClick += _ => Rebuild();
         header.AddChild(refreshButton);
+
+        if (path.Parent is { } parent)
+        {
+            var upButton = new Button("Up");
+            upButton.OnClick += _ => Open(parent);
+            header.AddChild(upButton);
+        }
+
         root.AddChild(header);
 
-        var scroll = new ScrollContainer { VerticalExpand = true, HorizontalExpand = true, MinHeight = 320 };
-        root.AddChild(scroll);
+        root.AddChild(new Label { Text = path.ToString(), AutoWrap = false });
+
+        // var scroll = new ScrollContainer { VerticalExpand = false, HorizontalExpand = true, MinHeight = 200 };
+        // root.AddChild(scroll);
 
         _body = new BoxContainer { Orientation = Orientation.Vertical, Separation = 4 };
-        scroll.AddChild(_body);
+        root.AddChild(_body);
+
+        _componentsLabel = new Label { Text = "Components:", Visible = false };
+        root.AddChild(_componentsLabel);
+
+        _componentsScroll = new ScrollContainer { VerticalExpand = true, HorizontalExpand = true, MinHeight = 120, Visible = false };
+        root.AddChild(_componentsScroll);
+
+        _componentsBody = new BoxContainer { Orientation = Orientation.Vertical, Separation = 4, Background = new (0, 0, 0, 0.5f) };
+        _componentsScroll.AddChild(_componentsBody);
 
         _statusLabel = new Label { Text = "" };
         root.AddChild(_statusLabel);
