@@ -116,4 +116,51 @@ public sealed class VVPath : IEquatable<VVPath>
 
         return hash.ToHashCode();
     }
+
+    // flattened into primitive lists so a VVPath can ride inside a NetMessage
+    public (byte RootKind, int RootUid, string RootComponent, int RootHandle, List<string> StepKinds, List<string> StepArgs) Flatten()
+    {
+        var kinds = new List<string>(Steps.Count);
+        var args = new List<string>(Steps.Count);
+
+        foreach (var step in Steps)
+        {
+            switch (step)
+            {
+                case MemberStep m: kinds.Add("M"); args.Add(m.Name); break;
+                case IndexStep i: kinds.Add("I"); args.Add(i.Index.ToString()); break;
+                case KeyStep k: kinds.Add("K"); args.Add(k.RawKey); break;
+            }
+        }
+
+        return ((byte)Root.Kind, Root.Uid, Root.ComponentTypeName ?? "", Root.DetachedHandle, kinds, args);
+    }
+
+    public static VVPath? Unflatten(byte rootKind, int rootUid, string rootComponent, int rootHandle,
+        List<string> stepKinds, List<string> stepArgs)
+    {
+        if (stepKinds.Count != stepArgs.Count || stepKinds.Count > MaxDepth || !Enum.IsDefined(typeof(VVRootKind), rootKind))
+            return null;
+
+        VVRoot root = (VVRootKind)rootKind switch
+        {
+            VVRootKind.Entity => new VVRoot(VVRootKind.Entity, rootUid, null, 0),
+            VVRootKind.Component => new VVRoot(VVRootKind.Component, rootUid, rootComponent, 0),
+            _ => new VVRoot(VVRootKind.Detached, 0, null, rootHandle),
+        };
+
+        var path = Of(root);
+        for (var i = 0; i < stepKinds.Count; i++)
+        {
+            switch (stepKinds[i])
+            {
+                case "M": path = path.Member(stepArgs[i]); break;
+                case "K": path = path.At(stepArgs[i]); break;
+                case "I" when int.TryParse(stepArgs[i], out var index): path = path.At(index); break;
+                default: return null;
+            }
+        }
+
+        return path;
+    }
 }

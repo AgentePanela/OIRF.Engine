@@ -35,13 +35,10 @@ public sealed class NullableEditorDecorator : VVEditorControl
         _hasValue = new CheckBox { Text = "set", Disabled = !ctx.Member.CanWrite };
         _hasValue.OnToggled += pressed =>
         {
-            if (_inner is not null)
-                return;
-            
             _inner.Visible = pressed;
 
             if (pressed)
-                MarkDirty(); // nothing was written yet - don't let the next refresh snap this back to unchecked
+                MarkDirty(); // nothing was written yet
             else
                 TryCommit(null, "null");
         };

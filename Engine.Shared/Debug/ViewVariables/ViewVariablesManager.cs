@@ -4,6 +4,7 @@ using System.Linq;
 using Engine.Shared.GameObjects;
 using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.IoC;
+using Engine.Shared.Networking;
 
 namespace Engine.Shared.Debug.ViewVariables;
 
@@ -40,20 +41,40 @@ public sealed class LocalViewVariablesAccess : IViewVariablesAccess
         => _resolver.TryWrite(path, newValue, out error);
 }
 
+// requests a snapshot over the wire and caches whatever comes back
 public sealed class RemoteViewVariablesAccess : IViewVariablesAccess
 {
+    private readonly INetManager _netMan;
+    private readonly Dictionary<VVPath, VVSnapshot> _cache = new();
+    private readonly Dictionary<uint, VVPath> _pendingRequests = new();
+    private uint _nextRequestId = 1;
+
     public bool IsRemote => true;
 
-    public VVSnapshot Snapshot(VVPath path) => new()
+    public RemoteViewVariablesAccess(INetManager netMan)
     {
-        Path = path,
-        Title = path.ToString(),
-        Error = "VV remote is not implemented yet.",
-    };
+        _netMan = netMan;
+    }
+
+    public VVSnapshot Snapshot(VVPath path)
+    {
+        if (_cache.TryGetValue(path, out var cached))
+            return cached;
+
+        if (!_pendingRequests.ContainsValue(path) && _netMan.MySession is { } session)
+        {
+            var id = _nextRequestId++;
+            _pendingRequests[id] = path;
+            session.SendMessage(new MsgViewVariablesRequest(id, path));
+        }
+
+        return new VVSnapshot { Path = path, Title = path.ToString(), Error = "Waiting on the server (not implemented yet)." };
+    }
 
     public bool TryRead(VVPath path, out VVValue value)
     {
-        value = VVValue.Error("VV remote is not implemented yet.");
+        // there's no per-value request message yet - only whole-snapshot metadata round-trips
+        value = VVValue.Error("VV remote reads aren't wired up yet.");
         return false;
     }
 
@@ -62,6 +83,30 @@ public sealed class RemoteViewVariablesAccess : IViewVariablesAccess
         error = "VV remote is not implemented yet.";
         return false;
     }
+
+    internal void OnResponseReceived(MsgViewVariablesResponse msg)
+    {
+        if (!_pendingRequests.TryGetValue(msg.RequestId, out var path))
+            return;
+
+        _pendingRequests.Remove(msg.RequestId);
+
+        var members = new List<VVMemberInfo>(msg.Names.Count);
+        for (var i = 0; i < msg.Names.Count; i++)
+        {
+            var enumNames = msg.EnumNames[i].Length == 0 ? null : msg.EnumNames[i].Split('|');
+            members.Add(new VVMemberInfo(msg.Names[i], msg.TypeNames[i], null, msg.CanWrite[i],
+                msg.Kinds[i], false, enumNames, path.Member(msg.Names[i])));
+        }
+
+        _cache[path] = new VVSnapshot
+        {
+            Path = path,
+            Title = msg.Title,
+            Error = msg.Error.Length == 0 ? null : msg.Error,
+            Groups = [new VVGroup("", members)],
+        };
+    }
 }
 
 [RegisterIoC]
@@ -69,16 +114,48 @@ public sealed class ViewVariablesManager
 {
     [Dependency] private readonly EntityManager _entMan = default!;
     [Dependency] private readonly ComponentFactory _compFac = default!;
+    [Dependency] private readonly INetManager _netMan = default!;
+    [Dependency] private readonly SharedContentManager _content = default!;
 
     private readonly Dictionary<int, object> _pins = new();
     private int _nextPinHandle = 1;
 
     private readonly IViewVariablesAccess _local;
+    private readonly RemoteViewVariablesAccess _remote;
 
     public ViewVariablesManager()
     {
         IoCManager.ResolveDependencies(this);
         _local = new LocalViewVariablesAccess(new ViewVariablesResolver(_entMan, _compFac, TryGetPinned));
+        _remote = new RemoteViewVariablesAccess(_netMan);
+    }
+
+    public void Init()
+    {
+        // registration is symmetric (no client/server split)
+        _netMan.RegisterNetMessage<MsgViewVariablesRequest>((msg, session) =>
+        {
+            if (!_content.IsServer())
+                return;
+
+            Log.Warn("VV: remote requests are not implemented yet.");
+        });
+
+        _netMan.RegisterNetMessage<MsgViewVariablesResponse>((msg, _) =>
+        {
+            if (_content.IsServer())
+                return;
+
+            _remote.OnResponseReceived(msg);
+        });
+
+        _netMan.RegisterNetMessage<MsgViewVariablesWrite>((msg, session) =>
+        {
+            if (!_content.IsServer())
+                return;
+
+            Log.Warn("VV: remote writes are not implemented yet.");
+        });
     }
 
     public IViewVariablesAccess For(VVRoot root) => _local;

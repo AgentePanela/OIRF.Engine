@@ -73,6 +73,18 @@ internal static class NetSerializableResolver
         if (primitive is { } p)
             return new FieldPlan($"buffer.{p.Read}()", new List<string> { $"buffer.{p.Write}({accessPath});" });
 
+        // enums: write the underlying primitive, cast back on read
+        if (type.TypeKind == TypeKind.Enum && type is INamedTypeSymbol { EnumUnderlyingType: { } enumUnderlying })
+        {
+            var underlyingName = enumUnderlying.ToDisplayString();
+            if (GetPrimitiveMethods(underlyingName) is { } ep)
+            {
+                return new FieldPlan(
+                    $"({typeName})buffer.{ep.Read}()",
+                    new List<string> { $"buffer.{ep.Write}(({underlyingName}){accessPath});" });
+            }
+        }
+
         var collectionPlan = TryResolveCollection(type, accessPath, location, spc, out var isCollection);
         if (isCollection)
             return collectionPlan; // null means the element type already reported its own diagnostic

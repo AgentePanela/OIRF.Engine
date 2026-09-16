@@ -4,6 +4,7 @@ using Engine.Shared.Assets;
 using Engine.Shared.Audio;
 using Engine.Shared.Configuration;
 using Engine.Shared.Console;
+using Engine.Shared.Debug.ViewVariables;
 using Engine.Shared.GameObjects;
 using Engine.Shared.IoC;
 using Engine.Shared.Locale;
@@ -70,6 +71,7 @@ public sealed class SharedContentManager
     {
         IoCManager.Resolve<IConfigurationManager>().Init();
         IoCManager.Resolve<IConsoleHost>().Init();
+        IoCManager.Resolve<ViewVariablesManager>().Init();
         IoCManager.Resolve<IPrototypeManager>().Load();
         IoCManager.Resolve<SharedAudioManifest>().Load();
 
