@@ -42,7 +42,9 @@ public sealed class NullableEditorDecorator : VVEditorControl
         _hasValue = new CheckBox { Text = "set", Disabled = !ctx.Member.CanWrite };
         _hasValue.OnToggled += pressed =>
         {
+#pragma warning disable CS8602 // Dereference of a possibly null reference.
             _inner.Visible = pressed;
+#pragma warning restore CS8602 // Dereference of a possibly null reference.
 
             if (pressed)
                 MarkDirty(); // nothing was written yet
