@@ -94,10 +94,13 @@ public sealed partial class LineEdit : BaseTextInput
                 new ColorGradient(SelectionColor).Resolve(selRect));
         }
 
+        var displayFont = ResolveDisplayFont(fontManager, uiScale);
+        var displayScale = new Vector2(1f / MathHelper.Max(uiScale, 0.05f));
+        var textPos = SnapToPixel(new Vector2(textOriginX, textY), uiScale);
         if (Text.Length > 0)
-            sb.DrawString(font, Text, new Vector2(textOriginX, textY), Color);
+            sb.DrawString(displayFont, Text, textPos, Color, scale: displayScale);
         else if (!string.IsNullOrEmpty(PlaceholderText))
-            sb.DrawString(font, PlaceholderText, new Vector2(textOriginX, textY), PlaceholderColor);
+            sb.DrawString(displayFont, PlaceholderText, textPos, PlaceholderColor, scale: displayScale);
 
         if (IsFocused && _caretBlink < CaretBlinkInterval)
         {

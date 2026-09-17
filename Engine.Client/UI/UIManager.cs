@@ -31,6 +31,7 @@ public sealed partial class UIManager
     /// Current UI-wide scale factor.
     /// </summary>
     public float UIScale { get; private set; } = 1f;
+    private float _manualScale = 1f;
 
     public PanelContainer Root { get; } = new()
     {
@@ -78,15 +79,16 @@ public sealed partial class UIManager
         _cfg.Subs(UiCvars.ResAutoScaleLowX, _ => RecomputeUIScale());
         _cfg.Subs(UiCvars.ResAutoScaleLowY, _ => RecomputeUIScale());
         _cfg.Subs(UiCvars.ResAutoScaleMin, _ => RecomputeUIScale());
+        _cfg.Subs(UiCvars.Scale, v => { _manualScale = v; RecomputeUIScale(); }, true);
     }
 
     /// <summary>
-    /// Recomputes <see cref="UIScale"/> from the current screen size and the auto-scale cvars,
-    /// marking the layout dirty if it changed.
+    /// Recomputes <see cref="UIScale"/> from the current screen size, the auto-scale cvars and the
+    /// manual scale cvar (multiplied together), marking the layout dirty if it changed.
     /// </summary>
     private void RecomputeUIScale()
     {
-        var scale = ComputeAutoScale(_lastScreenSize);
+        var scale = ComputeAutoScale(_lastScreenSize) * MathHelper.Max(0.1f, _manualScale);
         if (scale == UIScale)
             return;
 

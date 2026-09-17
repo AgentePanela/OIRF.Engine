@@ -118,6 +118,16 @@ public abstract partial class BaseTextInput : PanelContainer
     protected SpriteFontBase ResolveFont(IFontManager fonts)
         => FontFamily is null ? fonts.Get(FontSize, FontVariant) : fonts.Get(FontSize, FontFamily, FontVariant);
 
+    /// <summary>
+    /// Same font/size/variant as <see cref="ResolveFont"/>, but baked at the physical pixel size
+    /// instead of the logical.
+    /// </summary>
+    protected SpriteFontBase ResolveDisplayFont(IFontManager fonts, float uiScale)
+    {
+        var size = FontSize * MathHelper.Max(uiScale, 0.05f);
+        return FontFamily is null ? fonts.Get(size, FontVariant) : fonts.Get(size, FontFamily, FontVariant);
+    }
+
     protected void ResetBlink() => _caretBlink = 0f;
 
     protected virtual void OnCaretChanged()

@@ -34,5 +34,11 @@ public static class UiCvars
     /// The smallest scale auto-scale will ever clamp down to.
     /// </summary>
     public static readonly CVarDef<float> ResAutoScaleMin =
-        CVarDef.Create("ui.resolutionAutoScaleMinimum", 0.5f, CVar.CLIENTONLY);
+        CVarDef.Create("ui.resolutionAutoScaleMinimum", 0.65f, CVar.CLIENTONLY);
+
+    /// <summary>
+    /// Manual UI scale multiplier, on top of the automatic resolution-based one. 
+    /// </summary>
+    public static readonly CVarDef<float> Scale =
+        CVarDef.Create("ui.scale", 1f, CVar.CLIENTONLY);
 }

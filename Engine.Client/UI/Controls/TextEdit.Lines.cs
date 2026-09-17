@@ -360,6 +360,8 @@ public sealed partial class TextEdit
             }
         }
 
+        var displayFont = ResolveDisplayFont(fontManager, uiScale);
+        var displayScale = new Vector2(1f / MathHelper.Max(uiScale, 0.05f));
         if (Text.Length > 0)
         {
             for (var vi = 0; vi < visualLines.Count; vi++)
@@ -369,12 +371,12 @@ public sealed partial class TextEdit
                     continue; // fully outside the visible band - scissor would clip it anyway
 
                 var v = visualLines[vi];
-                sb.DrawString(font, lines[v.LogicalLine][v.Start..v.End], new Vector2(textOriginX, y), Color);
+                sb.DrawString(displayFont, lines[v.LogicalLine][v.Start..v.End], SnapToPixel(new Vector2(textOriginX, y), uiScale), Color, scale: displayScale);
             }
         }
         else if (!string.IsNullOrEmpty(PlaceholderText))
         {
-            sb.DrawString(font, PlaceholderText, new Vector2(textOriginX, textOriginY), PlaceholderColor);
+            sb.DrawString(displayFont, PlaceholderText, SnapToPixel(new Vector2(textOriginX, textOriginY), uiScale), PlaceholderColor, scale: displayScale);
         }
 
         if (IsFocused && _caretBlink < CaretBlinkInterval)

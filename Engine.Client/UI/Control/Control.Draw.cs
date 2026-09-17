@@ -74,4 +74,16 @@ public abstract partial class Control : IDisposable
     protected virtual void DrawSelf(ShapeBatch sb, IFontManager fontManager, float dt)
     {
     }
+
+    /// <summary>
+    /// Rounds a logical-space draw position so it lands on a whole physical pixel once
+    /// <paramref name="uiScale"/> is applied. Text especially needs this!!!!!!!!!!!!!!!!
+    /// </summary>
+    protected static Vector2 SnapToPixel(Vector2 logical, float uiScale)
+    {
+        if (uiScale <= 0f)
+            return logical;
+
+        return new Vector2(MathF.Round(logical.X * uiScale), MathF.Round(logical.Y * uiScale)) / uiScale;
+    }
 }
