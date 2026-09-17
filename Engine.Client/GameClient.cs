@@ -29,6 +29,8 @@ using Engine.Shared.Threading;
 using Engine.Shared.Timing;
 using System.IO;
 using Engine.Shared.Networking;
+using Engine.Shared.Debug.ViewVariables;
+using Engine.Client.UI.Debug.ViewVariables;
 
 namespace Engine.Client;
 
@@ -238,6 +240,8 @@ public class GameClient : Game
         };
 
         Window.ClientSizeChanged += (_, _) => OnClientSizeChanged();
+
+        IoCManager.Resolve<ViewVariablesManager>().OnOpenRequested += path => ViewVariablesWindow.Open(path);
 
         Exiting += OnClientShutdown;
     }
