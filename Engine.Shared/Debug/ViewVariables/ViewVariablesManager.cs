@@ -20,6 +20,10 @@ public interface IViewVariablesAccess
     bool TryRead(VVPath path, out VVValue value);
 
     bool TryWrite(VVPath path, object? newValue, string text, out string? error);
+
+    bool TryInsert(VVPath collectionPath, string? rawKey, out string? error);
+
+    bool TryRemoveAt(VVPath elementPath, out string? error);
 }
 
 public sealed class LocalViewVariablesAccess : IViewVariablesAccess
@@ -39,6 +43,12 @@ public sealed class LocalViewVariablesAccess : IViewVariablesAccess
 
     public bool TryWrite(VVPath path, object? newValue, string text, out string? error)
         => _resolver.TryWrite(path, newValue, out error);
+
+    public bool TryInsert(VVPath collectionPath, string? rawKey, out string? error)
+        => _resolver.TryInsert(collectionPath, rawKey, out error);
+
+    public bool TryRemoveAt(VVPath elementPath, out string? error)
+        => _resolver.TryRemoveAt(elementPath, out error);
 }
 
 // requests a snapshot over the wire and caches whatever comes back
@@ -79,6 +89,18 @@ public sealed class RemoteViewVariablesAccess : IViewVariablesAccess
     }
 
     public bool TryWrite(VVPath path, object? newValue, string text, out string? error)
+    {
+        error = "VV remote is not implemented yet.";
+        return false;
+    }
+
+    public bool TryInsert(VVPath collectionPath, string? rawKey, out string? error)
+    {
+        error = "VV remote is not implemented yet.";
+        return false;
+    }
+
+    public bool TryRemoveAt(VVPath elementPath, out string? error)
     {
         error = "VV remote is not implemented yet.";
         return false;

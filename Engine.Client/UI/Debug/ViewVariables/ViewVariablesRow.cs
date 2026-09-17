@@ -37,6 +37,19 @@ public sealed class ViewVariablesRow : BoxContainer
             _drillButton.OnClick += _ => Drill();
             AddChild(_drillButton);
         }
+
+        if (member.CanRemove)
+        {
+            var removeButton = new Button("-") { MinWidth = 28 };
+            removeButton.OnClick += _ =>
+            {
+                if (access.TryRemoveAt(member.Path, out var error))
+                    Parent?.RemoveChild(this, dispose: true);
+                else
+                    setStatus(error ?? "couldn't remove element");
+            };
+            AddChild(removeButton);
+        }
     }
 
     public void Refresh(VVValue value)

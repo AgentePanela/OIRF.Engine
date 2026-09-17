@@ -363,6 +363,177 @@ public sealed class ViewVariablesResolver
         }
     }
 
+    // appends a new element (List) or entry (Dictionary, given rawKey) - never needs the
+    // struct write-back TryWrite has, since the container itself is mutated in place and every
+    // supported container (List<T>, Dictionary<K,V>) is a reference type
+    public bool TryInsert(VVPath collectionPath, string? rawKey, out string? error)
+    {
+        if (!TryResolve(collectionPath, out var obj, out error) || obj is null)
+            return false;
+
+        if (obj is System.Collections.IDictionary dict)
+        {
+            if (dict.IsReadOnly)
+            {
+                error = "This dictionary can't be resized.";
+                return false;
+            }
+
+            if (rawKey is null)
+            {
+                error = "A key is required.";
+                return false;
+            }
+
+            if (!ViewVariablesConvert.TryParse(GetDictionaryKeyType(obj.GetType()), rawKey, out var keyObj, out error) || keyObj is null)
+                return false;
+
+            if (dict.Contains(keyObj))
+            {
+                error = "That key already exists.";
+                return false;
+            }
+
+            if (!TryCreateDefault(GetDictionaryValueType(obj.GetType()), out var defaultValue, out error))
+                return false;
+
+            dict[keyObj] = defaultValue;
+            error = null;
+            return true;
+        }
+
+        if (obj is Array)
+        {
+            error = "Arrays can't be resized.";
+            return false;
+        }
+
+        if (obj is System.Collections.IList list)
+        {
+            if (list.IsReadOnly)
+            {
+                error = "This list can't be resized.";
+                return false;
+            }
+
+            if (!TryCreateDefault(GetListElementType(obj.GetType()), out var defaultValue, out error))
+                return false;
+
+            list.Add(defaultValue);
+            error = null;
+            return true;
+        }
+
+        error = $"{obj.GetType().Name} isn't a resizable collection.";
+        return false;
+    }
+
+    // elementPath points at the element itself (its last step is the Index/Key to remove)
+    public bool TryRemoveAt(VVPath elementPath, out string? error)
+    {
+        if (elementPath.Steps.Count == 0)
+        {
+            error = "Cannot remove a root object.";
+            return false;
+        }
+
+        if (!TryResolve(elementPath.Parent!, out var collection, out error) || collection is null)
+            return false;
+
+        switch (elementPath.Steps[^1])
+        {
+            case IndexStep index:
+                if (collection is Array)
+                {
+                    error = "Arrays can't be resized.";
+                    return false;
+                }
+
+                if (collection is not System.Collections.IList list || list.IsReadOnly)
+                {
+                    error = $"{collection.GetType().Name} elements can't be removed.";
+                    return false;
+                }
+
+                if (index.Index < 0 || index.Index >= list.Count)
+                {
+                    error = $"Index {index.Index} is out of range.";
+                    return false;
+                }
+
+                list.RemoveAt(index.Index);
+                error = null;
+                return true;
+
+            case KeyStep key:
+                if (collection is not System.Collections.IDictionary dict || dict.IsReadOnly)
+                {
+                    error = $"{collection.GetType().Name} entries can't be removed.";
+                    return false;
+                }
+
+                if (!ViewVariablesConvert.TryParse(GetDictionaryKeyType(collection.GetType()), key.RawKey, out var keyObj, out error) || keyObj is null)
+                    return false;
+
+                dict.Remove(keyObj);
+                error = null;
+                return true;
+
+            default:
+                error = "Only collection/dictionary elements can be removed.";
+                return false;
+        }
+    }
+
+    // Activator.CreateInstance already does the right thing for primitives/structs/classes with
+    // a parameterless constructor; anything else (abstract, interface, no matching ctor) throws,
+    // and we surface that as a clean refusal rather than guessing a concrete type or inserting null
+    private static bool TryCreateDefault(Type type, out object? value, out string? error)
+    {
+        error = null;
+
+        if (type == typeof(string))
+        {
+            value = "";
+            return true;
+        }
+
+        if (type.IsEnum)
+        {
+            var values = Enum.GetValues(type);
+            value = values.Length > 0 ? values.GetValue(0) : Activator.CreateInstance(type);
+            return true;
+        }
+
+        try
+        {
+            value = Activator.CreateInstance(type);
+            return true;
+        }
+        catch (MissingMethodException)
+        {
+            value = null;
+            error = $"{type.Name} doesn't have a parameterless constructor - can't create one automatically.";
+            return false;
+        }
+    }
+
+    private static Type GetDictionaryValueType(Type dictType)
+    {
+        var iface = dictType.GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>));
+
+        return iface?.GetGenericArguments()[1] ?? typeof(object);
+    }
+
+    private static Type GetListElementType(Type listType)
+    {
+        var iface = listType.GetInterfaces()
+            .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IList<>));
+
+        return iface?.GetGenericArguments()[0] ?? typeof(object);
+    }
+
     public VVSnapshot Snapshot(VVPath path)
     {
         if (!TryResolve(path, out var obj, out var error) || obj is null)
@@ -408,7 +579,7 @@ public sealed class ViewVariablesResolver
                     break;
 
                 var keyText = ViewVariablesConvert.ToText(entry.Key);
-                members.Add(DescribeElement($"[{keyText}]", entry.Value, path.At(keyText), writable));
+                members.Add(DescribeElement($"[{keyText}]", entry.Value, path.At(keyText), writable, writable));
                 shown++;
             }
 
@@ -418,16 +589,21 @@ public sealed class ViewVariablesResolver
                 Title = $"{obj.GetType().Name} [{dict.Count}]",
                 Groups = [new VVGroup("", members)],
                 StructureVersion = dict.Count,
+                Collection = new VVCollectionInfo(true, writable),
             };
         }
 
-        var writableList = obj is Array || obj is System.Collections.IList { IsReadOnly: false };
+        // arrays can have their elements written but never resized - insert/remove need the
+        // second flag to stay separate from "can this element itself be set"
+        var elementsWritable = obj is Array || obj is System.Collections.IList { IsReadOnly: false };
+        var resizable = obj is System.Collections.IList { IsReadOnly: false } && obj is not Array;
+
         var index = 0;
         foreach (var item in (System.Collections.IEnumerable)obj)
         {
             if (shown < MaxDrillElements)
             {
-                members.Add(DescribeElement($"[{index}]", item, path.At(index), writableList));
+                members.Add(DescribeElement($"[{index}]", item, path.At(index), elementsWritable, resizable));
                 shown++;
             }
 
@@ -438,10 +614,17 @@ public sealed class ViewVariablesResolver
             ? $"{obj.GetType().Name} [{shown}+ of {index}]"
             : $"{obj.GetType().Name} [{index}]";
 
-        return new VVSnapshot { Path = path, Title = title, Groups = [new VVGroup("", members)], StructureVersion = index };
+        return new VVSnapshot
+        {
+            Path = path,
+            Title = title,
+            Groups = [new VVGroup("", members)],
+            StructureVersion = index,
+            Collection = new VVCollectionInfo(false, resizable),
+        };
     }
 
-    private static VVMemberInfo DescribeElement(string label, object? value, VVPath path, bool canWrite)
+    private static VVMemberInfo DescribeElement(string label, object? value, VVPath path, bool canWrite, bool canRemove)
     {
         var declaredType = value?.GetType();
         var kind = ClassifyKind(declaredType ?? typeof(object), value);
@@ -449,7 +632,7 @@ public sealed class ViewVariablesResolver
         var drillable = value is not null &&
             kind is VVValueKind.Object or VVValueKind.Collection or VVValueKind.Dictionary or VVValueKind.EntityRef;
 
-        return new VVMemberInfo(label, declaredType?.Name ?? "object", declaredType, canWrite, kind, drillable, enumNames, path);
+        return new VVMemberInfo(label, declaredType?.Name ?? "object", declaredType, canWrite, kind, drillable, enumNames, path, canRemove);
     }
 
     // shown before the component list, in this order, whichever of these Entity actually has

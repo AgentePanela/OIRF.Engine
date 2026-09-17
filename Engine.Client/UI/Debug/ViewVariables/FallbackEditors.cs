@@ -10,7 +10,14 @@ public sealed class ReadOnlyTextEditor : VVEditorControl
 
     public ReadOnlyTextEditor(VVEditorContext ctx) : base(ctx)
     {
-        _label = new Label { HorizontalExpand = true, AutoWrap = false, TextVerticalAlign = VerticalAlignment.Center };
+        _label = new Label 
+        { 
+            HorizontalExpand = true, 
+            AutoWrap = false, 
+            TextVerticalAlign = VerticalAlignment.Bottom,
+            TextAlign = HorizontalAlignment.Center,
+            FontSize = 13f
+        };
         AddChild(_label);
     }
 

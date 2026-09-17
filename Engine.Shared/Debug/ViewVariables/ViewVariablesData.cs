@@ -48,11 +48,16 @@ public sealed record VVMemberInfo(
     VVValueKind Kind,
     bool Drillable,
     IReadOnlyList<string>? EnumNames,
-    VVPath Path);
+    VVPath Path,
+    bool CanRemove = false); // only meaningful for a collection/dict element
 
 // Path is set when the group has its own standalone root (a component) - lets the window
 // offer "open just this" instead of only showing it inline.
 public sealed record VVGroup(string Name, IReadOnlyList<VVMemberInfo> Members, VVPath? Path = null);
+
+// set on a snapshot whose target is itself a collection/dictionary - CanInsert is false for
+// arrays (fixed size) and read-only collections
+public sealed record VVCollectionInfo(bool IsDictionary, bool CanInsert);
 
 public sealed class VVSnapshot
 {
@@ -60,6 +65,7 @@ public sealed class VVSnapshot
     public string Title { get; init; } = "";
     public string? Error { get; init; }
     public IReadOnlyList<VVGroup> Groups { get; init; } = Array.Empty<VVGroup>();
+    public VVCollectionInfo? Collection { get; init; }
 
     // does the member list itself need rebuilding - checked every refresh instead of diffing
     public int StructureVersion { get; init; }

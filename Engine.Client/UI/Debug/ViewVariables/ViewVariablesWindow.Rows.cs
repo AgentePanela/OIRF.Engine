@@ -80,6 +80,30 @@ public sealed partial class ViewVariablesWindow
             }
         }
 
+        if (snapshot.Collection is { CanInsert: true } collection)
+        {
+            var addRow = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 4, HorizontalExpand = true };
+
+            LineEdit? keyEdit = null;
+            if (collection.IsDictionary)
+            {
+                keyEdit = new LineEdit { PlaceholderText = "key", HorizontalExpand = true };
+                addRow.AddChild(keyEdit);
+            }
+
+            var addButton = new Button("+") { HorizontalExpand = !collection.IsDictionary };
+            addButton.OnClick += _ =>
+            {
+                if (_access.TryInsert(_path, keyEdit?.Text, out var error))
+                    Rebuild();
+                else
+                    _statusLabel.Text = error ?? "couldn't add element";
+            };
+            addRow.AddChild(addButton);
+
+            _body.AddChild(addRow);
+        }
+
         _componentsLabel.Visible = hasComponents;
         _componentsScroll.Visible = hasComponents;
 
