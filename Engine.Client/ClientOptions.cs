@@ -34,19 +34,22 @@ public sealed class ClientOptions
     public Type? InitialScene;
 
     /// <summary>
-    /// The default loading scene used by the engine.
+    /// The default loading scene used by the engine loading proccess. 
+    /// MUST be a "LoadingScene" scene type.
     /// </summary>
     public Type LoadingScene = typeof(DefaultLoadingScene);
 
     /// <summary>
-    /// The %AppData% location for your game data storage.
+    /// The %AppData% (or self contained) location for your game data storage.
+    /// DEFAULTS: "data"
     /// </summary>
-    public string DataPath = Path.Combine("MyCompany", "MyGame");
+    public string DataPath = Path.Combine("data");
 
     /// <summary>
     /// This will disable the %AppData%/<see cref="DataPath"/> with a DataPath in the same folder as the executable.
+    /// DEFAULTS: true
     /// </summary>
-    public bool SelfContainedDataPath = false;
+    public bool SelfContainedDataPath = true;
     
     /// <summary>
     /// Will save the current CVar config when the game closes?

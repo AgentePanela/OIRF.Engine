@@ -7,6 +7,7 @@ using Engine.Shared.Configuration;
 using Engine.Shared.Configuration.CVars;
 using Engine.Shared.Console;
 using Engine.Shared.IoC;
+using Engine.Shared.Storage;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 
@@ -33,11 +34,15 @@ public sealed class ConsoleOverlay : Overlay
     [Dependency] private readonly InputManager _inputManager = default!;
     [Dependency] private readonly IConfigurationManager _cfg = default!;
 
+    private const string HistoryFile = "consoleHistory.txt";
+    private const int MaxHistoryEntries = 200;
+
     private readonly BoxContainer _lines;
     private readonly ScrollContainer _scroll;
     private readonly LineEdit _inputLine;
     private readonly BoxContainer _suggestions;
     private static readonly List<string> _history = new(); // must be static to keep per instances
+    private static bool _historyLoaded;
     private int _historyIndex;
 
     private readonly List<CompletionOption> _allMatches = new();
@@ -90,6 +95,12 @@ public sealed class ConsoleOverlay : Overlay
 
         _consoleHost.OnEngineLog += OnLog;
         _consoleHost.OnRemoteCompletions += OnRemoteCompletions;
+
+        if (!_historyLoaded)
+        {
+            _historyLoaded = true;
+            LoadHistory();
+        }
 
         ResetHistoryCursor();
         FocusInput();
@@ -184,6 +195,30 @@ public sealed class ConsoleOverlay : Overlay
     }
 
     private void ResetHistoryCursor() => _historyIndex = _history.Count;
+
+    private static void LoadHistory()
+    {
+        var text = IoCManager.Resolve<UserStorageManager>().ReadText(HistoryFile);
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        _history.Clear();
+        _history.AddRange(text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+    }
+
+    /// <summary>
+    /// Flushes the command history to disk.
+    /// </summary>
+    internal static void SaveHistory()
+    {
+        if (_history.Count == 0)
+            return;
+
+        if (_history.Count > MaxHistoryEntries)
+            _history.RemoveRange(0, _history.Count - MaxHistoryEntries);
+
+        IoCManager.Resolve<UserStorageManager>().WriteText(HistoryFile, string.Join('\n', _history));
+    }
 
     private void UpdateSuggestions(string text)
     {

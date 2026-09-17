@@ -8,6 +8,7 @@ using Engine.Client.Graphics.Fonts;
 using Engine.Client.Graphics.Shaders;
 using Engine.Client.Inputs;
 using Engine.Client.UI;
+using Engine.Client.UI.Debug;
 //using Engine.Client.UI.Fonts;
 using Engine.Client.Scenes;
 using Microsoft.Xna.Framework;
@@ -254,6 +255,8 @@ public class GameClient : Game
         
         if (Options.SaveConfigOnExit)
             ConfigManager.SaveConfig();
+
+        ConsoleOverlay.SaveHistory();
     }
 
     private void OnClientSizeChanged()
