@@ -11,7 +11,18 @@ public sealed class StyleSet : IReadOnlyCollection<string>
     private readonly HashSet<string> _set = new();
     private readonly Control _owner;
 
-    internal StyleSet(Control owner) => _owner = owner;
+    /// <summary>
+    /// Whether membership in this set cascades down to descendants for style matching purposes
+    /// (see <see cref="Control.StyleClasses"/>) - if so, changing it must also invalidate every
+    /// descendant's style cache, since their resolved rules may depend on it.
+    /// </summary>
+    private readonly bool _cascades;
+
+    internal StyleSet(Control owner, bool cascades = false)
+    {
+        _owner = owner;
+        _cascades = cascades;
+    }
 
     public int Count => _set.Count;
 
@@ -22,7 +33,7 @@ public sealed class StyleSet : IReadOnlyCollection<string>
         if (!_set.Add(item))
             return false;
 
-        _owner.InvalidateStyleCache();
+        _owner.InvalidateStyleCache(_cascades);
         return true;
     }
 
@@ -31,7 +42,7 @@ public sealed class StyleSet : IReadOnlyCollection<string>
         if (!_set.Remove(item))
             return false;
 
-        _owner.InvalidateStyleCache();
+        _owner.InvalidateStyleCache(_cascades);
         return true;
     }
 

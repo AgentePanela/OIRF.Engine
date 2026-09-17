@@ -11,7 +11,7 @@ public abstract partial class Control : IDisposable
     protected Control()
     {
         StyleAliasses = new StyleSet(this);
-        StyleClasses = new StyleSet(this);
+        StyleClasses = new StyleSet(this, cascades: true);
         PseudoClasses = new StyleSet(this);
     }
 
