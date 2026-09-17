@@ -4,6 +4,8 @@ using System.Linq;
 using Apos.Shapes;
 using Engine.Client.Graphics.Fonts;
 using Engine.Client.Inputs;
+using Engine.Shared.Configuration;
+using Engine.Shared.Configuration.CVars;
 using Engine.Shared.IoC;
 using Engine.Shared.Prototypes;
 using Microsoft.Xna.Framework;
@@ -23,6 +25,12 @@ public sealed partial class UIManager
     [Dependency] private readonly IPrototypeManager _protoMan = default!;
     [Dependency] private readonly IVirtualKeyboard _virtualKeyboard = default!;
     [Dependency] private readonly SceneManager _sceneMan = default!;
+    [Dependency] private readonly IConfigurationManager _cfg = default!;
+
+    /// <summary>
+    /// Current UI-wide scale factor.
+    /// </summary>
+    public float UIScale { get; private set; } = 1f;
 
     public PanelContainer Root { get; } = new()
     {
@@ -63,6 +71,46 @@ public sealed partial class UIManager
             if (scene.Layout.Name is null)
                 scene.Layout.Name = scene.GetType().Name;
         };
+
+        _cfg.Subs(UiCvars.ResAutoScaleEnabled, _ => RecomputeUIScale());
+        _cfg.Subs(UiCvars.ResAutoScaleUpperX, _ => RecomputeUIScale());
+        _cfg.Subs(UiCvars.ResAutoScaleUpperY, _ => RecomputeUIScale());
+        _cfg.Subs(UiCvars.ResAutoScaleLowX, _ => RecomputeUIScale());
+        _cfg.Subs(UiCvars.ResAutoScaleLowY, _ => RecomputeUIScale());
+        _cfg.Subs(UiCvars.ResAutoScaleMin, _ => RecomputeUIScale());
+    }
+
+    /// <summary>
+    /// Recomputes <see cref="UIScale"/> from the current screen size and the auto-scale cvars,
+    /// marking the layout dirty if it changed.
+    /// </summary>
+    private void RecomputeUIScale()
+    {
+        var scale = ComputeAutoScale(_lastScreenSize);
+        if (scale == UIScale)
+            return;
+
+        UIScale = scale;
+        _layoutDirty = true;
+    }
+
+    private float ComputeAutoScale(Vector2 screenSize)
+    {
+        if (!_cfg.Get(UiCvars.ResAutoScaleEnabled))
+            return 1f;
+
+        var tX = InverseLerpClamped(_cfg.Get(UiCvars.ResAutoScaleLowX), _cfg.Get(UiCvars.ResAutoScaleUpperX), screenSize.X);
+        var tY = InverseLerpClamped(_cfg.Get(UiCvars.ResAutoScaleLowY), _cfg.Get(UiCvars.ResAutoScaleUpperY), screenSize.Y);
+
+        return MathHelper.Lerp(_cfg.Get(UiCvars.ResAutoScaleMin), 1f, MathHelper.Min(tX, tY));
+    }
+
+    private static float InverseLerpClamped(float a, float b, float v)
+    {
+        if (MathF.Abs(b - a) < 0.0001f)
+            return v >= b ? 1f : 0f;
+
+        return MathHelper.Clamp((v - a) / (b - a), 0f, 1f);
     }
 
     public void AddChild(Control control) => Root.AddChild(control);
@@ -102,6 +150,7 @@ public sealed partial class UIManager
         if (screenSize != _lastScreenSize)
         {
             _lastScreenSize = screenSize;
+            RecomputeUIScale();
             _layoutDirty = true;
         }
 
@@ -110,8 +159,9 @@ public sealed partial class UIManager
         if (_layoutDirty)
         {
             var layoutStart = Stopwatch.GetTimestamp();
-            Root.Measure(screenSize);
-            Root.Arrange(new Rectangle(0, 0, (int)screenSize.X, (int)screenSize.Y));
+            var logicalSize = screenSize / UIScale;
+            Root.Measure(logicalSize);
+            Root.Arrange(new Rectangle(0, 0, (int)logicalSize.X, (int)logicalSize.Y));
             _layoutDirty = false;
             UIProfiler.RecordLayout(Stopwatch.GetTimestamp() - layoutStart);
         }
@@ -131,7 +181,7 @@ public sealed partial class UIManager
 
     private void UpdateHover()
     {
-        var hit = Root.HitTest(_input.MouseScreenPosition);
+        var hit = Root.HitTest(_input.MouseUIPosition);
 
         if (hit == _hoveredControl)
             return;
@@ -145,7 +195,7 @@ public sealed partial class UIManager
     {
         //GameClient.GraphicsDevice.ScissorRectangle = GameClient.GraphicsDevice.Viewport.Bounds;
         UIProfiler.BeginFrame();
-        _shapeBatch.Begin(rasterizerState: ScissorRasterizer);
+        _shapeBatch.Begin(view: Matrix.CreateScale(UIScale), rasterizerState: ScissorRasterizer);
         Root.Draw(_shapeBatch, _fontMan, dt);
         _shapeBatch.End();
         UIProfiler.EndFrame();

@@ -151,7 +151,7 @@ public sealed partial class SplitContainer : Control
         {
             base.MouseButtonDown(button);
             if (button == MouseButton.Left)
-                OnDragStart?.Invoke(IoCManager.Resolve<InputManager>().MouseScreenPosition);
+                OnDragStart?.Invoke(IoCManager.Resolve<InputManager>().MouseUIPosition);
         }
 
         protected internal override void MouseMove(Vector2 position) => OnDrag?.Invoke(position);

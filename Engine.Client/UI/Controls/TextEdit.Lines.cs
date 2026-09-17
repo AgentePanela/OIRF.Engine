@@ -309,15 +309,19 @@ public sealed partial class TextEdit
         var textOriginY = rect.Y + Padding.Top - _scrollPixelsY;
 
         var device = GameClient.GraphicsDevice;
+        var uiScale = IoCManager.Resolve<UIManager>().UIScale;
         var previousScissor = device.ScissorRectangle;
         var textRect = new Rectangle(rect.X, rect.Y, (int)MathHelper.Max(0, rect.Width - _scrollBarReserve), rect.Height);
-        var clipped = Rectangle.Intersect(previousScissor, textRect);
+        var physicalTextRect = new Rectangle(
+            (int)(textRect.X * uiScale), (int)(textRect.Y * uiScale),
+            (int)(textRect.Width * uiScale), (int)(textRect.Height * uiScale));
+        var clipped = Rectangle.Intersect(previousScissor, physicalTextRect);
         if (clipped.Width <= 0 || clipped.Height <= 0)
             return;
 
         sb.End(); // scoped clip so overflowing/scrolled text can't bleed past our own Bounds
         device.ScissorRectangle = clipped;
-        sb.Begin(rasterizerState: ScissorRasterizer);
+        sb.Begin(view: Matrix.CreateScale(uiScale), rasterizerState: ScissorRasterizer);
         if (_caret != _selectionAnchor)
         {
             var selStart = Math.Min(_caret, _selectionAnchor);
@@ -390,6 +394,6 @@ public sealed partial class TextEdit
 
         sb.End();
         device.ScissorRectangle = previousScissor;
-        sb.Begin(rasterizerState: ScissorRasterizer);
+        sb.Begin(view: Matrix.CreateScale(uiScale), rasterizerState: ScissorRasterizer);
     }
 }

@@ -155,7 +155,7 @@ public partial class Slider : PanelContainer
 
         _dragging = true;
         PseudoClasses.Add("pressed");
-        SetValueFromMouse(IoCManager.Resolve<InputManager>().MouseScreenPosition);
+        SetValueFromMouse(IoCManager.Resolve<InputManager>().MouseUIPosition);
     }
 
     protected internal override void MouseMove(Vector2 position)

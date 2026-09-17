@@ -36,7 +36,7 @@ public abstract partial class BaseTextInput
         if (button != MouseButton.Left)
             return;
 
-        var mouse = IoCManager.Resolve<InputManager>().MouseScreenPosition;
+        var mouse = IoCManager.Resolve<InputManager>().MouseUIPosition;
         var clickIndex = HitTestIndex(mouse);
 
         switch (RegisterClick(clickIndex))

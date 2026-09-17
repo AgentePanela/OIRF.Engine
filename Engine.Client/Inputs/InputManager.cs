@@ -112,14 +112,27 @@ public sealed class InputManager()
     }
 
     #region Mouse
-    public Vector2 MouseScreenPosition 
+    public Vector2 MouseScreenPosition
         => _mousePosition;
 
     public Vector2 MouseWorldPosition
         => GameClient.Renderer.ScreenToWorld(_mousePosition);
 
+    /// <summary>
+    /// Mouse position in UI logical space.
+    /// </summary>
+    public Vector2 MouseUIPosition
+        => _mousePosition / _ui.UIScale;
+
     public (bool Changed, Vector2 Position) MousePositionChanged()
         => (_mousePosition != _prevMousePosition, _mousePosition);
+
+    /// <summary>
+    /// Logical-space equivalent of <see cref="MousePositionChanged"/>, for the same reason as
+    /// <see cref="MouseUIPosition"/>.
+    /// </summary>
+    public (bool Changed, Vector2 Position) MouseUIPositionChanged()
+        => (_mousePosition != _prevMousePosition, _mousePosition / _ui.UIScale);
 
     public (bool Changed, int Delta) MouseWheelDeltaChanged()
         => (_mouseWheelDelta != _prevMouseWheelDelta, _mouseWheelDelta - _prevMouseWheelDelta);
