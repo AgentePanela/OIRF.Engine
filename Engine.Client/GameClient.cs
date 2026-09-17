@@ -274,6 +274,8 @@ public class GameClient : Game
         if (Viewport != null)
             Viewport.UpdateScaleMatrix();
 
+        WindowManager?.EnsureBounds(new Vector2(width, height));
+
         SuppressDraw();
     }
 
