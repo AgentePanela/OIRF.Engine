@@ -22,7 +22,22 @@ public sealed class ClientOptions
     /// </summary>
     public bool CreateDedicatedAtlas = true;
 
+    /// <summary>
+    /// Enables the possibility to resize the game window.
+    /// </summary>
     public bool WindowResizing = true;
+
+    /// <summary>
+    /// Force defaults to the scale outer cvar, this will make the viewport fills the
+    /// entire screen (even if it is needed to draw out-of-bounds)
+    /// </summary>
+    public bool ScaleOuter = true;
+
+    /// <summary>
+    /// Force defaults to the scale integer cvar, Makes the scale outer integer safe, this
+    /// improves quality in pixel art games, making the pixels size integers.
+    /// </summary>
+    public bool ScaleInteger = false;
 
     public SamplerState Samplimg = SamplerState.PointClamp;
 

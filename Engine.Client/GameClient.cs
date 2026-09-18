@@ -193,6 +193,8 @@ public class GameClient : Game
         ConfigManager.ForceDefaultValue(GameCVars.GameVersion, Options.Version);
         ConfigManager.ForceDefaultValue(GameCVars.ResolutionWidth, Options.Width);
         ConfigManager.ForceDefaultValue(GameCVars.ResolutionHeight, options.Height);
+        ConfigManager.ForceDefaultValue(GameCVars.FitScaleOuter, Options.ScaleOuter);
+        ConfigManager.ForceDefaultValue(GameCVars.FitScaleInteger, Options.ScaleInteger);
 
         BeforeInit();
 
