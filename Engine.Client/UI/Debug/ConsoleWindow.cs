@@ -51,7 +51,7 @@ public sealed class ConsoleOverlay : Overlay
     private int _suggestionIndex;
     private RichLabel? _hintRow; // shown instead of rows when a command has nothing concrete to offer
 
-    private readonly ConcurrentQueue<(string Prefix, string Text, ConsoleColor Color)> _pendingLogs = new();
+    private readonly ConcurrentQueue<(string? Prefix, string Text, ConsoleColor Color, ConsoleColor? LevelColor)> _pendingLogs = new();
     private bool _pendingScrollToBottom;
 
 
@@ -91,7 +91,7 @@ public sealed class ConsoleOverlay : Overlay
 
         _consoleHost.OnLocalClear += OnLocalClear;
         foreach (var entry in _consoleHost.LogBacklog)
-            AddLogLine(entry.Prefix, entry.Text, MapConsoleColor(entry.Color));
+            AddLogLine(entry.Prefix, entry.Text, MapConsoleColor(entry.Color), MapLevelColor(entry.LevelColor));
 
         _consoleHost.OnEngineLog += OnLog;
         _consoleHost.OnRemoteCompletions += OnRemoteCompletions;
@@ -157,7 +157,7 @@ public sealed class ConsoleOverlay : Overlay
         }
 
         while (_pendingLogs.TryDequeue(out var entry))
-            AddLogLine(entry.Prefix, entry.Text, MapConsoleColor(entry.Color));
+            AddLogLine(entry.Prefix, entry.Text, MapConsoleColor(entry.Color), MapLevelColor(entry.LevelColor));
     }
 
     protected override void OnDispose()
@@ -181,7 +181,7 @@ public sealed class ConsoleOverlay : Overlay
         _history.Add(line);
         ResetHistoryCursor();
 
-        AddLine($"> {line}", EchoColor);
+        Log.Blank($"> {line}\n", ConsoleColor.Cyan);
         _consoleHost.LocalShell.ExecuteCommand(line);
     }
 
@@ -368,7 +368,8 @@ public sealed class ConsoleOverlay : Overlay
 
     private void OnLocalClear() => _lines.ClearChildren();
 
-    private void OnLog(string prefix, string text, ConsoleColor color) => _pendingLogs.Enqueue((prefix, text, color));
+    private void OnLog(string? prefix, string text, ConsoleColor color, ConsoleColor? levelColor)
+        => _pendingLogs.Enqueue((prefix, text, color, levelColor));
 
     private static Color MapConsoleColor(ConsoleColor color) => color switch
     {
@@ -379,10 +380,12 @@ public sealed class ConsoleOverlay : Overlay
         _ => NormalColor,
     };
 
-    private void AddLine(string text, Color color) => AddMarkupLine(Colored(text, color));
+    private static Color? MapLevelColor(ConsoleColor? color) => color is { } c ? MapConsoleColor(c) : null;
 
-    private void AddLogLine(string prefix, string text, Color prefixColor)
-        => AddMarkupLine($"{Colored($"[{prefix}]", prefixColor)} {Colored(text, NormalColor)}");
+    private void AddLogLine(string? prefix, string text, Color prefixColor, Color? textColor = null)
+        => AddMarkupLine(string.IsNullOrEmpty(prefix)
+            ? Colored(text, textColor ?? NormalColor)
+            : $"{Colored($"[{prefix}]", prefixColor)} {Colored(text, textColor ?? NormalColor)}");
 
     private void AddMarkupLine(string markup)
     {

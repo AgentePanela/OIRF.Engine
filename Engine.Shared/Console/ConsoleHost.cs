@@ -13,22 +13,23 @@ internal sealed class ConsoleHost : IConsoleHost
     [Dependency] private SharedContentManager _sharedContent = default!;
 
     private readonly Dictionary<string, IConsoleCommand> _commands = new();
+    private readonly HashSet<string> _disabledCommands = new();
     private readonly Dictionary<string, IConsoleShell> _sessionShells = new();
 
     private const int MaxLogBacklog = 500;
     private readonly System.Threading.Lock _logLock = new();
-    private readonly List<(string Prefix, string Text, ConsoleColor Color)> _logBacklog = new();
+    private readonly List<(string? Prefix, string Text, ConsoleColor Color, ConsoleColor? LevelColor)> _logBacklog = new();
 
     public IConsoleShell LocalShell { get; private set; } = default!;
     public IReadOnlyDictionary<string, IConsoleCommand> AvailableCommands => _commands;
 
-    public IReadOnlyList<(string Prefix, string Text, ConsoleColor Color)> LogBacklog
+    public IReadOnlyList<(string? Prefix, string Text, ConsoleColor Color, ConsoleColor? LevelColor)> LogBacklog
     {
         get { lock (_logLock) return _logBacklog.ToArray(); }
     }
 
     public event Action? OnLocalClear;
-    public event Action<string, string, ConsoleColor>? OnEngineLog;
+    public event Action<string?, string, ConsoleColor, ConsoleColor?>? OnEngineLog;
     public event Action<string, CompletionResult>? OnRemoteCompletions;
 
     // Only one remote completion request is ever relevant at a time
@@ -78,6 +79,17 @@ internal sealed class ConsoleHost : IConsoleHost
     public bool TryGetCommand(string name, [NotNullWhen(true)] out IConsoleCommand? command)
         => _commands.TryGetValue(name, out command);
 
+    public void SetCommandEnabled(string name, bool enabled)
+    {
+        if (enabled)
+            _disabledCommands.Remove(name);
+        else
+            _disabledCommands.Add(name);
+    }
+
+    public bool IsCommandEnabled(string name)
+        => _commands.ContainsKey(name) && !_disabledCommands.Contains(name);
+
     public CompletionResult GetCompletions(string line)
     {
         var endsWithSpace = line.Length == 0 || char.IsWhiteSpace(line[^1]);
@@ -91,6 +103,7 @@ internal sealed class ConsoleHost : IConsoleHost
             // still typing the command name itself
             partial = args.Length == 0 ? "" : args[0];
             raw = new CompletionResult(_commands.Values
+                .Where(c => !_disabledCommands.Contains(c.Name))
                 .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
                 .Select(c => new CompletionOption(c.Name, c.Description))
                 .ToList());
@@ -143,16 +156,16 @@ internal sealed class ConsoleHost : IConsoleHost
     internal void RaiseLocalClear() => OnLocalClear?.Invoke();
 
     // Log can call from any thread (networking, parallel jobs, etc.)
-    private void OnEngineLogWritten(string prefix, string text, ConsoleColor color)
+    private void OnEngineLogWritten(string? prefix, string text, ConsoleColor color, ConsoleColor? levelColor)
     {
         lock (_logLock)
         {
-            _logBacklog.Add((prefix, text, color));
+            _logBacklog.Add((prefix, text, color, levelColor));
             if (_logBacklog.Count > MaxLogBacklog)
                 _logBacklog.RemoveAt(0);
         }
 
-        OnEngineLog?.Invoke(prefix, text, color);
+        OnEngineLog?.Invoke(prefix, text, color, levelColor);
     }
 
     private void OnExecuteCommandReceived(MsgExecuteCommand msg, INetSession? session)

@@ -31,6 +31,18 @@ public interface IConsoleHost
     bool TryGetCommand(string name, [NotNullWhen(true)] out IConsoleCommand? command);
 
     /// <summary>
+    /// Disables/re-enables a registered command without unregistering it - a disabled command is
+    /// rejected by <see cref="IConsoleShell.ExecuteCommand"/> and hidden from
+    /// <see cref="GetCompletions"/>'s command-name suggestions.
+    /// </summary>
+    void SetCommandEnabled(string name, bool enabled);
+
+    /// <summary>
+    /// Whether the named command is registered and not currently disabled.
+    /// </summary>
+    bool IsCommandEnabled(string name);
+
+    /// <summary>
     /// Autocomplete for a command line as currently typed
     /// </summary>
     CompletionResult GetCompletions(string line);
@@ -56,12 +68,16 @@ public interface IConsoleHost
     event Action? OnLocalClear;
 
     /// <summary>
-    /// Recent engine log lines
+    /// Recent engine log lines. Prefix is null for a prefix-less (<see cref="Log.Blank"/>) line.
+    /// LevelColor is the body text's color (e.g. red for an error), null to use the console's
+    /// own default text color.
     /// </summary>
-    IReadOnlyList<(string Prefix, string Text, ConsoleColor Color)> LogBacklog { get; }
+    IReadOnlyList<(string? Prefix, string Text, ConsoleColor Color, ConsoleColor? LevelColor)> LogBacklog { get; }
 
     /// <summary>
-    /// Raised (CLIENT-SIDE) for every Log line written from here on, mirroring the terminal
+    /// Raised (CLIENT-SIDE) for every Log line written from here on, mirroring the terminal.
+    /// Prefix is null for a prefix-less (<see cref="Log.Blank"/>) line. LevelColor is the body
+    /// text's color (e.g. red for an error), null to use the console's own default text color.
     /// </summary>
-    event Action<string, string, ConsoleColor>? OnEngineLog;
+    event Action<string?, string, ConsoleColor, ConsoleColor?>? OnEngineLog;
 }

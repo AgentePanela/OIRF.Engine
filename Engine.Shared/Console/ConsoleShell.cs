@@ -52,6 +52,12 @@ internal sealed class ConsoleShell : IConsoleShell
             return;
         }
 
+        if (!_host.IsCommandEnabled(name))
+        {
+            WriteError($"Command '{name}' is currently disabled.");
+            return;
+        }
+
         if (cmd.RequireServerOrSingleplayer && !IsServer)
         {
             RemoteExecuteCommand(line);
@@ -111,7 +117,7 @@ internal sealed class ConsoleShell : IConsoleShell
         if (isError)
             Log.Error(text);
         else
-            Log.Debug(text);
+            Log.Blank(text);
     }
 
     public static string[] Tokenize(string line)
