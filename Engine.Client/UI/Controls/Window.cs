@@ -38,7 +38,11 @@ public partial class Window : BoxContainer
     public bool ShowCloseButton
     {
         get => _closeButton.Visible;
-        set => _closeButton.Visible = value;
+        set
+        {
+            _closeButton.Visible = value;
+            UpdateClosable();
+        }
     }
 
     /// <summary>
@@ -85,6 +89,7 @@ public partial class Window : BoxContainer
         _titleRow.StyleAliasses.Add("window");
         _titleRow.AddChild(_titleBar);
         _titleRow.AddChild(_closeButton);
+        UpdateClosable();
 
         Contents = new PanelContainer { VerticalExpand = true };
         Contents.StyleAliasses.Add("windowContents");
@@ -111,4 +116,12 @@ public partial class Window : BoxContainer
     public void Close() => Manager?.Close(this);
 
     internal void NotifyClosed() => OnClosed?.Invoke(this);
+
+    private void UpdateClosable()
+    {
+        if (!ShowCloseButton)
+            _titleRow.PseudoClasses.Add("unclosable");
+        else
+            _titleRow.PseudoClasses.Remove("unclosable");
+    }
 }
