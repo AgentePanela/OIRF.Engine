@@ -16,15 +16,22 @@ public class ViewportAdapter
     // The scale matrix applied to the sprite batch to make the virtual resolution fit the screen
     private Matrix _scaleMatrix = Matrix.Identity;
     private bool scaleOuter = true;
+    private bool scaleInteger = false;
 
     internal void Init()
     {
         IoCManager.ResolveDependencies(this);
         VirtualWidth = GameClient.Options.Width;
         VirtualHeight = GameClient.Options.Height;
-        _cfg.Subs(GameCVars.FitScaleOuter, v => 
+        _cfg.Subs(GameCVars.FitScaleOuter, v =>
         {
             scaleOuter = v;
+            if (GameClient.GraphicsDevice is not null)
+                UpdateScaleMatrix();
+        });
+        _cfg.Subs(GameCVars.FitScaleInteger, v =>
+        {
+            scaleInteger = v;
             if (GameClient.GraphicsDevice is not null)
                 UpdateScaleMatrix();
         });
@@ -52,6 +59,13 @@ public class ViewportAdapter
             scale = Math.Max(scaleX, scaleY);
         else
             scale = Math.Min(scaleX, scaleY);
+
+        if (scaleInteger)
+        {
+            // outer (crop-to-fill) / inner (letterbox)
+            scale = scaleOuter ? MathF.Ceiling(scale) : MathF.Floor(scale);
+            scale = Math.Max(scale, 1f);
+        }
 
         VirtualWidth = (int)Math.Round(ops.Width * scale);
         VirtualHeight = (int)Math.Round(ops.Height * scale);

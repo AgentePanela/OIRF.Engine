@@ -38,7 +38,7 @@ public partial class Window
         if (button != MouseButton.Left)
             return;
 
-        var mouse = IoCManager.Resolve<InputManager>().MouseScreenPosition;
+        var mouse = IoCManager.Resolve<InputManager>().MouseUIPosition;
         _edge = Resizable ? EdgeAt(mouse) : ResizeEdge.None;
 
         // plain click somewhere in the window that isn't an edge or the title bar - nothing to

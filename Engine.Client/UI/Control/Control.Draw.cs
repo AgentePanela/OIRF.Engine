@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using Apos.Shapes;
 using Engine.Client.Graphics.Fonts;
+using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -29,8 +30,12 @@ public abstract partial class Control : IDisposable
             return;
 
         var device = GameClient.GraphicsDevice;
+        var uiScale = IoCManager.Resolve<UIManager>().UIScale;
         var previousScissor = device.ScissorRectangle;
-        var clipped = Rectangle.Intersect(previousScissor, Bounds);
+        var physicalBounds = new Rectangle(
+            (int)(Bounds.X * uiScale), (int)(Bounds.Y * uiScale),
+            (int)(Bounds.Width * uiScale), (int)(Bounds.Height * uiScale));
+        var clipped = Rectangle.Intersect(previousScissor, physicalBounds);
 
         if (clipped.Width <= 0 || clipped.Height <= 0)
             return; // fully clipped out - this and everything under it is off-screen
@@ -47,7 +52,7 @@ public abstract partial class Control : IDisposable
         {
             sb.End(); //todo: fork apos.shapes and add Flush as public member instead of end/begin
             device.ScissorRectangle = clipped;
-            sb.Begin(rasterizerState: ScissorRasterizer);
+            sb.Begin(view: Matrix.CreateScale(uiScale), rasterizerState: ScissorRasterizer);
         }
 
         var ordered = OrderedChildren;
@@ -58,7 +63,7 @@ public abstract partial class Control : IDisposable
         {
             sb.End();
             device.ScissorRectangle = previousScissor;
-            sb.Begin(rasterizerState: ScissorRasterizer);
+            sb.Begin(view: Matrix.CreateScale(uiScale), rasterizerState: ScissorRasterizer);
         }
     }
 
@@ -68,5 +73,17 @@ public abstract partial class Control : IDisposable
     /// </summary>
     protected virtual void DrawSelf(ShapeBatch sb, IFontManager fontManager, float dt)
     {
+    }
+
+    /// <summary>
+    /// Rounds a logical-space draw position so it lands on a whole physical pixel once
+    /// <paramref name="uiScale"/> is applied. Text especially needs this!!!!!!!!!!!!!!!!
+    /// </summary>
+    protected static Vector2 SnapToPixel(Vector2 logical, float uiScale)
+    {
+        if (uiScale <= 0f)
+            return logical;
+
+        return new Vector2(MathF.Round(logical.X * uiScale), MathF.Round(logical.Y * uiScale)) / uiScale;
     }
 }

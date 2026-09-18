@@ -7,9 +7,18 @@ using System.Collections.Generic;
 public static class Log
 {
     internal static bool ExceptOnWarn = false;
-    public static void Debug(object? log) => Write(log, 11, "DEBUG");
-    public static void Warn(object? log) => Write(log, 14, "WARN ", true);
-    public static void Error(object? log) => Write(log, 12, "ERROR", true);
+
+    /// <summary>
+    /// Fired for every log line written, after the terminal write it
+    /// </summary>
+    public static event Action<string?, string, ConsoleColor, ConsoleColor?>? OnLog;
+
+    public static void Debug(object? log) => Write(log, ConsoleColor.Cyan, "DEBUG");
+    public static void Warn(object? log) => Write(log, ConsoleColor.Yellow, "WARN ", true);
+    public static void Error(object? log) => Write(log, ConsoleColor.Red, "ERROR", true);
+    public static void Blank(object? log, ConsoleColor? overrideColor = default) 
+        => Write(log, ConsoleColor.White, null, false, overrideColor);
+    
     public static void Clowny(object? log)
     {
         if (log is string s)
@@ -26,17 +35,19 @@ public static class Log
             log = new string(result);
         }
 
-        Write(log, 5, "CLOWN");
+        Write(log, ConsoleColor.DarkMagenta, "CLOWN");
     }
 
-    static private void Write(object? log, int icolor, string prefix, bool warningOrError = false)
-    {
-        var color = (ConsoleColor)icolor;
-        
-        Console.Write("[");
-        Console.ForegroundColor = color;
-        Console.Write(prefix);
-        Console.ResetColor();
+    static private void Write(object? log, ConsoleColor color, string? prefix, bool warningOrError = false, ConsoleColor? levelColor = default)
+    {        
+        if (prefix is not null)
+        {
+            Console.Write("[");
+            Console.ForegroundColor = color;
+            Console.Write(prefix);
+            Console.ResetColor();
+            Console.Write("] ");
+        }
 
         string output;
 
@@ -45,13 +56,15 @@ public static class Log
         else
             output = Newtonsoft.Json.JsonConvert.SerializeObject(log, Newtonsoft.Json.Formatting.Indented);
 
-        Console.Write("] ");
+        if (levelColor is null)
+            levelColor = LevelColor.TryGetValue(prefix ?? "", out var found) ? found : null;
 
-        if (LevelColor.TryGetValue(prefix, out var contentColor))
-            Console.ForegroundColor = contentColor;
+        var contentColor = levelColor ?? ConsoleColor.Gray;
+        Console.ForegroundColor = contentColor;
 
         Console.WriteLine(output);
         Console.ResetColor();
+        OnLog?.Invoke(prefix, output, color, levelColor);
         if (warningOrError && ExceptOnWarn)
             throw new Exception(output);
     }

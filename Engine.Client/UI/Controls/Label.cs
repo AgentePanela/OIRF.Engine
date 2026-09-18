@@ -82,6 +82,13 @@ public partial class Label : Control
     private SpriteFontBase ResolveFont(IFontManager fonts)
         => FontFamily is null ? fonts.Get(FontSize, FontVariant) : fonts.Get(FontSize, FontFamily, FontVariant);
 
+    /// <inheritdoc cref="BaseTextInput.ResolveDisplayFont(IFontManager, float)"/>
+    private SpriteFontBase ResolveDisplayFont(IFontManager fonts, float uiScale)
+    {
+        var size = FontSize * MathHelper.Max(uiScale, 0.05f);
+        return FontFamily is null ? fonts.Get(size, FontVariant) : fonts.Get(size, FontFamily, FontVariant);
+    }
+
     private struct DisplayCache
     {
         public string? SourceText;
@@ -197,7 +204,10 @@ public partial class Label : Control
             _ => Bounds.Y, // Top, Stretch
         };
 
-        sb.DrawString(font, text, new Vector2(x, y), Color, textStyle: TextDecoration.ToTextStyle());
+        var uiScale = IoCManager.Resolve<UIManager>().UIScale;
+        var displayFont = ResolveDisplayFont(fontManager, uiScale);
+        sb.DrawString(displayFont, text, SnapToPixel(new Vector2(x, y), uiScale), Color,
+            scale: new Vector2(1f / MathHelper.Max(uiScale, 0.05f)), textStyle: TextDecoration.ToTextStyle());
     }
 
     protected Vector2 MeasureString(SpriteFontBase font, string text)

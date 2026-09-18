@@ -24,7 +24,7 @@ public sealed partial class UIManager
     private void UpdateCursor()
     {
         var target = _pressedControl ?? _hoveredControl;
-        var shape = target?.GetCursorShape(_input.MouseScreenPosition) ?? CursorShape.Arrow;
+        var shape = target?.GetCursorShape(_input.MouseUIPosition) ?? CursorShape.Arrow;
 
         if (shape == _cursorShape)
             return;
@@ -133,7 +133,7 @@ public sealed partial class UIManager
     /// </summary>
     private void UpdateMouseMove()
     {
-        var (changed, position) = _input.MousePositionChanged();
+        var (changed, position) = _input.MouseUIPositionChanged();
         if (!changed || _pressedControl is null)
             return;
 

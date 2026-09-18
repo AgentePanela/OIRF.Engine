@@ -49,6 +49,22 @@ public interface IConfigurationManager
     /// </summary>
     public void InjectCVar(CVarDef? def);
 
+    /// <summary>
+    /// Gets a cvar's current value by name. False if no such cvar is registered.
+    /// </summary>
+    public bool TryGetByName(string name, out object? value);
+
+    /// <summary>
+    /// Parses <paramref name="rawValue"/> for whatever type the named cvar actually is and sets
+    /// it.
+    /// </summary>
+    public bool TrySetByName(string name, string rawValue, out string? error);
+
+    /// <summary>
+    /// Every registered cvars name.
+    /// </summary>
+    public IEnumerable<string> AllCVarNames { get; }
+
     public event Action? OnConfigLoad;
 }
 
@@ -175,13 +191,57 @@ public sealed class ConfigurationManager : IConfigurationManager
     }
 
     private void BroadcastCvarChange<T>(CVarDef<T> cvar, T value)
+        => BroadcastCvarChangeByName(cvar.Name, cvar, value!);
+
+    private void BroadcastCvarChangeByName(string name, CVarDef def, object value)
     {
-        if (cvar.Flags.HasFlag(CVar.REPLICATED) && _netMan.IsServer)
+        if (def.Flags.HasFlag(CVar.REPLICATED) && _netMan.IsServer)
         {
-            var serialized = FormatToml(value!);
-            _netMan.Broadcast(new MsgReplicateCvar(cvar.Name, serialized));
+            var serialized = FormatToml(value);
+            _netMan.Broadcast(new MsgReplicateCvar(name, serialized));
         }
     }
+
+    public bool TryGetByName(string name, out object? value)
+        => _values.TryGetValue(name, out value);
+
+    public bool TrySetByName(string name, string rawValue, out string? error)
+    {
+        if (!_defs.TryGetValue(name, out var def))
+        {
+            error = $"Unknown cvar: '{name}'";
+            return false;
+        }
+
+        if (def.Flags.HasFlag(CVar.SERVER) && !_sharedContent.IsServer())
+        {
+            error = $"Cvar '{name}' can only be set by the server.";
+            return false;
+        }
+
+        object value;
+        try
+        {
+            value = ParseTomlValue(rawValue, def);
+        }
+        catch (Exception e)
+        {
+            error = $"Couldn't parse '{rawValue}' for cvar '{name}': {e.Message}";
+            return false;
+        }
+
+        _values[name] = value;
+
+        if (_subscribers.TryGetValue(name, out var subs))
+            def.FireSubscribers(value, subs);
+
+        BroadcastCvarChangeByName(name, def, value);
+
+        error = null;
+        return true;
+    }
+
+    public IEnumerable<string> AllCVarNames => _defs.Keys;
 
     public void Subs<T>(CVarDef<T> cvar, Action<T> callback, bool invokeImmediately = true)
     {

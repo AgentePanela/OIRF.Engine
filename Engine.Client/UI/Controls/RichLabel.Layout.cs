@@ -9,7 +9,7 @@ namespace Engine.Client.UI;
 
 public sealed partial class RichLabel
 {
-    private readonly record struct Run(SpriteFontBase Font, string Text, Color Color, ApiTextStyle Style, float Width);
+    private readonly record struct Run(SpriteFontBase Font, SpriteFontBase DisplayFont, string Text, Color Color, ApiTextStyle Style, float Width);
     private readonly record struct Line(List<Run> Runs, float Width, float Height, float OffsetY);
     private readonly record struct LayoutResult(List<Line> Lines, Vector2 Size);
     private readonly record struct Piece(string Text, FormattedStyle Style, float Width);
@@ -27,17 +27,19 @@ public sealed partial class RichLabel
         public string? FontFamily;
         public float FontSize;
         public FontVariant FontVariant;
+        public float UIScale;
         public LayoutResult Result;
         public bool Valid;
 
-        public readonly bool Matches(RichLabel label, bool wrap, float width)
+        public readonly bool Matches(RichLabel label, bool wrap, float width, float uiScale)
             => Valid
                 && ReferenceEquals(Message, label._message)
                 && Wrap == wrap
                 && (!wrap || Width == width)
                 && ReferenceEquals(FontFamily, label.FontFamily)
                 && FontSize == label.FontSize
-                && FontVariant == label.FontVariant;
+                && FontVariant == label.FontVariant
+                && UIScale == uiScale;
     }
 
     private LayoutCache _measureCache;
@@ -45,11 +47,12 @@ public sealed partial class RichLabel
 
     private LayoutResult EnsureLayout(float maxWidth, bool wrap, bool forDraw)
     {
+        var uiScale = IoCManager.Resolve<UIManager>().UIScale;
         ref var cache = ref forDraw ? ref _drawCache : ref _measureCache;
-        if (cache.Matches(this, wrap, maxWidth))
+        if (cache.Matches(this, wrap, maxWidth, uiScale))
             return cache.Result;
 
-        var result = BuildLayout(maxWidth, wrap);
+        var result = BuildLayout(maxWidth, wrap, uiScale);
 
         cache = new LayoutCache
         {
@@ -59,6 +62,7 @@ public sealed partial class RichLabel
             FontFamily = FontFamily,
             FontSize = FontSize,
             FontVariant = FontVariant,
+            UIScale = uiScale,
             Result = result,
             Valid = true,
         };
@@ -73,19 +77,36 @@ public sealed partial class RichLabel
         return family is null ? fonts.Get(size, variant) : fonts.Get(size, family, variant);
     }
 
+    /// <inheritdoc cref="BaseTextInput.ResolveDisplayFont(IFontManager, float)"/>
+    private SpriteFontBase ResolveDisplayFont(IFontManager fonts, FormattedStyle style, float uiScale)
+    {
+        var variant = FontVariant | style.Variant;
+        var family = style.FontFamily ?? FontFamily;
+        var size = (style.FontSize ?? FontSize) * MathHelper.Max(uiScale, 0.05f);
+        return family is null ? fonts.Get(size, variant) : fonts.Get(size, family, variant);
+    }
+
     private Color ResolveColor(FormattedStyle style) => style.Color ?? Color;
 
     private static float LineHeight(SpriteFontBase font) => font.MeasureString("Ag").Y;
 
-    private LayoutResult BuildLayout(float maxWidth, bool wrap)
+    private LayoutResult BuildLayout(float maxWidth, bool wrap, float uiScale)
     {
         var fonts = IoCManager.Resolve<IFontManager>();
         var fontCache = new Dictionary<FormattedStyle, SpriteFontBase>();
+        var displayFontCache = new Dictionary<FormattedStyle, SpriteFontBase>();
 
         SpriteFontBase Font(FormattedStyle style)
         {
             if (!fontCache.TryGetValue(style, out var font))
                 fontCache[style] = font = ResolveFont(fonts, style);
+            return font;
+        }
+
+        SpriteFontBase DisplayFont(FormattedStyle style)
+        {
+            if (!displayFontCache.TryGetValue(style, out var font))
+                displayFontCache[style] = font = ResolveDisplayFont(fonts, style, uiScale);
             return font;
         }
 
@@ -108,7 +129,7 @@ public sealed partial class RichLabel
                     width += linePieces[j].Width;
                 }
 
-                runs.Add(new Run(Font(style), string.Concat(parts), ResolveColor(style), style.Decoration.ToTextStyle(), width));
+                runs.Add(new Run(Font(style), DisplayFont(style), string.Concat(parts), ResolveColor(style), style.Decoration.ToTextStyle(), width));
                 start = i;
             }
 

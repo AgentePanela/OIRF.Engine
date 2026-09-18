@@ -55,9 +55,20 @@ public abstract partial class Control
     // <property name (bool, value)>.
     private Dictionary<string, (bool Found, object? Value)>? _styleCache;
 
-    internal void InvalidateStyleCache()
+    /// <summary>
+    /// Clears the resolved-style cache. When <paramref name="cascadeToChildren"/> is set (used for
+    /// <see cref="StyleClasses"/>, which cascade down to descendants for matching purposes), also
+    /// clears every descendant's cache, since their resolved rules may depend on this control's classes.
+    /// </summary>
+    internal void InvalidateStyleCache(bool cascadeToChildren = false)
     {
         _styleCache?.Clear();
+
+        if (!cascadeToChildren)
+            return;
+
+        foreach (var child in _children)
+            child.InvalidateStyleCache(true);
     }
 
     internal void AnnounceThemeUpdate()

@@ -69,14 +69,18 @@ public sealed partial class LineEdit : BaseTextInput
         var textY = Bounds.Y + (Bounds.Height - font.MeasureString("Ag").Y) / 2f;
 
         var device = GameClient.GraphicsDevice;
+        var uiScale = IoCManager.Resolve<UIManager>().UIScale;
         var previousScissor = device.ScissorRectangle;
-        var clipped = Rectangle.Intersect(previousScissor, Bounds);
+        var physicalBounds = new Rectangle(
+            (int)(Bounds.X * uiScale), (int)(Bounds.Y * uiScale),
+            (int)(Bounds.Width * uiScale), (int)(Bounds.Height * uiScale));
+        var clipped = Rectangle.Intersect(previousScissor, physicalBounds);
         if (clipped.Width <= 0 || clipped.Height <= 0)
             return;
 
         sb.End(); // scoped clip so overflowing/scrolled text can't bleed past our own Bounds
         device.ScissorRectangle = clipped;
-        sb.Begin(rasterizerState: ScissorRasterizer);
+        sb.Begin(view: Matrix.CreateScale(uiScale), rasterizerState: ScissorRasterizer);
         var textHeight = font.MeasureString("Ag").Y;
 
         if (_caret != _selectionAnchor)
@@ -90,10 +94,13 @@ public sealed partial class LineEdit : BaseTextInput
                 new ColorGradient(SelectionColor).Resolve(selRect));
         }
 
+        var displayFont = ResolveDisplayFont(fontManager, uiScale);
+        var displayScale = new Vector2(1f / MathHelper.Max(uiScale, 0.05f));
+        var textPos = SnapToPixel(new Vector2(textOriginX, textY), uiScale);
         if (Text.Length > 0)
-            sb.DrawString(font, Text, new Vector2(textOriginX, textY), Color);
+            sb.DrawString(displayFont, Text, textPos, Color, scale: displayScale);
         else if (!string.IsNullOrEmpty(PlaceholderText))
-            sb.DrawString(font, PlaceholderText, new Vector2(textOriginX, textY), PlaceholderColor);
+            sb.DrawString(displayFont, PlaceholderText, textPos, PlaceholderColor, scale: displayScale);
 
         if (IsFocused && _caretBlink < CaretBlinkInterval)
         {
@@ -107,6 +114,6 @@ public sealed partial class LineEdit : BaseTextInput
 
         sb.End();
         device.ScissorRectangle = previousScissor;
-        sb.Begin(rasterizerState: ScissorRasterizer);
+        sb.Begin(view: Matrix.CreateScale(uiScale), rasterizerState: ScissorRasterizer);
     }
 }

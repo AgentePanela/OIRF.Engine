@@ -24,13 +24,32 @@ public sealed class StyleClass
             return false;
 
         // Empty class ("") or "*" matches everything (universal selector)
-        if (!IsUniversal && (Class is null || !c.StyleClasses.Contains(Class)))
+        if (!IsUniversal && !MatchesClass(c))
             return false;
 
         if (Identifier is not null && c.StyleIdentifier != Identifier)
             return false;
 
         return true;
+    }
+
+    /// <summary>
+    /// Classes cascade down the tree: a control matches a class selector either by carrying the
+    /// class itself, or by having an ancestor that does. This lets a composite widget tag its root
+    /// once instead of every internal part individually.
+    /// </summary>
+    private bool MatchesClass(Control c)
+    {
+        if (Class is null)
+            return false;
+
+        for (var control = c; control is not null; control = control.Parent)
+        {
+            if (control.StyleClasses.Contains(Class))
+                return true;
+        }
+
+        return false;
     }
 
     private bool MatchesControlType(Control c)

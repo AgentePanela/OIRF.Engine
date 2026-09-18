@@ -1,3 +1,4 @@
+using Engine.Shared.Debug.ViewVariables;
 using Engine.Shared.IoC;
 using Engine.Shared.Prototypes;
 using Engine.Shared.Threading;
@@ -16,7 +17,8 @@ public sealed class Entity
     /// <summary>
     /// The current scene this entity is in.
     /// </summary>
-    [JsonIgnore] public IEntityScene? Scene { get; private set; }
+    [JsonIgnore, ViewVariablesReadOnly] 
+    public IEntityScene? Scene { get; private set; }
 
     /// <summary>
     /// The name of the entity.
@@ -26,11 +28,13 @@ public sealed class Entity
     /// <summary>
     /// The unique identifier of the entity used in most entity based functions.
     /// </summary>
+    [ViewVariablesReadOnly]
     public EntityUid Uid { get; private set; } = EntityUid.Empty;
 
     /// <summary>
     /// The prototype id that this entity has used while being created.
     /// </summary>
+    [ViewVariablesReadOnly]
     public ProtoId<EntityPrototype> Id { get; private set; } = new ProtoId<EntityPrototype>();
 
     /// <summary>

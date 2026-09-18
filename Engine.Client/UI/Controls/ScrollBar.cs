@@ -92,7 +92,7 @@ public partial class ScrollBar : PanelContainer
         if (button != MouseButton.Left || MaxValue <= 0)
             return;
 
-        var mouse = IoCManager.Resolve<InputManager>().MouseScreenPosition;
+        var mouse = IoCManager.Resolve<InputManager>().MouseUIPosition;
         var (trackLength, clickPos) = Orientation == Orientation.Vertical
             ? (Bounds.Height, mouse.Y - Bounds.Y)
             : (Bounds.Width, mouse.X - Bounds.X);
@@ -130,7 +130,7 @@ public partial class ScrollBar : PanelContainer
         if (_draggingThumb || button != MouseButton.Left || MaxValue <= 0)
             return;
 
-        var mouse = IoCManager.Resolve<InputManager>().MouseScreenPosition;
+        var mouse = IoCManager.Resolve<InputManager>().MouseUIPosition;
         var (trackLength, clickPos) = Orientation == Orientation.Vertical
             ? (Bounds.Height, mouse.Y - Bounds.Y)
             : (Bounds.Width, mouse.X - Bounds.X);

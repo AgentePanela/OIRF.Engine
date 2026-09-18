@@ -32,6 +32,10 @@ public partial class BoxContainer : PanelContainer
         {
             child.Measure(availableSize);
 
+            // an invisible child takes up zero space, but must not claim a Separation gap either
+            if (!child.EffectivelyVisible && !child.ReservesSpace)
+                continue;
+
             if (Orientation == Orientation.Horizontal)
             {
                 mainTotal += child.DesiredSize.X;
@@ -59,19 +63,24 @@ public partial class BoxContainer : PanelContainer
         var horizontal = Orientation == Orientation.Horizontal;
         var available = horizontal ? finalRect.Width : finalRect.Height;
 
-        var count = Children.Count;
-        if (count == 0)
+        if (Children.Count == 0)
             return;
 
+        var count = 0;
         var desiredTotal = 0f;
         var expandCount = 0;
 
         foreach (var child in ChildrenList)
         {
+            if (!child.EffectivelyVisible && !child.ReservesSpace)
+                continue; // see MeasureCore - doesn't get a Separation gap either
+
             desiredTotal += horizontal ? child.DesiredSize.X : child.DesiredSize.Y;
 
             if (horizontal ? child.HorizontalExpand : child.VerticalExpand)
                 expandCount++;
+
+            count++;
         }
 
         if (count > 1)
@@ -84,6 +93,12 @@ public partial class BoxContainer : PanelContainer
 
         foreach (var child in ChildrenList)
         {
+            if (!child.EffectivelyVisible && !child.ReservesSpace)
+            {
+                child.Arrange(Rectangle.Empty);
+                continue;
+            }
+
             var mainSize = horizontal ? child.DesiredSize.X : child.DesiredSize.Y;
             var expands = horizontal ? child.HorizontalExpand : child.VerticalExpand;
 

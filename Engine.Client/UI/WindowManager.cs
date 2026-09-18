@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Engine.Client.Inputs;
 using Engine.Shared.IoC;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Input;
 
 namespace Engine.Client.UI;
@@ -81,6 +82,15 @@ public sealed class WindowManager
     {
         foreach (var window in _windows.ToArray())
             Close(window);
+    }
+
+    /// <summary>
+    /// Repositions every open window whose rect would otherwise fall outside the given bounds.
+    /// </summary>
+    public void EnsureBounds(Vector2 bounds)
+    {
+        foreach (var window in _windows)
+            LayoutContainer.ClampPositionToBounds(window, bounds);
     }
 
     /// <summary>

@@ -140,9 +140,9 @@ internal sealed partial class AssetManager : IAssetManager
             }
             catch
             {
-                Console.BackgroundColor = ConsoleColor.Red;
+                //Console.BackgroundColor = ConsoleColor.Red;
                 Log.Error($"Something went wrong loading {curKey}");
-                Console.ResetColor();
+                //Console.ResetColor();
             }
         }
     }

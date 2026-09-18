@@ -164,6 +164,32 @@ public partial class LayoutContainer : Control
             data.AutoHeight ? child.DesiredSize.Y : data.OffsetMax.Y - data.OffsetMin.Y);
     }
 
+    /// <summary>
+    /// If the child has been pinned to an explicit pixel position (via <see cref="SetPosition"/>),
+    /// clamps that position so its rect stays within [0, containerSize].
+    /// </summary>
+    public static void ClampPositionToBounds(Control child, Vector2 containerSize)
+    {
+        if (ContainerOf(child) is not { } lc)
+            return;
+
+        var data = lc.Get(child);
+        if (data.AnchorMin != Vector2.Zero || data.AnchorMax != Vector2.Zero)
+            return;
+
+        var size = GetSize(child);
+        var maxX = MathHelper.Max(0f, containerSize.X - size.X);
+        var maxY = MathHelper.Max(0f, containerSize.Y - size.Y);
+
+        var clampedX = MathHelper.Clamp(data.OffsetMin.X, 0f, maxX);
+        var clampedY = MathHelper.Clamp(data.OffsetMin.Y, 0f, maxY);
+
+        if (clampedX == data.OffsetMin.X && clampedY == data.OffsetMin.Y)
+            return;
+
+        SetPosition(child, new Vector2(clampedX, clampedY));
+    }
+
     public static void SetAnchorPreset(Control child, LayoutPreset preset)
     {
         if (ContainerOf(child) is not { } lc)

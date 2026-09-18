@@ -1,5 +1,6 @@
 using Apos.Shapes;
 using Engine.Client.Graphics.Fonts;
+using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
 using HAlign = Engine.Client.UI.HorizontalAlignment;
 using VAlign = Engine.Client.UI.VerticalAlignment;
@@ -76,6 +77,8 @@ public sealed partial class RichLabel : Control
     protected override void DrawSelf(ShapeBatch sb, IFontManager fontManager, float dt)
     {
         var layout = EnsureLayout(Bounds.Width, AutoWrap, forDraw: true);
+        var uiScale = IoCManager.Resolve<UIManager>().UIScale;
+        var displayScale = new Vector2(1f / MathHelper.Max(uiScale, 0.05f));
 
         var blockY = TextVerticalAlign switch
         {
@@ -96,7 +99,7 @@ public sealed partial class RichLabel : Control
             foreach (var run in line.Runs)
             {
                 var y = blockY + line.OffsetY + (line.Height - LineHeight(run.Font));
-                sb.DrawString(run.Font, run.Text, new Vector2(x, y), run.Color, textStyle: run.Style);
+                sb.DrawString(run.DisplayFont, run.Text, SnapToPixel(new Vector2(x, y), uiScale), run.Color, scale: displayScale, textStyle: run.Style);
                 x += run.Width;
             }
         }
