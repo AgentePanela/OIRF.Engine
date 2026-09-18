@@ -31,16 +31,28 @@ public interface IConsoleHost
     bool TryGetCommand(string name, [NotNullWhen(true)] out IConsoleCommand? command);
 
     /// <summary>
+    /// Looks up the registered name of a command by its type.
+    string GetCommandName<T>() where T : IConsoleCommand;
+
+    /// <summary>
     /// Disables/re-enables a registered command without unregistering it - a disabled command is
     /// rejected by <see cref="IConsoleShell.ExecuteCommand"/> and hidden from
     /// <see cref="GetCompletions"/>'s command-name suggestions.
     /// </summary>
     void SetCommandEnabled(string name, bool enabled);
 
+    /// <inheritdoc cref="SetCommandEnabled(string, bool)"/>
+    void SetCommandEnabled<T>(bool enabled) where T : IConsoleCommand
+        => SetCommandEnabled(GetCommandName<T>(), enabled);
+
     /// <summary>
     /// Whether the named command is registered and not currently disabled.
     /// </summary>
     bool IsCommandEnabled(string name);
+
+    /// <inheritdoc cref="IsCommandEnabled(string)"/>
+    bool IsCommandEnabled<T>() where T : IConsoleCommand
+        => IsCommandEnabled(GetCommandName<T>());
 
     /// <summary>
     /// Autocomplete for a command line as currently typed

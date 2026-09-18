@@ -79,6 +79,17 @@ internal sealed class ConsoleHost : IConsoleHost
     public bool TryGetCommand(string name, [NotNullWhen(true)] out IConsoleCommand? command)
         => _commands.TryGetValue(name, out command);
 
+    public string GetCommandName<T>() where T : IConsoleCommand
+    {
+        foreach (var command in _commands.Values)
+        {
+            if (command is T)
+                return command.Name;
+        }
+
+        throw new InvalidOperationException($"No registered command of type '{typeof(T).Name}'.");
+    }
+
     public void SetCommandEnabled(string name, bool enabled)
     {
         if (enabled)
