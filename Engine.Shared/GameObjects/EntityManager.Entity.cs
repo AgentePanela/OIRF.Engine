@@ -53,6 +53,9 @@ public sealed partial class EntityManager
         if (!_entities.TryAdd(uid, ent))
             throw new Exception($"Entity {uid} already exists.");
 
+        if (_contentMan.IsServer())
+            AssignNetEntity(ent);
+
         EventBus.RaiseEvent(uid, new EntityInitEvent());
         return ent;
     }

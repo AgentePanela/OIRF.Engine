@@ -32,6 +32,12 @@ public sealed class Entity
     public EntityUid Uid { get; private set; } = EntityUid.Empty;
 
     /// <summary>
+    /// The id of this entity over the network. <see cref="NetEntity.Invalid"/> if it is a client-only entity.
+    /// </summary>
+    [ViewVariablesReadOnly]
+    public NetEntity NetId { get; internal set; } = NetEntity.Invalid;
+
+    /// <summary>
     /// The prototype id that this entity has used while being created.
     /// </summary>
     [ViewVariablesReadOnly]

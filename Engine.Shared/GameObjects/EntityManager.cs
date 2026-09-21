@@ -117,6 +117,7 @@ public sealed partial class EntityManager
                 if (!_entities.TryRemove(uid, out var removedEnt))
                     continue;
                 removedEnt.Scene?.OwnedEntities.Remove(uid);
+                ReleaseNetEntity(removedEnt);
                 availableUids.Add(uid.Id);
             }
             snapshot.Clear();
