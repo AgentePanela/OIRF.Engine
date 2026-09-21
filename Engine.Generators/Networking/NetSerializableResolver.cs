@@ -57,15 +57,19 @@ internal static class NetSerializableResolver
     public static string EscapeIdentifier(string name)
         => SyntaxFacts.GetKeywordKind(name) != SyntaxKind.None ? "@" + name : name;
 
-    public static FieldPlan? Resolve(ITypeSymbol type, string accessPath, Location? location, SourceProductionContext spc)
+    /// <param name="entMan">
+    /// Name of an in-scope EntityManager variable. When given, EntityUid is sent as its NetEntity (converted through
+    /// it), otherwise EntityUid is treated like any other type.
+    /// </param>
+    public static FieldPlan? Resolve(ITypeSymbol type, string accessPath, Location? location, SourceProductionContext spc, string? entMan = null)
     {
         // Nullable<T> (int?, EntityUid?)
         if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullableValueType)
-            return ResolveNullable(nullableValueType.TypeArguments[0], accessPath, location, spc, isValueType: true);
+            return ResolveNullable(nullableValueType.TypeArguments[0], accessPath, location, spc, isValueType: true, entMan);
 
         // Nullable reference type (string?, SomeClass?)
         if (type.IsReferenceType && type.NullableAnnotation == NullableAnnotation.Annotated)
-            return ResolveNullable(type.WithNullableAnnotation(NullableAnnotation.NotAnnotated), accessPath, location, spc, isValueType: false);
+            return ResolveNullable(type.WithNullableAnnotation(NullableAnnotation.NotAnnotated), accessPath, location, spc, isValueType: false, entMan);
 
         var typeName = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
 
@@ -85,11 +89,23 @@ internal static class NetSerializableResolver
             }
         }
 
-        var collectionPlan = TryResolveCollection(type, accessPath, location, spc, out var isCollection);
+        if (entMan is not null && typeName == "EntityUid")
+        {
+            return new FieldPlan(
+                $"{entMan}.GetEntity(new global::NetEntity(buffer.ReadVariableInt32()))",
+                new List<string> { $"buffer.WriteVariableInt32({entMan}.GetNetEntity({accessPath}).Id);" });
+        }
+
+        // Small math types are sent field by field instead of going through NetSerializer (a MemoryStream per value)
+        var mathPlan = GetMathPlan(typeName, accessPath);
+        if (mathPlan is not null)
+            return mathPlan;
+
+        var collectionPlan = TryResolveCollection(type, accessPath, location, spc, out var isCollection, entMan);
         if (isCollection)
             return collectionPlan; // null means the element type already reported its own diagnostic
 
-        var dictionaryPlan = TryResolveDictionary(type, accessPath, location, spc, out var isDictionary);
+        var dictionaryPlan = TryResolveDictionary(type, accessPath, location, spc, out var isDictionary, entMan);
         if (isDictionary)
             return dictionaryPlan;
 
@@ -105,10 +121,36 @@ internal static class NetSerializableResolver
         return new FieldPlan(readExpr, new List<string> { writeLine });
     }
 
-    private static FieldPlan? ResolveNullable(ITypeSymbol underlying, string accessPath, Location? location, SourceProductionContext spc, bool isValueType)
+    private static FieldPlan? GetMathPlan(string typeName, string accessPath)
+    {
+        const string xna = "global::Microsoft.Xna.Framework.";
+        switch (typeName)
+        {
+            case "Microsoft.Xna.Framework.Vector2":
+                return new FieldPlan(
+                    $"new {xna}Vector2(buffer.ReadSingle(), buffer.ReadSingle())",
+                    new List<string> { $"buffer.Write({accessPath}.X);", $"buffer.Write({accessPath}.Y);" });
+            case "Microsoft.Xna.Framework.Vector3":
+                return new FieldPlan(
+                    $"new {xna}Vector3(buffer.ReadSingle(), buffer.ReadSingle(), buffer.ReadSingle())",
+                    new List<string> { $"buffer.Write({accessPath}.X);", $"buffer.Write({accessPath}.Y);", $"buffer.Write({accessPath}.Z);" });
+            case "Microsoft.Xna.Framework.Point":
+                return new FieldPlan(
+                    $"new {xna}Point(buffer.ReadVariableInt32(), buffer.ReadVariableInt32())",
+                    new List<string> { $"buffer.WriteVariableInt32({accessPath}.X);", $"buffer.WriteVariableInt32({accessPath}.Y);" });
+            case "Microsoft.Xna.Framework.Color":
+                return new FieldPlan(
+                    $"new {xna}Color {{ PackedValue = buffer.ReadUInt32() }}",
+                    new List<string> { $"buffer.Write({accessPath}.PackedValue);" });
+            default:
+                return null;
+        }
+    }
+
+    private static FieldPlan? ResolveNullable(ITypeSymbol underlying, string accessPath, Location? location, SourceProductionContext spc, bool isValueType, string? entMan)
     {
         var valueAccessPath = isValueType ? $"{accessPath}.Value" : accessPath;
-        var innerPlan = Resolve(underlying, valueAccessPath, location, spc);
+        var innerPlan = Resolve(underlying, valueAccessPath, location, spc, entMan);
         if (innerPlan is null)
             return null;
 
@@ -130,7 +172,7 @@ internal static class NetSerializableResolver
         return new FieldPlan(readExpr, writeLines);
     }
 
-    private static FieldPlan? TryResolveCollection(ITypeSymbol type, string accessPath, Location? location, SourceProductionContext spc, out bool isCollection)
+    private static FieldPlan? TryResolveCollection(ITypeSymbol type, string accessPath, Location? location, SourceProductionContext spc, out bool isCollection, string? entMan)
     {
         ITypeSymbol elementType;
         string readHelper;
@@ -153,7 +195,7 @@ internal static class NetSerializableResolver
         }
 
         isCollection = true;
-        var elementPlan = Resolve(elementType, "item", location, spc);
+        var elementPlan = Resolve(elementType, "item", location, spc, entMan);
         if (elementPlan is null)
             return null;
 
@@ -166,7 +208,7 @@ internal static class NetSerializableResolver
         return new FieldPlan(readExpr, new List<string> { writeLine });
     }
 
-    private static FieldPlan? TryResolveDictionary(ITypeSymbol type, string accessPath, Location? location, SourceProductionContext spc, out bool isDictionary)
+    private static FieldPlan? TryResolveDictionary(ITypeSymbol type, string accessPath, Location? location, SourceProductionContext spc, out bool isDictionary, string? entMan)
     {
         if (type is not INamedTypeSymbol { TypeArguments.Length: 2 } namedType ||
             namedType.OriginalDefinition.ToDisplayString() != "System.Collections.Generic.Dictionary<TKey, TValue>")
@@ -179,11 +221,11 @@ internal static class NetSerializableResolver
         var keyType = namedType.TypeArguments[0];
         var valueType = namedType.TypeArguments[1];
 
-        var keyPlan = Resolve(keyType, "key", location, spc);
+        var keyPlan = Resolve(keyType, "key", location, spc, entMan);
         if (keyPlan is null)
             return null;
 
-        var valuePlan = Resolve(valueType, "value", location, spc);
+        var valuePlan = Resolve(valueType, "value", location, spc, entMan);
         if (valuePlan is null)
             return null;
 

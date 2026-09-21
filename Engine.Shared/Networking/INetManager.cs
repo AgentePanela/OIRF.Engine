@@ -28,6 +28,8 @@ public interface INetManager
     /// </remarks>
     public IReadOnlyList<INetSession> Sessions { get; }
 
+    internal void Init();
+
     /// <summary>
     /// Looks up a connected session by its <see cref="INetSession.SessionId"/>.
     /// Null if no session with that id is currently connected.

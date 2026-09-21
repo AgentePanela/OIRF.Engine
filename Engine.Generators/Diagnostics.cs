@@ -5,4 +5,6 @@ public static class Diagnostics
     public const string StyleConstructorID = "EA001";
     public const string NetFieldUnsupportedTypeID = "EA002";
     public const string MessageNotPartialID = "EA003";
+    public const string NetworkedComponentInvalidID = "EA004";
+    public const string NetworkedFieldInvalidID = "EA005";
 }

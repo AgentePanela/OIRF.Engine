@@ -13,3 +13,4 @@ engine-loading-flavour-asset =
 
 # netman
 engine-netman-server-hail-fail-hash-not-sync-reason = Network hashmap does not match! Please contact developers or update your app.
+engine-netman-server-hail-fail-components-not-sync-reason = Networked components do not match the server! Please contact developers or update your app.
