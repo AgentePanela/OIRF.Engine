@@ -20,6 +20,7 @@ public sealed partial class EntityManager
     private readonly ConcurrentDictionary<EntityUid, Entity> _entities = new();
     private readonly ConcurrentDictionary<Type, Dictionary<EntityUid, Component>> _components = new();
     private int _nextUid = 1;
+    private List<int> availableUids = new(); // list of uids from deleted entities to be recycled
 
     internal readonly List<EntityUid> EntitiesToRemove = new();
     internal readonly HashSet<Component> CompsPendingAdd = new();
@@ -113,8 +114,10 @@ public sealed partial class EntityManager
             foreach (var uid in snapshot)
             {
                 EventBus.RaiseEvent(uid, new EntityRemovedEvent());
-                if (_entities.TryRemove(uid, out var removedEnt))
-                    removedEnt.Scene?.OwnedEntities.Remove(uid);
+                if (!_entities.TryRemove(uid, out var removedEnt))
+                    continue;
+                removedEnt.Scene?.OwnedEntities.Remove(uid);
+                availableUids.Add(uid.Id);
             }
             snapshot.Clear();
         }

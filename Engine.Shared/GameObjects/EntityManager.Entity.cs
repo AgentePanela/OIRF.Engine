@@ -26,11 +26,23 @@ public sealed partial class EntityManager
     internal Entity CreateEmptyEntity(string? name = default, bool i = true)
         => CreateEmptyEntityOwned(name, null);
 
+    private EntityUid GenerateUid()
+    {
+        if (availableUids.Count <= 0)
+            return new EntityUid(_nextUid++);
+        
+        var lastUid = availableUids.Count - 1;
+        var uid = availableUids[lastUid];
+        availableUids.RemoveAt(lastUid);
+
+        return new EntityUid(uid);
+    }
+
     private Entity CreateEmptyEntityOwned(string? name, IEntityScene? owner)
     {
         MainThread.AssertMainThread();
 
-        var uid = new EntityUid(_nextUid++);
+        var uid = GenerateUid();
         var ent = new Entity(uid, name ?? string.Empty);
         if (owner is not null)
         {
