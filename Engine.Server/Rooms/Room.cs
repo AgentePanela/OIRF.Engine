@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Engine.Shared.GameObjects;
 using Engine.Shared.Networking;
 using Engine.Shared.Rooms;
 
@@ -8,11 +9,29 @@ namespace Engine.Server.Rooms;
 /// <summary>
 /// A room instance that can organize sessions. Inherit <see cref="Room{TOptions}"/> to receive typed options.
 /// </summary>
-public abstract class Room : IDisposable
+public abstract class Room : IDisposable, IEntityScene
 {
     [Dependency] protected readonly IRoomManager RoomManager = default!;
 
+    /// <summary>
+    /// The identifier the client will use to join this room.
+    /// </summary>
     public string RoomId { get; init; }
+
+    /// <summary>
+    /// Max sessions connected this room can handle. null = infinity.
+    /// </summary>
+    public uint? MaxSessions;
+    
+    /// <summary>
+    /// When locked, the room will not accept new connections.
+    /// </summary>
+    public bool Locked = false;
+
+    /// <summary>
+    /// When hidden, the room will not show in the client rooms list.
+    /// </summary>
+    public bool Hiddden = false;
 
     private List<INetSession> _sessions = new();
     public IReadOnlyList<INetSession> Sessions => _sessions;
@@ -21,6 +40,8 @@ public abstract class Room : IDisposable
     /// The <see cref="RoomOptions"/> type clients must send to join this room.
     /// </summary>
     public virtual Type OptionsType => typeof(EmptyRoomOptions);
+
+    public HashSet<EntityUid> OwnedEntities { get; } = new();
 
     /// <summary>
     /// Fired when a session joins the room.

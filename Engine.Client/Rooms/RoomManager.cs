@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Engine.Shared.IoC;
 using Engine.Shared.Networking;
@@ -43,7 +44,24 @@ public interface IRoomManager
     /// </summary>
     public event Action<string>? OnError;
 
+    /// <summary>
+    /// The last rooms list received from the server, empty until <see cref="RequestRoomList"/> is answered.
+    /// Hidden rooms are never included.
+    /// </summary>
+    public IReadOnlyList<RoomInfo> AvailableRooms { get; }
+
+    /// <summary>
+    /// Fired when the server answers <see cref="RequestRoomList"/>, with the same list as <see cref="AvailableRooms"/>.
+    /// </summary>
+    public event Action<IReadOnlyList<RoomInfo>>? OnRoomListReceived;
+
     internal void Init();
+
+    /// <summary>
+    /// Asks the server for its active rooms. The result arrives through <see cref="OnRoomListReceived"/>.
+    /// </summary>
+    /// <returns>False if the request was not sent (not connected).</returns>
+    public bool RequestRoomList();
 
     /// <summary>
     /// Asks the server to join a room. The result arrives through <see cref="OnJoined"/> or <see cref="OnError"/>.
@@ -69,15 +87,34 @@ internal sealed class RoomManager : IRoomManager
     [MemberNotNullWhen(true, nameof(CurrentRoomId))]
     public bool IsInRoom => CurrentRoomId is not null;
 
+    public IReadOnlyList<RoomInfo> AvailableRooms { get; private set; } = Array.Empty<RoomInfo>();
+
     public event Action<string>? OnJoined;
     public event Action<string, string>? OnLeft;
     public event Action<string>? OnError;
+    public event Action<IReadOnlyList<RoomInfo>>? OnRoomListReceived;
 
     void IRoomManager.Init()
     {
         IoCManager.ResolveDependencies(this);
         _netMan.RegisterNetMessage<RoomResonseMessage>(OnRoomResponse);
+        _netMan.RegisterNetMessage<RoomListResponseMessage>(OnRoomListResponse);
         _netMan.OnDisconnected += (_, _) => Reset();
+    }
+
+    public bool RequestRoomList()
+    {
+        if (!_netMan.IsClient || _netMan.MySession is not { } session)
+            return false;
+
+        session.SendMessage(new RoomListRequestMessage());
+        return true;
+    }
+
+    private void OnRoomListResponse(RoomListResponseMessage message, INetSession? session)
+    {
+        AvailableRooms = message.Rooms;
+        OnRoomListReceived?.Invoke(AvailableRooms);
     }
 
     public bool JoinRoom(string roomId, RoomOptions? options = null)
@@ -132,5 +169,6 @@ internal sealed class RoomManager : IRoomManager
     {
         IsJoining = false;
         CurrentRoomId = null;
+        AvailableRooms = Array.Empty<RoomInfo>();
     }
 }

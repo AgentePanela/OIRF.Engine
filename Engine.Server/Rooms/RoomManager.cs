@@ -98,6 +98,12 @@ internal sealed class RoomManager : IRoomManager
         if (!room.OptionsType.IsInstanceOfType(options))
             throw new ArgumentException($"Room {room.RoomId} expects {room.OptionsType.Name}, got {options.GetType().Name}.", nameof(options));
 
+        if (room.Locked)
+            return;
+
+        if (room.MaxSessions is not null && room.Sessions.Count >= room.MaxSessions)
+            return;
+
         _sessions.Add(session, room);
         room.JoinRoom(session, options);
         session.SendMessage(new RoomResonseMessage 
@@ -133,6 +139,31 @@ internal sealed class RoomManager : IRoomManager
         IoCManager.ResolveDependencies(this);
         _netMan.RegisterNetMessage<JoinRoomMessage>(OnRoomJoinMessage);
         _netMan.RegisterNetMessage<LeaveRoomMessage>(OnRoomLeaveMessage);
+        _netMan.RegisterNetMessage<RoomListRequestMessage>(OnRoomListRequest);
+    }
+
+    private void OnRoomListRequest(RoomListRequestMessage message, INetSession? session)
+    {
+        if (session is null)
+            return;
+
+        var response = new RoomListResponseMessage();
+        foreach (var room in _rooms.Values)
+        {
+            if (room.Hiddden)
+                continue;
+
+            response.Rooms.Add(new RoomInfo
+            {
+                RoomId = room.RoomId,
+                RoomType = room.GetType().Name,
+                Sessions = room.Sessions.Count,
+                MaxSessions = room.MaxSessions,
+                Locked = room.Locked
+            });
+        }
+
+        session.SendMessage(response);
     }
 
     private void OnRoomJoinMessage(JoinRoomMessage message, INetSession? session)
@@ -153,6 +184,26 @@ internal sealed class RoomManager : IRoomManager
             {
                 responseType = RoomResonseMessage.ResponseType.Error,
                 Reason = Loc.GetString("internal-room-man-response-unknown-room-id")
+            });
+            return;
+        }
+
+        if (room.Locked)
+        {
+            session.SendMessage(new RoomResonseMessage
+            {
+                responseType = RoomResonseMessage.ResponseType.Error,
+                Reason = Loc.GetString("internal-room-man-response-join-room-locked")
+            });
+            return;
+        }
+
+        if (room.MaxSessions is not null && room.Sessions.Count >= room.MaxSessions)
+        {
+            session.SendMessage(new RoomResonseMessage
+            {
+                responseType = RoomResonseMessage.ResponseType.Error,
+                Reason = Loc.GetString("internal-room-man-response-join-room-full")
             });
             return;
         }
