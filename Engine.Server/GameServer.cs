@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Threading;
 using Engine.Server.CVars;
+using Engine.Server.Rooms;
 using Engine.Shared;
 using Engine.Shared.Configuration;
 using Engine.Shared.Configuration.CVars;
@@ -70,12 +71,12 @@ public class GameServer : IDisposable
     public ILocalizationManager LocalizationManager { get; private set; } = default!;
     public IGameTiming Timing { get; private set; } = default!;
     public INetManager Networking { get; private set; } = default!;
+    public IRoomManager RoomManager { get; private set; } = default!;
 
     private readonly Stopwatch _tickWatch = new();
     private bool _running;
     private CancellationTokenSource? _cts;
 
-    private EntityRoom? _room; // todo: RoomManager
 
     /// <summary>
     /// Creates a new headless server instance.
@@ -91,6 +92,7 @@ public class GameServer : IDisposable
 
         Log.Debug("ServerState: Booting...");
         IoCManager.Register(new UserStorageManager(Options.DataPath, false));
+        IoCManager.Register<RoomManager>();
 
         // Register and init shared content manager
         IoCManager.Register<SharedContentManager>();
@@ -108,6 +110,7 @@ public class GameServer : IDisposable
         LocalizationManager = IoCManager.Resolve<ILocalizationManager>();
         Timing = IoCManager.Resolve<IGameTiming>();
         Networking = IoCManager.Resolve<INetManager>();
+        RoomManager = IoCManager.Resolve<RoomManager>();
 
         IoCManager.AutoRegister(Assembly.GetExecutingAssembly());
 
@@ -120,8 +123,6 @@ public class GameServer : IDisposable
         sharedContent.PostInit();
         Initialize();
         
-        _room = new EntityRoom(); // todo: RoomManager
-
 #pragma warning disable CS0618 // remove in 2027
         Timing.SetTickRate(Options.TickRate ?? ConfigManager.Get(NetworkingCvars.Tickrate));
 
@@ -143,6 +144,8 @@ public class GameServer : IDisposable
                 
         EntityManager.Init();
         EntityManager.RegisterSystems();
+
+        RoomManager.Init();
     }
 
     /// <summary>
@@ -213,6 +216,7 @@ public class GameServer : IDisposable
         Timing.UpdateFPS(deltaTime); // no separate draw phase server-side, so this doubles as "actual ticks/sec"
 
         Networking.Update();
+        RoomManager.Update(deltaTime);
 
         // Advance the tick before simulating
         Timing.AdvanceTick();
