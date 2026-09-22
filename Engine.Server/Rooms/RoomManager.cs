@@ -68,6 +68,7 @@ internal sealed class RoomManager : IRoomManager
         {
             RoomId = id ?? Guid.NewGuid().ToString()[..8],
         };
+        IoCManager.ResolveDependencies(room);
 
         _rooms.Add(room.RoomId, room);
         room.Init();

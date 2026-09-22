@@ -24,6 +24,7 @@ public sealed class ComponentFactory
 
     private readonly List<Type> _networkedTypes = new();
     private readonly Dictionary<Type, int> _networkedIds = new();
+    private readonly HashSet<Type> _manualStateTypes = new();
     private string _networkedHash = string.Empty;
 
     public ComponentFactory()
@@ -63,27 +64,32 @@ public sealed class ComponentFactory
     {
         _networkedTypes.Clear();
         _networkedIds.Clear();
+        _manualStateTypes.Clear();
 
         foreach (var (name, type) in ComponentsSanitized.OrderBy(kvp => kvp.Key, StringComparer.Ordinal))
         {
             var hasNetAttr = type.GetCustomAttribute<NetworkedComponentAttribute>() is not null;
+            var isManual = IsManualStateType(type);
 
             if (!hasNetAttr)
             {
-                if (GetNetworkedMembers(type).Any())
-                    throw new Exception($"{type.FullName} has [NetworkedField] members but is missing [NetworkedComponent].");
+                if (GetNetworkedMembers(type).Any() || isManual)
+                    throw new Exception($"{type.FullName} has [NetField] members or GetNetState/HandleNetState but is missing [NetworkedComponent].");
                 continue;
             }
+
+            if (isManual)
+                _manualStateTypes.Add(type);
 
             _networkedTypes.Add(type);
             _networkedIds[type] = _networkedTypes.Count;
         }
 
-        // the hash covers the names, order and field types so a client and server can compare and agree
+        // the hash covers the names, order and field types and manual/auto choice so a client and server can compare
         var sb = new StringBuilder();
         foreach (var type in _networkedTypes)
         {
-            sb.Append(GetSanitizedByType(type)).Append('{');
+            sb.Append(GetSanitizedByType(type)).Append(_manualStateTypes.Contains(type) ? "[manual]{" : '{');
             foreach (var member in GetNetworkedMembers(type))
                 sb.Append(member.Name).Append(':').Append(GetMemberType(member).FullName).Append(';');
             sb.Append('}');
@@ -104,6 +110,20 @@ public sealed class ComponentFactory
 
     private static Type GetMemberType(MemberInfo member)
         => member is PropertyInfo p ? p.PropertyType : ((FieldInfo)member).FieldType;
+
+    /// <summary>
+    /// True if the type overrides <see cref="Component.GetNetState"/> - it replicates itself by hand (see
+    /// Component.cs), instead of using the generated version.
+    /// </summary>
+    private static bool IsManualStateType(Type type)
+        => type.GetMethod(nameof(Component.GetNetState), BindingFlags.Public | BindingFlags.Instance)?.DeclaringType != typeof(Component);
+
+    /// <summary>
+    /// True if a networked component type replicates itself by hand via <see cref="Component.GetNetState"/>/
+    /// <see cref="Component.HandleNetState"/> instead of the generated state.
+    /// </summary>
+    public bool IsManualState(Type type)
+        => _manualStateTypes.Contains(type);
 
     /// <summary>
     /// Every component type that is replicated. The index + 1 is its net id.

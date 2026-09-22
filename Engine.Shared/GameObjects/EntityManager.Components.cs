@@ -53,7 +53,10 @@ public sealed partial class EntityManager
         EventBus.RaiseEvent(uid, new CompInitEvent() { Component = comp });
 
         comp.Owner = uid;
+        comp.CreationTick = _timing.CurTick;
         pool[uid] = comp;
+
+        Dirty(uid, comp);
 
         //comp.State = Component.CompState.Running;
         //EventBus.RaiseEvent(uid, new CompAddedEvent() { Component = comp });

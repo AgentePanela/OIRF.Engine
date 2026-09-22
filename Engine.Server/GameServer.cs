@@ -92,7 +92,7 @@ public class GameServer : IDisposable
 
         Log.Debug("ServerState: Booting...");
         IoCManager.Register(new UserStorageManager(Options.DataPath, false));
-        IoCManager.Register<RoomManager>();
+        IoCManager.Register<IRoomManager, RoomManager>();
 
         // Register and init shared content manager
         IoCManager.Register<SharedContentManager>();
@@ -110,7 +110,7 @@ public class GameServer : IDisposable
         LocalizationManager = IoCManager.Resolve<ILocalizationManager>();
         Timing = IoCManager.Resolve<IGameTiming>();
         Networking = IoCManager.Resolve<INetManager>();
-        RoomManager = IoCManager.Resolve<RoomManager>();
+        RoomManager = IoCManager.Resolve<IRoomManager>();
 
         IoCManager.AutoRegister(Assembly.GetExecutingAssembly());
 

@@ -18,6 +18,7 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
     private const string FieldAttributeFullName = "Engine.Shared.GameObjects.NetFieldAttribute";
     private const string ComponentFullName = "Engine.Shared.GameObjects.Component";
     private const string EntityManagerParam = "entMan";
+    private static readonly string[] ManualStateMethodNames = { "GetNetState", "HandleNetState" };
 
     private static readonly DiagnosticDescriptor InvalidComponent = new(
         id: Diagnostics.NetworkedComponentInvalidID,
@@ -53,6 +54,10 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
             }
 
             if (comp.Errors.Count > 0)
+                return;
+
+            // the component replicates itself by hand via GetNetState/HandleNetState - nothing to generate
+            if (comp.IsManual)
                 return;
 
             var writeLines = new List<string>();
@@ -103,19 +108,28 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
         var fullName = namespaceName.Length == 0 ? classSymbol.Name : $"{namespaceName}.{classSymbol.Name}";
         var classLocation = classDecl.Identifier.GetLocation();
 
+        // GetNetState/HandleNetState overridden - this component replicates itself by handd
+        var isManual = classSymbol.GetMembers().OfType<IMethodSymbol>()
+            .Any(m => m.IsOverride && ManualStateMethodNames.Contains(m.Name));
+
         var errors = new List<ErrorData>();
 
-        if (!classDecl.Modifiers.Any(SyntaxKind.PartialKeyword))
-            errors.Add(new ErrorData(false, fullName, "must be a partial class so its net state can be generated", classLocation));
+        // these only matter for code generation - a manual component (GetNetState/HandleNetState) generates
+        // nothing, so it doesn't need to be partial, top-level, non-generic or a direct Component subclass
+        if (!isManual)
+        {
+            if (!classDecl.Modifiers.Any(SyntaxKind.PartialKeyword))
+                errors.Add(new ErrorData(false, fullName, "must be a partial class so its net state can be generated", classLocation));
 
-        if (classSymbol.ContainingType is not null)
-            errors.Add(new ErrorData(false, fullName, "cannot be a nested class", classLocation));
+            if (classSymbol.ContainingType is not null)
+                errors.Add(new ErrorData(false, fullName, "cannot be a nested class", classLocation));
 
-        if (classSymbol.IsGenericType)
-            errors.Add(new ErrorData(false, fullName, "cannot be a generic class", classLocation));
+            if (classSymbol.IsGenericType)
+                errors.Add(new ErrorData(false, fullName, "cannot be a generic class", classLocation));
 
-        if (classSymbol.BaseType?.ToDisplayString() != ComponentFullName)
-            errors.Add(new ErrorData(false, fullName, "must derive directly from Component", classLocation));
+            if (classSymbol.BaseType?.ToDisplayString() != ComponentFullName)
+                errors.Add(new ErrorData(false, fullName, "must derive directly from Component", classLocation));
+        }
 
         var members = new List<MemberData>();
         foreach (var member in classSymbol.GetMembers())
@@ -153,10 +167,13 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
             }
         }
 
+        if (isManual && members.Count > 0)
+            errors.Add(new ErrorData(false, fullName, "implements GetNetState/HandleNetState manually AND has [NetField] members - pick one, the fields would be silently ignored", classLocation));
+
         // same order as ComponentFactory uses for the networked hash, so both sides agree on it
         members.Sort((a, b) => string.CompareOrdinal(a.Name, b.Name));
 
-        return new ComponentData(classSymbol.Name, namespaceName, members, errors);
+        return new ComponentData(classSymbol.Name, namespaceName, members, errors, isManual);
     }
 
     private static string GenerateClass(string @namespace, string className, List<string> writeLines, List<string> readLines)
@@ -172,12 +189,12 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
 
             {{namespaceDecl}}partial class {{className}}
             {
-                public override void WriteNetState(global::Lidgren.Network.NetOutgoingMessage buffer, global::Engine.Shared.GameObjects.EntityManager {{EntityManagerParam}})
+                public override void WriteNetState(global::Lidgren.Network.NetBuffer buffer, global::Engine.Shared.GameObjects.EntityManager {{EntityManagerParam}})
                 {
                     {{writes}}
                 }
 
-                public override void ReadNetState(global::Lidgren.Network.NetIncomingMessage buffer, global::Engine.Shared.GameObjects.EntityManager {{EntityManagerParam}})
+                public override void ReadNetState(global::Lidgren.Network.NetBuffer buffer, global::Engine.Shared.GameObjects.EntityManager {{EntityManagerParam}})
                 {
                     {{reads}}
                 }
@@ -246,19 +263,22 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
         public readonly string Namespace;
         public readonly List<MemberData> Members;
         public readonly List<ErrorData> Errors;
+        public readonly bool IsManual;
 
-        public ComponentData(string className, string @namespace, List<MemberData> members, List<ErrorData> errors)
+        public ComponentData(string className, string @namespace, List<MemberData> members, List<ErrorData> errors, bool isManual)
         {
             ClassName = className;
             Namespace = @namespace;
             Members = members;
             Errors = errors;
+            IsManual = isManual;
         }
 
         public bool Equals(ComponentData? other)
             => other is not null
                && ClassName == other.ClassName
                && Namespace == other.Namespace
+               && IsManual == other.IsManual
                && Members.SequenceEqual(other.Members)
                && Errors.SequenceEqual(other.Errors);
 

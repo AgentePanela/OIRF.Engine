@@ -9,14 +9,14 @@ namespace Engine.Shared.Networking;
 /// </summary>
 public static class NetCollectionHelpers
 {
-    public static void WriteCollection<T>(NetOutgoingMessage buffer, IReadOnlyCollection<T> collection, Action<NetOutgoingMessage, T> writeItem)
+    public static void WriteCollection<T>(NetBuffer buffer, IReadOnlyCollection<T> collection, Action<NetBuffer, T> writeItem)
     {
         buffer.WriteVariableInt32(collection.Count);
         foreach (var item in collection)
             writeItem(buffer, item);
     }
 
-    public static List<T> ReadList<T>(NetIncomingMessage buffer, Func<NetIncomingMessage, T> readItem)
+    public static List<T> ReadList<T>(NetBuffer buffer, Func<NetBuffer, T> readItem)
     {
         var count = buffer.ReadVariableInt32();
         var list = new List<T>(count);
@@ -26,7 +26,7 @@ public static class NetCollectionHelpers
         return list;
     }
 
-    public static T[] ReadArray<T>(NetIncomingMessage buffer, Func<NetIncomingMessage, T> readItem)
+    public static T[] ReadArray<T>(NetBuffer buffer, Func<NetBuffer, T> readItem)
     {
         var count = buffer.ReadVariableInt32();
         var array = new T[count];
@@ -36,7 +36,7 @@ public static class NetCollectionHelpers
         return array;
     }
 
-    public static void WriteDictionary<TKey, TValue>(NetOutgoingMessage buffer, IReadOnlyDictionary<TKey, TValue> dictionary, Action<NetOutgoingMessage, TKey> writeKey, Action<NetOutgoingMessage, TValue> writeValue) where TKey : notnull
+    public static void WriteDictionary<TKey, TValue>(NetBuffer buffer, IReadOnlyDictionary<TKey, TValue> dictionary, Action<NetBuffer, TKey> writeKey, Action<NetBuffer, TValue> writeValue) where TKey : notnull
     {
         buffer.WriteVariableInt32(dictionary.Count);
         foreach (var (key, value) in dictionary)
@@ -46,7 +46,7 @@ public static class NetCollectionHelpers
         }
     }
 
-    public static Dictionary<TKey, TValue> ReadDictionary<TKey, TValue>(NetIncomingMessage buffer, Func<NetIncomingMessage, TKey> readKey, Func<NetIncomingMessage, TValue> readValue) where TKey : notnull
+    public static Dictionary<TKey, TValue> ReadDictionary<TKey, TValue>(NetBuffer buffer, Func<NetBuffer, TKey> readKey, Func<NetBuffer, TValue> readValue) where TKey : notnull
     {
         var count = buffer.ReadVariableInt32();
         var dictionary = new Dictionary<TKey, TValue>(count);

@@ -80,6 +80,10 @@ public sealed class NetMessageGenerator : IIncrementalGenerator
         if (!InheritsNetMessage(classSymbol))
             return null;
 
+        // the message writes its own buffer, nothing to generate
+        if (classSymbol.GetMembers().OfType<IMethodSymbol>().Any(m => m.Name is "WriteToBuffer" or "ReadFromBuffer"))
+            return null;
+
         var fullNameForWarning = classSymbol.ContainingNamespace.IsGlobalNamespace
             ? classSymbol.Name
             : $"{classSymbol.ContainingNamespace.ToDisplayString()}.{classSymbol.Name}";

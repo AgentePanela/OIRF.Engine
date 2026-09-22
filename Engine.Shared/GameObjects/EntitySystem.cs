@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using Engine.Shared.Networking;
 using Engine.Shared.Prototypes;
 using Microsoft.Xna.Framework;
 using static Engine.Shared.GameObjects.EventBus;
@@ -12,7 +13,8 @@ namespace Engine.Shared.GameObjects;
 /// </summary>
 public abstract class EntitySystem
 {
-    [Dependency] protected readonly EntityManager _entManager;
+    [Dependency] protected readonly EntityManager _entManager = default!;
+    [Dependency] private readonly INetManager _internalNetMan = default!;
 
     /// <summary>
     /// Stops the update calls in this system.
@@ -91,6 +93,18 @@ public abstract class EntitySystem
     public void RaiseEvent<T>(EntityUid uid, T ev) where T : EntityEvent
         => _bus.RaiseEvent<T>(uid, ev);
 
+    /// <inheritdoc cref="INetManager.RegisterNetMessage{T}(Action{T, INetSession?}?)"/>
+    public void SubscribeNetMessage<T>(Action<T, INetSession?>? rxCallback = null) where T : NetMessage, new()
+        => _internalNetMan.RegisterNetMessage<T>(rxCallback);
+
+    /// <inheritdoc cref="INetManager.Broadcast(NetMessage, List{INetSession}?))"/>
+    public void BroadcastNetMessage<T>(NetMessage message, List<INetSession>? specifcSessions = null)
+        => _internalNetMan.Broadcast(message, specifcSessions);
+
+    /// <inheritdoc cref="INetSession.SendMessage(NetMessage)"/>
+    public void SendNetMessage(NetMessage message, INetSession session)
+        => session.SendMessage(message);
+
     /// ================
     /// Entity Manager wrappers.
     /// ================
@@ -114,6 +128,12 @@ public abstract class EntitySystem
 
     /// <inheritdoc cref="EntityManager.RemComp{T}(EntityUid)"/>
     protected void RemComp<T>(EntityUid uid) where T : Component => _entManager.RemComp<T>(uid);
+
+    /// <inheritdoc cref="EntityManager.Dirty(Component)"/>
+    protected void Dirty(Component comp) => _entManager.Dirty(comp);
+
+    /// <inheritdoc cref="EntityManager.Dirty(EntityUid, Component)"/>
+    protected void Dirty(EntityUid uid, Component comp) => _entManager.Dirty(uid, comp);
 
     /// <inheritdoc cref="EntityManager.GetEntityComps(EntityUid)"/>
     public List<Component>? GetEntityComps(EntityUid uid)

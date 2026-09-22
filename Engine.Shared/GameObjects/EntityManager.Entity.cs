@@ -43,7 +43,7 @@ public sealed partial class EntityManager
         MainThread.AssertMainThread();
 
         var uid = GenerateUid();
-        var ent = new Entity(uid, name ?? string.Empty);
+        var ent = new Entity(uid, name ?? string.Empty) { CreationTick = _timing.CurTick };
         if (owner is not null)
         {
             ent.SetScene(owner);

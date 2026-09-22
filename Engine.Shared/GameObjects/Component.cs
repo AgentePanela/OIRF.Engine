@@ -1,5 +1,7 @@
+using Engine.Shared.GameStates;
 using Engine.Shared.IoC;
 using Engine.Shared.Threading;
+using Engine.Shared.Timing;
 using Lidgren.Network;
 
 namespace Engine.Shared.GameObjects;
@@ -22,9 +24,19 @@ public class Component
     public CompState State { get; internal set; } = CompState.Adding;
 
     /// <summary>
+    /// The tick this component was added on.
+    /// </summary>
+    public GameTick CreationTick { get; internal set; } = GameTick.Zero;
+
+    /// <summary>
+    /// The last tick <see cref="EntityManager.Dirty"/> was called on this comp.
+    /// </summary>
+    public GameTick LastModifiedTick { get; internal set; } = GameTick.Zero;
+
+    /// <summary>
     /// AUTO GENERATED: Writes the state of this component that goes to the clients.
     /// </summary>
-    public virtual void WriteNetState(NetOutgoingMessage buffer, EntityManager entMan)
+    public virtual void WriteNetState(NetBuffer buffer, EntityManager entMan)
     {
     }
 
@@ -32,7 +44,24 @@ public class Component
     /// AUTO GENERATED: Reads what <see cref="WriteNetState"/> wrote. <see cref="EntityUid"/> members net entity are resolved through
     /// <paramref name="entMan"/>.
     /// </summary>
-    public virtual void ReadNetState(NetIncomingMessage buffer, EntityManager entMan)
+    public virtual void ReadNetState(NetBuffer buffer, EntityManager entMan)
+    {
+    }
+
+    /// <summary>
+    /// MANUAL: for components whose data doesn't fit per-field replication (e.g. a tilemap's chunks). Returns a
+    /// <c>[Serializable]</c> <see cref="IComponentState"/> with whatever changed since <paramref name="fromTick"/>,
+    /// or null if nothing did. <para/>
+    /// Overriding this (together with <see cref="HandleNetState"/>) make the NetworkedComponent
+    /// component OUT of the auto generated.
+    /// <see cref="WriteNetState"/>/<see cref="ReadNetState"/> (DO NOT USE <see cref="NetFieldAttribute"/>)
+    /// </summary>
+    public virtual IComponentState? GetNetState(GameTick fromTick) => null;
+
+    /// <summary>
+    /// MANUAL: applies a state built by <see cref="GetNetState"/>.
+    /// </summary>
+    public virtual void HandleNetState(IComponentState state)
     {
     }
 

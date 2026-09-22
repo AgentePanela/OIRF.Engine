@@ -7,6 +7,7 @@ using System.Net;
 using Engine.Shared.Configuration;
 using Engine.Shared.Configuration.CVars;
 using Engine.Shared.GameObjects.Factories;
+using Engine.Shared.GameStates;
 using Engine.Shared.IoC;
 using Engine.Shared.Serializer;
 using Lidgren.Network;
@@ -42,6 +43,10 @@ internal sealed partial class NetManager : INetManager
     {
         IoCManager.ResolveDependencies(this);
         RegisterNetMessage<ClientHandshakeMessage>(ClientHandshakeCompleted);
+
+        RegisterNetMessage<GameStateMessage>();
+        RegisterNetMessage<StateAckMessage>();
+        RegisterNetMessage<RequestFullStateMessage>();
 
         SubscribeLiveConfig(NetworkingCvars.NetFakeLoss, (c, v) => c.SimulatedLoss = v);
         SubscribeLiveConfig(NetworkingCvars.NetFakeLagMin, (c, v) => c.SimulatedMinimumLatency = v);

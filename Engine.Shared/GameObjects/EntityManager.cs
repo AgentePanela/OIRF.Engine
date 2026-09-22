@@ -7,6 +7,7 @@ using Engine.Shared.Prototypes;
 using Engine.Shared;
 using Engine.Shared.IoC;
 using Engine.Shared.GameObjects;
+using Engine.Shared.Timing;
 
 namespace Engine.Shared.GameObjects;
 
@@ -15,6 +16,7 @@ public sealed partial class EntityManager
     [Dependency] private ComponentFactory _compFac = default!;
     [Dependency] private readonly IPrototypeManager _proto = default!;
     [Dependency] private readonly SharedContentManager _contentMan = default!;
+    [Dependency] private readonly IGameTiming _timing = default!;
     public EventBus EventBus;
 
     private readonly ConcurrentDictionary<EntityUid, Entity> _entities = new();
