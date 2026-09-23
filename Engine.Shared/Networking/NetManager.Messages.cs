@@ -119,7 +119,7 @@ internal sealed partial class NetManager : INetManager
         message.WriteToBuffer(outgoing);
 
         var recipients = specifcSessions.Select(s => s.Connection).ToList();
-        Server.SendMessage(outgoing, recipients, message.DeliveryMethod.ToLidgren(), 0);
+        Server.SendMessage(outgoing, recipients, message.DeliveryMethod.ToLidgren(outgoing.LengthBits), 0);
     }
 
 }
