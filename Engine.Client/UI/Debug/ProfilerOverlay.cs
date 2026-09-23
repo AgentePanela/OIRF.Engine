@@ -4,12 +4,14 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using Engine.Client.Debug.Diagnostics;
+using Engine.Client.GameStates;
 using Engine.Client.Graphics;
 using Engine.Client.Graphics.Lighting;
 using Engine.Shared.Configuration;
 using Engine.Shared.Configuration.CVars;
 using Engine.Shared.Debug.Diagnostics;
 using Engine.Shared.IoC;
+using Engine.Shared.Networking;
 using Microsoft.Xna.Framework;
 using MonoGame.Framework.Utilities;
 
@@ -26,12 +28,18 @@ public sealed class ProfilerOverlay : Overlay
     [Dependency] private readonly LightingManager _lighting = default!;
     [Dependency] private readonly IConfigurationManager _cfg = default!;
     [Dependency] private readonly SystemsProfiler _profiler = default!;
+    [Dependency] private readonly INetManager _net = default!;
+    [Dependency] private readonly ClientGameStateMetrics _netMetrics = default!;
 
     private const int RowsPerSection = 10;
     private const float RefreshInterval = 0.25f;
 
+    // what the bandwidth bar treats as "full" - not a limit, just a scale to read against
+    private const double BandwidthReferenceBps = 64 * 1024;
+
     private static readonly Color UpdateBarColor = new(80, 180, 255, 220);
     private static readonly Color DrawBarColor = new(80, 255, 140, 220);
+    private static readonly Color NetBarColor = new(255, 200, 80, 220);
     private static readonly Color PanelBg = new(0, 0, 0, 140);
 
     private readonly Label _generalLabel;
@@ -42,6 +50,11 @@ public sealed class ProfilerOverlay : Overlay
     private readonly Label _lightingLabel;
     private readonly Label _memoryLabel;
     private readonly Label _stateLabel;
+
+    private readonly BoxContainer _netPanel;
+    private readonly Label _netLabel;
+    private readonly ProfilerRow _bandwidthRow;
+    private readonly ProfilerRow _queueRow;
 
     private readonly List<ProfilerRow> _updateRows;
     private readonly List<ProfilerRow> _drawRows;
@@ -58,16 +71,23 @@ public sealed class ProfilerOverlay : Overlay
         //ZIndex = 998;
         StylesheetOverride = "EngineDefault";
 
+        var leftColumn = new BoxContainer
+        {
+            Orientation = Orientation.Vertical,
+            Separation = 4,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        AddChild(leftColumn);
+
         var left = new BoxContainer
         {
             Orientation = Orientation.Vertical,
             Separation = 4,
             Background = PanelBg,
             Padding = new(8, 6),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top,
         };
-        AddChild(left);
+        leftColumn.AddChild(left);
 
         _generalLabel = CreateLabel();
         _fpsLabel = CreateLabel();
@@ -91,6 +111,23 @@ public sealed class ProfilerOverlay : Overlay
         left.AddChild(new Separator());
         left.AddChild(_stateLabel);
 
+        _netPanel = new BoxContainer
+        {
+            Orientation = Orientation.Vertical,
+            Separation = 4,
+            Background = PanelBg,
+            Padding = new(8, 6),
+            MinWidth = 260,
+            Visible = false, // nothing to say until there is a server
+        };
+        leftColumn.AddChild(_netPanel);
+
+        _netPanel.AddChild(new Label { Text = "NETWORKING", FontSize = 28f, Color = Color.White });
+        _netLabel = CreateLabel();
+        _netPanel.AddChild(_netLabel);
+        _bandwidthRow = BuildRow(_netPanel, NetBarColor, "band");
+        _queueRow = BuildRow(_netPanel, NetBarColor, "queue");
+
         var right = new BoxContainer
         {
             Orientation = Orientation.Vertical,
@@ -113,6 +150,7 @@ public sealed class ProfilerOverlay : Overlay
 
         RefreshStats();
         RefreshSystems();
+        RefreshNetworking();
     }
 
     protected override void Update(float dt)
@@ -125,6 +163,7 @@ public sealed class ProfilerOverlay : Overlay
         _refreshTimer = 0f;
         RefreshStats();
         RefreshSystems();
+        RefreshNetworking();
     }
 
     private void RefreshStats()
@@ -192,20 +231,68 @@ public sealed class ProfilerOverlay : Overlay
     {
         var rows = new List<ProfilerRow>(count);
         for (var i = 0; i < count; i++)
-        {
-            var row = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 6, Visible = false };
-            var name = new Label { Width = 120, FontSize = 18f, Color = Color.White, AutoWrap = false  };
-            var bar = new ProgressBar { Width = 100, BarThickness = 12f, FillColor = barColor };
-            var value = new Label { MinWidth = 55, FontSize = 18f, Color = Color.White, TextAlign = HorizontalAlignment.Right };
+            rows.Add(BuildRow(parent, barColor, null));
 
-            row.AddChild(name);
-            row.AddChild(bar);
-            row.AddChild(value);
-            parent.AddChild(row);
-
-            rows.Add(new ProfilerRow(row, name, bar, value));
-        }
         return rows;
+    }
+
+    /// <summary>
+    /// One name/bar/value row. A row with a fixed <paramref name="name"/> starts visible; the profiler chart builds
+    /// them hidden and names them as it fills them.
+    /// </summary>
+    private static ProfilerRow BuildRow(BoxContainer parent, Color barColor, string? name)
+    {
+        var row = new BoxContainer { Orientation = Orientation.Horizontal, Separation = 6, Visible = name is not null };
+        var nameLabel = new Label { Width = 120, FontSize = 18f, Color = Color.White, AutoWrap = false, Text = name ?? "" };
+        var bar = new ProgressBar { Width = 100, BarThickness = 12f, FillColor = barColor };
+        var value = new Label { MinWidth = 55, FontSize = 18f, Color = Color.White, TextAlign = HorizontalAlignment.Right };
+
+        row.AddChild(nameLabel);
+        row.AddChild(bar);
+        row.AddChild(value);
+        parent.AddChild(row);
+
+        return new ProfilerRow(row, nameLabel, bar, value);
+    }
+
+    private void RefreshNetworking()
+    {
+        // only a connected client can report
+        if (!_net.IsClient || _net.MySession is not { } session)
+        {
+            _netPanel.Visible = false;
+            return;
+        }
+
+        _netPanel.Visible = true;
+
+        var timing = GameClient.Timing;
+        var latest = _netMetrics.Latest;
+        var bps = _netMetrics.BytesPerSecond(timing.TickRate);
+        var behind = timing.CurTick.Value > _netMetrics.LastAppliedTick.Value
+            ? timing.CurTick - _netMetrics.LastAppliedTick
+            : 0;
+
+        _netLabel.Text =
+            $"Ping: {session.Ping}ms | {session.RemoteEndPoint}\n" +
+            $"Tick: {_netMetrics.LastAppliedTick} (behind {behind})\n" +
+            $"State: {FormatBytes(latest.Bytes)} in {latest.Blocks} block(s)\n" +
+            $"Entities: {latest.Entities} (+{latest.Entering} / -{latest.Leaving})" +
+            (_netMetrics.AwaitingFull ? "\nWaiting on a full state" : "");
+
+        _bandwidthRow.Bar.Value = (float)Math.Clamp(bps / BandwidthReferenceBps, 0.0, 1.0);
+        _bandwidthRow.Value.Text = $"{FormatBytes((int)bps)}/s";
+
+        _queueRow.Bar.Value = Math.Clamp(latest.Queued / 5f, 0f, 1f);
+        _queueRow.Value.Text = latest.Queued.ToString();
+    }
+
+    private static string FormatBytes(int bytes)
+    {
+        if (bytes >= 1024 * 1024)
+            return $"{bytes / (1024.0 * 1024.0):0.00}MB";
+
+        return bytes >= 1024 ? $"{bytes / 1024.0:0.0}KB" : $"{bytes}B";
     }
 
     private static Label CreateLabel() => new() { Color = Color.White, FontSize = 18f };

@@ -28,6 +28,66 @@ public sealed class ReadOnlyTextEditor : VVEditorControl
     }
 }
 
+/// <summary>
+/// A plain text box for a member whose type this build cannot resolve - a component that only exists on the other
+/// side.
+/// </summary>
+public sealed class RawTextEditor : VVEditorControl
+{
+    private readonly LineEdit _edit;
+
+    public RawTextEditor(VVEditorContext ctx) : base(ctx)
+    {
+        _edit = new LineEdit { HorizontalExpand = true, ReadOnly = !ctx.Member.CanWrite };
+        _edit.OnTextChanged += _ => MarkDirty();
+        _edit.OnTextEntered += text => TryCommit(null, text);
+        AddChild(_edit);
+    }
+
+    protected override void ApplyValue(VVValue value)
+    {
+        _edit.Text = value.Text;
+        _edit.OutlineColor = null;
+    }
+
+    protected override void OnCommitFailed() => _edit.OutlineColor = Color.Red;
+}
+
+/// <summary>
+/// Same as <see cref="EnumEditor"/> for an enum whose <see cref="Type"/> is unavailable.
+/// </summary>
+public sealed class NamedEnumEditor : VVEditorControl
+{
+    private readonly OptionButton _option;
+    private readonly string[] _names;
+
+    public NamedEnumEditor(VVEditorContext ctx, System.Collections.Generic.IReadOnlyList<string> names) : base(ctx)
+    {
+        _names = [.. names];
+
+        _option = new OptionButton { HorizontalExpand = true, Disabled = !ctx.Member.CanWrite };
+        foreach (var name in _names)
+            _option.AddItem(name);
+
+        _option.OnItemSelected += i =>
+        {
+            if (ApplyingValue || i < 0 || i >= _names.Length)
+                return;
+
+            TryCommit(null, _names[i]);
+        };
+
+        AddChild(_option);
+    }
+
+    protected override void ApplyValue(VVValue value)
+    {
+        var idx = Array.IndexOf(_names, value.Text);
+        if (idx >= 0)
+            _option.Select(idx);
+    }
+}
+
 // a checkbox to toggle HasValue plus the editor for the underlying type
 public sealed class NullableEditorDecorator : VVEditorControl
 {

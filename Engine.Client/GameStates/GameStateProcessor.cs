@@ -22,6 +22,11 @@ public sealed class GameStateProcessor
     /// </summary>
     public bool NeedsFullState { get; private set; }
 
+    /// <summary>
+    /// How many states are buffered. Anything above 1 means they are arriving faster than they are applied.
+    /// </summary>
+    public int QueuedCount => _queue.Count;
+
     public void Add(GameStateMessage msg)
     {
         // states are unreliable, so they arrive late and out of order

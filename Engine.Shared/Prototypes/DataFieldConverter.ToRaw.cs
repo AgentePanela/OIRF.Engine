@@ -106,6 +106,7 @@ public static partial class DataFieldConverter
             return result;
         }
 
-        return value.ToString();
+        // invariant so a value written here reads back the same way on a machine with another culture
+        return value is IFormattable formattable ? formattable.ToString(null, CultureInfo.InvariantCulture) : value.ToString();
     }
 }

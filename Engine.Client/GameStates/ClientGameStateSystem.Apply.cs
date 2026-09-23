@@ -23,6 +23,7 @@ public sealed partial class ClientGameStateSystem
         _isFullState = msg.State.IsFullState;
         _seen.Clear();
         _entering.Clear();
+        _metrics.BeginApply(msg.State.ToTick);
 
         // everything the state mentions has to exist before any component is read, since a component state can
         // point at another entity of the same state
@@ -55,6 +56,8 @@ public sealed partial class ClientGameStateSystem
 
         if (_isFullState)
             DeleteMissing();
+
+        _metrics.EndApply(_net.MySession?.Ping ?? 0, _processor.QueuedCount);
     }
 
     private void EnterEntity(EnteringEntity entering)
@@ -75,6 +78,9 @@ public sealed partial class ClientGameStateSystem
     {
         if (_entManager.TryGetEntity(netEntity, out var uid))
             DeleteEntity(uid);
+
+        _metrics.RecordEntity(netEntity, ClientGameStateMetrics.NetEntState.Leave,
+            _origin.GetValueOrDefault(netEntity), "");
 
         _origin.Remove(netEntity);
     }
@@ -108,6 +114,11 @@ public sealed partial class ClientGameStateSystem
         _currentEntering = _entering.Contains(netEntity);
         _currentKnown = _entManager.TryGetEntity(netEntity, out _currentUid);
         _currentComps.Clear();
+
+        var state = _currentEntering
+            ? ClientGameStateMetrics.NetEntState.Enter
+            : ClientGameStateMetrics.NetEntState.Data;
+        _metrics.RecordEntity(netEntity, state, kind, _entManager.GetEntity(_currentUid)?.Id.Id ?? "");
 
         // only reachable if the state that made this entity enter was lost AND the server already counted it as acked
         if (!_currentKnown)

@@ -23,6 +23,7 @@ public sealed partial class ClientGameStateSystem : EntitySystem, IGameStateAppl
     [Dependency] private readonly ComponentFactory _compFac = default!;
     [Dependency] private readonly SceneManager _sceneMan = default!;
     [Dependency] private readonly IRoomManager _rooms = default!;
+    [Dependency] private readonly ClientGameStateMetrics _metrics = default!;
 
     private readonly GameStateProcessor _processor = new();
 
@@ -65,6 +66,7 @@ public sealed partial class ClientGameStateSystem : EntitySystem, IGameStateAppl
 
         _processor.Applied(msg.State.ToTick);
         _fullStateRequested = false;
+        _metrics.AwaitingFull = false;
 
         // TODO: client-side tickrate
         _timing.SetTick(msg.State.ToTick);
@@ -73,7 +75,10 @@ public sealed partial class ClientGameStateSystem : EntitySystem, IGameStateAppl
     }
 
     private void OnGameState(GameStateMessage msg, INetSession? session)
-        => _processor.Add(msg);
+    {
+        _metrics.RecordReceived(msg.BlocksLength, msg.BlockCount);
+        _processor.Add(msg);
+    }
 
     private void Ack(GameTick tick)
     {
@@ -90,6 +95,7 @@ public sealed partial class ClientGameStateSystem : EntitySystem, IGameStateAppl
             return;
 
         _fullStateRequested = true;
+        _metrics.AwaitingFull = true;
         _net.MySession?.SendMessage(new RequestFullStateMessage());
     }
 
@@ -114,6 +120,7 @@ public sealed partial class ClientGameStateSystem : EntitySystem, IGameStateAppl
 
         _toDelete.Clear();
         _processor.Reset();
+        _metrics.Reset();
         _lastAckedTick = GameTick.Zero;
 
         if (_net.IsClient && _net.MySession is not null)

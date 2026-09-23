@@ -117,8 +117,11 @@ public static class VVEditorRegistry
     public static VVEditorControl Create(VVEditorContext ctx)
     {
         var type = ctx.Member.LocalType;
+
+        // nothing to dispatch on - a member of a component only the other side has. The kind is still known, and a
+        // remote write is parsed over there, so text is enough to keep the row editable
         if (type is null)
-            return new ReadOnlyTextEditor(ctx);
+            return CreateForKind(ctx);
 
         var underlying = Nullable.GetUnderlyingType(type);
         if (underlying is not null)
@@ -128,6 +131,19 @@ public static class VVEditorRegistry
             return factory(ctx);
 
         return CreateForType(ctx, type);
+    }
+
+    private static VVEditorControl CreateForKind(VVEditorContext ctx)
+    {
+        if (!ctx.Member.CanWrite)
+            return new ReadOnlyTextEditor(ctx);
+
+        if (ctx.Member.Kind == VVValueKind.Enum && ctx.Member.EnumNames is { Count: > 0 } names)
+            return new NamedEnumEditor(ctx, names);
+
+        return ctx.Member.Kind is VVValueKind.Scalar or VVValueKind.EntityRef
+            ? new RawTextEditor(ctx)
+            : new ReadOnlyTextEditor(ctx);
     }
 
     internal static VVEditorControl CreateForType(VVEditorContext ctx, Type type)

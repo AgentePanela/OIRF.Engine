@@ -193,6 +193,108 @@ public sealed class ViewVariablesResolver
         return iface?.GetGenericArguments()[0] ?? typeof(string);
     }
 
+    /// <summary>
+    /// Writes a value given only its text form, parsing it against the declared type of whatever the path points at.
+    /// <paramref name="entityFromNet"/> is how an entity reference survives the trip: the text is a
+    /// <see cref="NetEntity"/> id, which has nothing to do with this process' uids.
+    /// </summary>
+    public bool TryWriteText(VVPath path, string text, out string? error, Func<int, EntityUid>? entityFromNet = null)
+    {
+        if (path.Steps.Count == 0)
+        {
+            error = "Cannot write to a root object directly.";
+            return false;
+        }
+
+        var parentPath = path.Parent!;
+        if (!TryResolve(parentPath, out var parent, out error))
+            return false;
+
+        if (parent is null)
+        {
+            error = $"'{parentPath}' is null.";
+            return false;
+        }
+
+        if (!TryGetStepType(parent, path.Steps[^1], out var type, out error) || type is null)
+            return false;
+
+        object? parsed;
+        if (entityFromNet is not null && (type == typeof(EntityUid) || Nullable.GetUnderlyingType(type) == typeof(EntityUid)))
+        {
+            if (text.Length == 0 && Nullable.GetUnderlyingType(type) is not null)
+            {
+                parsed = null;
+            }
+            else if (int.TryParse(text, out var netId))
+            {
+                parsed = entityFromNet(netId);
+            }
+            else
+            {
+                error = $"'{text}' is not a net entity id.";
+                return false;
+            }
+        }
+        else if (!ViewVariablesConvert.TryParse(type, text, out parsed, out error))
+        {
+            return false;
+        }
+
+        return TryWrite(path, parsed, out error);
+    }
+
+    private static bool TryGetStepType(object parent, VVStep step, out Type? type, out string? error)
+    {
+        type = null;
+        error = null;
+
+        switch (step)
+        {
+            case MemberStep member:
+            {
+                var desc = ViewVariablesConvert.ScanMembers(parent.GetType())
+                    .FirstOrDefault(m => m.Member.Name == member.Name);
+
+                if (desc.Member is null)
+                {
+                    error = $"No member '{member.Name}' on {parent.GetType().Name}.";
+                    return false;
+                }
+
+                type = DataFieldConverter.GetMemberType(desc.Member);
+                return true;
+            }
+            case IndexStep:
+            {
+                type = parent.GetType().IsArray
+                    ? parent.GetType().GetElementType()
+                    : parent.GetType().GetInterfaces()
+                        .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IList<>))
+                        ?.GetGenericArguments()[0];
+
+                if (type is null)
+                    error = $"Can't tell the element type of {parent.GetType().Name}.";
+
+                return type is not null;
+            }
+            case KeyStep:
+            {
+                type = parent.GetType().GetInterfaces()
+                    .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IDictionary<,>))
+                    ?.GetGenericArguments()[1];
+
+                if (type is null)
+                    error = $"Can't tell the value type of {parent.GetType().Name}.";
+
+                return type is not null;
+            }
+            default:
+                error = $"Step '{step}' is not supported.";
+                return false;
+        }
+    }
+
     public bool TryWrite(VVPath path, object? newValue, out string? error)
     {
         if (path.Steps.Count == 0)

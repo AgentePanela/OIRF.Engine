@@ -11,7 +11,18 @@ public enum VVRootKind : byte
     Detached,
 }
 
-public readonly record struct VVRoot(VVRootKind Kind, int Uid, string? ComponentTypeName, int DetachedHandle)
+/// <summary>
+/// Which process the target lives in. It is part of the root because a <see cref="VVPath"/> is used as a dictionary
+/// key
+/// </summary>
+public enum VVSide : byte
+{
+    Client,
+    Server,
+}
+
+public readonly record struct VVRoot(VVRootKind Kind, int Uid, string? ComponentTypeName, int DetachedHandle,
+    VVSide Side = VVSide.Client)
 {
     public static VVRoot Entity(EntityUid uid) => new(VVRootKind.Entity, uid.Id, null, 0);
 
@@ -19,13 +30,30 @@ public readonly record struct VVRoot(VVRootKind Kind, int Uid, string? Component
 
     public static VVRoot Detached(int handle) => new(VVRootKind.Detached, 0, null, handle);
 
-    public override string ToString() => Kind switch
+    /// <summary>
+    /// A <see cref="VVSide.Server"/> root keeps a <see cref="NetEntity"/> id in <see cref="Uid"/> - the two uid spaces
+    /// are unrelated, so translating once here is the only place that needs an EntityManager.
+    /// </summary>
+    public static VVRoot ServerEntity(NetEntity netEnt) => new(VVRootKind.Entity, netEnt.Id, null, 0, VVSide.Server);
+
+    /// <summary>
+    /// Takes the component name and not a <see cref="Type"/>: a server-only component has no type on the client.
+    /// </summary>
+    public static VVRoot ServerComponent(NetEntity netEnt, string compName)
+        => new(VVRootKind.Component, netEnt.Id, compName, 0, VVSide.Server);
+
+    public override string ToString()
     {
-        VVRootKind.Entity => $"#{Uid}",
-        VVRootKind.Component => $"#{Uid}/{ComponentTypeName}",
-        VVRootKind.Detached => $"detached:{DetachedHandle}",
-        _ => "?",
-    };
+        var side = Side == VVSide.Server ? "sv" : "";
+
+        return Kind switch
+        {
+            VVRootKind.Entity => $"{side}#{Uid}",
+            VVRootKind.Component => $"{side}#{Uid}/{ComponentTypeName}",
+            VVRootKind.Detached => $"detached:{DetachedHandle}",
+            _ => "?",
+        };
+    }
 }
 
 // never a captured object - a struct member read through reflection is a boxed copy, so editing
@@ -82,6 +110,11 @@ public sealed class VVPath : IEquatable<VVPath>
 
     public VVPath? Parent => Steps.Count == 0 ? null : new VVPath(Root, Steps.Take(Steps.Count - 1).ToArray());
 
+    /// <summary>
+    /// The same chain of steps under a different root - how a path is rebased when it crosses the network boundary.
+    /// </summary>
+    public VVPath WithRoot(VVRoot root) => new(root, Steps);
+
     public override string ToString()
         => Steps.Count == 0 ? Root.ToString() : $"{Root} / {string.Join(" / ", Steps)}";
 
@@ -118,7 +151,8 @@ public sealed class VVPath : IEquatable<VVPath>
     }
 
     // flattened into primitive lists so a VVPath can ride inside a NetMessage
-    public (byte RootKind, int RootUid, string RootComponent, int RootHandle, List<string> StepKinds, List<string> StepArgs) Flatten()
+    public (byte RootKind, int RootUid, string RootComponent, int RootHandle, byte Side, List<string> StepKinds,
+        List<string> StepArgs) Flatten()
     {
         var kinds = new List<string>(Steps.Count);
         var args = new List<string>(Steps.Count);
@@ -133,20 +167,22 @@ public sealed class VVPath : IEquatable<VVPath>
             }
         }
 
-        return ((byte)Root.Kind, Root.Uid, Root.ComponentTypeName ?? "", Root.DetachedHandle, kinds, args);
+        return ((byte)Root.Kind, Root.Uid, Root.ComponentTypeName ?? "", Root.DetachedHandle, (byte)Root.Side, kinds, args);
     }
 
-    public static VVPath? Unflatten(byte rootKind, int rootUid, string rootComponent, int rootHandle,
+    public static VVPath? Unflatten(byte rootKind, int rootUid, string rootComponent, int rootHandle, byte side,
         List<string> stepKinds, List<string> stepArgs)
     {
-        if (stepKinds.Count != stepArgs.Count || stepKinds.Count > MaxDepth || !Enum.IsDefined(typeof(VVRootKind), rootKind))
+        if (stepKinds.Count != stepArgs.Count || stepKinds.Count > MaxDepth
+            || !Enum.IsDefined(typeof(VVRootKind), rootKind) || !Enum.IsDefined(typeof(VVSide), side))
             return null;
 
+        var vvSide = (VVSide)side;
         VVRoot root = (VVRootKind)rootKind switch
         {
-            VVRootKind.Entity => new VVRoot(VVRootKind.Entity, rootUid, null, 0),
-            VVRootKind.Component => new VVRoot(VVRootKind.Component, rootUid, rootComponent, 0),
-            _ => new VVRoot(VVRootKind.Detached, 0, null, rootHandle),
+            VVRootKind.Entity => new VVRoot(VVRootKind.Entity, rootUid, null, 0, vvSide),
+            VVRootKind.Component => new VVRoot(VVRootKind.Component, rootUid, rootComponent, 0, vvSide),
+            _ => new VVRoot(VVRootKind.Detached, 0, null, rootHandle, vvSide),
         };
 
         var path = Of(root);
