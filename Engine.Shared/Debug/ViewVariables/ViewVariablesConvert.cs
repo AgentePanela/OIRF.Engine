@@ -90,7 +90,7 @@ public static class ViewVariablesConvert
         }
         catch (Exception ex)
         {
-            return $"<error: {ex.Message}>";
+            return Loc.GetString("engine-vv-error-text", ("message", ex.Message));
         }
     }
 
@@ -122,7 +122,7 @@ public static class ViewVariablesConvert
             if (!EntityUid.TryParse(text, out var uid))
             {
                 value = null;
-                error = $"'{text}' is not a valid entity uid.";
+                error = Loc.GetString("engine-vv-error-invalid-uid", ("text", text));
                 return false;
             }
 

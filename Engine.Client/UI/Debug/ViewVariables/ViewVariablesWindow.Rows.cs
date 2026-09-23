@@ -38,7 +38,7 @@ public sealed partial class ViewVariablesWindow
             Body = new BoxContainer { Orientation = Orientation.Vertical, Separation = 4 };
             scroll.AddChild(Body);
 
-            ComponentsLabel = new Label { Text = "Components:", Visible = false };
+            ComponentsLabel = new Label { Text = Loc.GetString("engine-vv-components"), Visible = false };
             Root.AddChild(ComponentsLabel);
 
             ComponentsScroll = new ScrollContainer { VerticalExpand = true, HorizontalExpand = true, MinHeight = 120, Visible = false };
@@ -50,7 +50,7 @@ public sealed partial class ViewVariablesWindow
             if (path.Root.Kind != VVRootKind.Entity)
                 return;
 
-            var addButton = new Button("Add Component");
+            var addButton = new Button(Loc.GetString("engine-vv-add-component"));
             addButton.OnClick += _ => window.ToggleAddComponentPopup(addButton, this);
             Root.AddChild(addButton);
         }
@@ -144,7 +144,7 @@ public sealed partial class ViewVariablesWindow
             }
             else
             {
-                _statusLabel.Text = error ?? "couldn't remove component";
+                _statusLabel.Text = error ?? Loc.GetString("engine-vv-fail-remove-component");
             }
         };
         row.AddChild(removeButton);
@@ -162,7 +162,7 @@ public sealed partial class ViewVariablesWindow
         LineEdit? keyEdit = null;
         if (collection.IsDictionary)
         {
-            keyEdit = new LineEdit { PlaceholderText = "key", HorizontalExpand = true };
+            keyEdit = new LineEdit { PlaceholderText = Loc.GetString("engine-vv-key-placeholder"), HorizontalExpand = true };
             addRow.AddChild(keyEdit);
         }
 
@@ -172,7 +172,7 @@ public sealed partial class ViewVariablesWindow
             if (side.Access.TryInsert(side.Path, keyEdit?.Text, out var error))
                 Rebuild(side);
             else
-                _statusLabel.Text = error ?? "couldn't add element";
+                _statusLabel.Text = error ?? Loc.GetString("engine-vv-fail-add-element");
         };
         addRow.AddChild(addButton);
 

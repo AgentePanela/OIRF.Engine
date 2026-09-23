@@ -23,7 +23,7 @@ public sealed class ViewVariablesRow : BoxContainer
 
         AddChild(new Label
         {
-            Text = member.CanWrite ? member.Name : $"{member.Name} (ro)",
+            Text = member.CanWrite ? member.Name : Loc.GetString("engine-vv-member-read-only", ("name", member.Name)),
             MinWidth = 190,
             AutoWrap = false,
             TextVerticalAlign = VerticalAlignment.Center,
@@ -48,7 +48,7 @@ public sealed class ViewVariablesRow : BoxContainer
                 if (access.TryRemoveAt(member.Path, out var error))
                     Parent?.RemoveChild(this, dispose: true);
                 else
-                    setStatus(error ?? "couldn't remove element");
+                    setStatus(error ?? Loc.GetString("engine-vv-fail-remove-element"));
             };
             AddChild(removeButton);
         }

@@ -35,7 +35,7 @@ public sealed class ViewVariablesResolver
                 var ent = _entMan.GetEntity(uid);
                 if (ent is null || ent.Deleting)
                 {
-                    error = $"Entity #{root.Uid} no longer exists.";
+                    error = Loc.GetString("engine-vv-error-entity-gone", ("uid", root.Uid));
                     return false;
                 }
 
@@ -49,7 +49,7 @@ public sealed class ViewVariablesResolver
                 var type = root.ComponentTypeName is null ? null : _compFac.GetTypeByString(root.ComponentTypeName);
                 if (type is null || !_entMan.TryComp(uid, type, out var comp))
                 {
-                    error = $"Component '{root.ComponentTypeName}' not found on entity #{root.Uid}.";
+                    error = Loc.GetString("engine-vv-error-component-missing", ("name", root.ComponentTypeName ?? ""), ("uid", root.Uid));
                     return false;
                 }
 
@@ -62,7 +62,7 @@ public sealed class ViewVariablesResolver
                 obj = _detachedLookup(root.DetachedHandle);
                 if (obj is null)
                 {
-                    error = "Detached object is no longer pinned.";
+                    error = Loc.GetString("engine-vv-error-unpinned");
                     return false;
                 }
 
@@ -70,7 +70,7 @@ public sealed class ViewVariablesResolver
                 return true;
             }
             default:
-                error = "Unknown VV root kind.";
+                error = Loc.GetString("engine-vv-error-unknown-root");
                 return false;
         }
     }
@@ -84,7 +84,7 @@ public sealed class ViewVariablesResolver
         {
             if (obj is null)
             {
-                error = $"'{path.Steps[i - 1]}' is null.";
+                error = Loc.GetString("engine-vv-error-null", ("step", path.Steps[i - 1]));
                 return false;
             }
 
@@ -111,7 +111,7 @@ public sealed class ViewVariablesResolver
 
                     if (desc.Member is null)
                     {
-                        error = $"No member '{member.Name}' on {parent.GetType().Name}.";
+                        error = Loc.GetString("engine-vv-error-no-member", ("name", member.Name), ("type", parent.GetType().Name));
                         return false;
                     }
 
@@ -124,7 +124,7 @@ public sealed class ViewVariablesResolver
                     {
                         if (index.Index < 0 || index.Index >= array.Length)
                         {
-                            error = $"Index {index.Index} is out of range.";
+                            error = Loc.GetString("engine-vv-error-index-range", ("index", index.Index));
                             return false;
                         }
 
@@ -136,7 +136,7 @@ public sealed class ViewVariablesResolver
                     {
                         if (index.Index < 0 || index.Index >= list.Count)
                         {
-                            error = $"Index {index.Index} is out of range.";
+                            error = Loc.GetString("engine-vv-error-index-range", ("index", index.Index));
                             return false;
                         }
 
@@ -150,14 +150,14 @@ public sealed class ViewVariablesResolver
                         return true;
                     }
 
-                    error = $"{parent.GetType().Name} is not indexable.";
+                    error = Loc.GetString("engine-vv-error-not-indexable", ("type", parent.GetType().Name));
                     return false;
                 }
                 case KeyStep key:
                 {
                     if (parent is not System.Collections.IDictionary dict)
                     {
-                        error = $"{parent.GetType().Name} is not a dictionary.";
+                        error = Loc.GetString("engine-vv-error-not-dictionary", ("type", parent.GetType().Name));
                         return false;
                     }
 
@@ -166,7 +166,7 @@ public sealed class ViewVariablesResolver
 
                     if (!dict.Contains(keyObj))
                     {
-                        error = $"Key '{key.RawKey}' not found.";
+                        error = Loc.GetString("engine-vv-error-key-missing", ("key", key.RawKey));
                         return false;
                     }
 
@@ -174,7 +174,7 @@ public sealed class ViewVariablesResolver
                     return true;
                 }
                 default:
-                    error = $"Step '{step}' is not supported.";
+                    error = Loc.GetString("engine-vv-error-step-unsupported", ("step", step));
                     return false;
             }
         }
@@ -202,7 +202,7 @@ public sealed class ViewVariablesResolver
     {
         if (path.Steps.Count == 0)
         {
-            error = "Cannot write to a root object directly.";
+            error = Loc.GetString("engine-vv-error-write-root");
             return false;
         }
 
@@ -212,7 +212,7 @@ public sealed class ViewVariablesResolver
 
         if (parent is null)
         {
-            error = $"'{parentPath}' is null.";
+            error = Loc.GetString("engine-vv-error-null", ("step", parentPath));
             return false;
         }
 
@@ -232,7 +232,7 @@ public sealed class ViewVariablesResolver
             }
             else
             {
-                error = $"'{text}' is not a net entity id.";
+                error = Loc.GetString("engine-vv-error-not-net-entity", ("text", text));
                 return false;
             }
         }
@@ -258,7 +258,7 @@ public sealed class ViewVariablesResolver
 
                 if (desc.Member is null)
                 {
-                    error = $"No member '{member.Name}' on {parent.GetType().Name}.";
+                    error = Loc.GetString("engine-vv-error-no-member", ("name", member.Name), ("type", parent.GetType().Name));
                     return false;
                 }
 
@@ -274,7 +274,7 @@ public sealed class ViewVariablesResolver
                         ?.GetGenericArguments()[0];
 
                 if (type is null)
-                    error = $"Can't tell the element type of {parent.GetType().Name}.";
+                    error = Loc.GetString("engine-vv-error-element-type", ("type", parent.GetType().Name));
 
                 return type is not null;
             }
@@ -285,12 +285,12 @@ public sealed class ViewVariablesResolver
                     ?.GetGenericArguments()[1];
 
                 if (type is null)
-                    error = $"Can't tell the value type of {parent.GetType().Name}.";
+                    error = Loc.GetString("engine-vv-error-value-type", ("type", parent.GetType().Name));
 
                 return type is not null;
             }
             default:
-                error = $"Step '{step}' is not supported.";
+                error = Loc.GetString("engine-vv-error-step-unsupported", ("step", step));
                 return false;
         }
     }
@@ -299,7 +299,7 @@ public sealed class ViewVariablesResolver
     {
         if (path.Steps.Count == 0)
         {
-            error = "Cannot write to a root object directly.";
+            error = Loc.GetString("engine-vv-error-write-root");
             return false;
         }
 
@@ -317,7 +317,7 @@ public sealed class ViewVariablesResolver
 
             if (next is null)
             {
-                error = $"'{path.Steps[i]}' is null.";
+                error = Loc.GetString("engine-vv-error-null", ("step", path.Steps[i]));
                 return false;
             }
 
@@ -336,7 +336,7 @@ public sealed class ViewVariablesResolver
 
             if (!IsStepWritable(chain[i], path.Steps[i], out error))
             {
-                error = $"'{path.Steps[i]}' is read-only, so the change wouldn't be written back.";
+                error = Loc.GetString("engine-vv-error-read-only-chain", ("step", path.Steps[i]));
                 return false;
             }
         }
@@ -370,13 +370,13 @@ public sealed class ViewVariablesResolver
 
                 if (desc.Member is null)
                 {
-                    error = $"No member '{member.Name}' on {parent.GetType().Name}.";
+                    error = Loc.GetString("engine-vv-error-no-member", ("name", member.Name), ("type", parent.GetType().Name));
                     return false;
                 }
 
                 if (!desc.CanWrite)
                 {
-                    error = $"'{member.Name}' is read-only.";
+                    error = Loc.GetString("engine-vv-error-read-only", ("name", member.Name));
                     return false;
                 }
 
@@ -386,16 +386,16 @@ public sealed class ViewVariablesResolver
                 if (parent is Array || parent is System.Collections.IList { IsReadOnly: false })
                     return true;
 
-                error = $"{parent.GetType().Name} elements can't be written.";
+                error = Loc.GetString("engine-vv-error-elements-read-only", ("type", parent.GetType().Name));
                 return false;
             case KeyStep:
                 if (parent is System.Collections.IDictionary { IsReadOnly: false })
                     return true;
 
-                error = $"{parent.GetType().Name} entries can't be written.";
+                error = Loc.GetString("engine-vv-error-entries-read-only", ("type", parent.GetType().Name));
                 return false;
             default:
-                error = $"Step '{step}' is not supported.";
+                error = Loc.GetString("engine-vv-error-step-unsupported", ("step", step));
                 return false;
         }
     }
@@ -415,7 +415,7 @@ public sealed class ViewVariablesResolver
 
                     if (desc.Member is null)
                     {
-                        error = $"No member '{member.Name}' on {parent.GetType().Name}.";
+                        error = Loc.GetString("engine-vv-error-no-member", ("name", member.Name), ("type", parent.GetType().Name));
                         return false;
                     }
 
@@ -436,14 +436,14 @@ public sealed class ViewVariablesResolver
                         return true;
                     }
 
-                    error = $"{parent.GetType().Name} elements can't be written.";
+                    error = Loc.GetString("engine-vv-error-elements-read-only", ("type", parent.GetType().Name));
                     return false;
                 }
                 case KeyStep key:
                 {
                     if (parent is not System.Collections.IDictionary dict)
                     {
-                        error = $"{parent.GetType().Name} is not a dictionary.";
+                        error = Loc.GetString("engine-vv-error-not-dictionary", ("type", parent.GetType().Name));
                         return false;
                     }
 
@@ -454,7 +454,7 @@ public sealed class ViewVariablesResolver
                     return true;
                 }
                 default:
-                    error = $"Step '{step}' is not supported.";
+                    error = Loc.GetString("engine-vv-error-step-unsupported", ("step", step));
                     return false;
             }
         }
@@ -477,13 +477,13 @@ public sealed class ViewVariablesResolver
         {
             if (dict.IsReadOnly)
             {
-                error = "This dictionary can't be resized.";
+                error = Loc.GetString("engine-vv-error-dictionary-fixed");
                 return false;
             }
 
             if (rawKey is null)
             {
-                error = "A key is required.";
+                error = Loc.GetString("engine-vv-error-key-required");
                 return false;
             }
 
@@ -492,7 +492,7 @@ public sealed class ViewVariablesResolver
 
             if (dict.Contains(keyObj))
             {
-                error = "That key already exists.";
+                error = Loc.GetString("engine-vv-error-key-exists");
                 return false;
             }
 
@@ -506,7 +506,7 @@ public sealed class ViewVariablesResolver
 
         if (obj is Array)
         {
-            error = "Arrays can't be resized.";
+            error = Loc.GetString("engine-vv-error-array-fixed");
             return false;
         }
 
@@ -514,7 +514,7 @@ public sealed class ViewVariablesResolver
         {
             if (list.IsReadOnly)
             {
-                error = "This list can't be resized.";
+                error = Loc.GetString("engine-vv-error-list-fixed");
                 return false;
             }
 
@@ -526,7 +526,7 @@ public sealed class ViewVariablesResolver
             return true;
         }
 
-        error = $"{obj.GetType().Name} isn't a resizable collection.";
+        error = Loc.GetString("engine-vv-error-not-resizable", ("type", obj.GetType().Name));
         return false;
     }
 
@@ -535,7 +535,7 @@ public sealed class ViewVariablesResolver
     {
         if (elementPath.Steps.Count == 0)
         {
-            error = "Cannot remove a root object.";
+            error = Loc.GetString("engine-vv-error-remove-root");
             return false;
         }
 
@@ -547,19 +547,19 @@ public sealed class ViewVariablesResolver
             case IndexStep index:
                 if (collection is Array)
                 {
-                    error = "Arrays can't be resized.";
+                    error = Loc.GetString("engine-vv-error-array-fixed");
                     return false;
                 }
 
                 if (collection is not System.Collections.IList list || list.IsReadOnly)
                 {
-                    error = $"{collection.GetType().Name} elements can't be removed.";
+                    error = Loc.GetString("engine-vv-error-elements-fixed", ("type", collection.GetType().Name));
                     return false;
                 }
 
                 if (index.Index < 0 || index.Index >= list.Count)
                 {
-                    error = $"Index {index.Index} is out of range.";
+                    error = Loc.GetString("engine-vv-error-index-range", ("index", index.Index));
                     return false;
                 }
 
@@ -570,7 +570,7 @@ public sealed class ViewVariablesResolver
             case KeyStep key:
                 if (collection is not System.Collections.IDictionary dict || dict.IsReadOnly)
                 {
-                    error = $"{collection.GetType().Name} entries can't be removed.";
+                    error = Loc.GetString("engine-vv-error-entries-fixed", ("type", collection.GetType().Name));
                     return false;
                 }
 
@@ -582,7 +582,7 @@ public sealed class ViewVariablesResolver
                 return true;
 
             default:
-                error = "Only collection/dictionary elements can be removed.";
+                error = Loc.GetString("engine-vv-error-remove-collection-only");
                 return false;
         }
     }
@@ -615,7 +615,7 @@ public sealed class ViewVariablesResolver
         catch (MissingMethodException)
         {
             value = null;
-            error = $"{type.Name} doesn't have a parameterless constructor - can't create one automatically.";
+            error = Loc.GetString("engine-vv-error-no-parameterless-ctor", ("type", type.Name));
             return false;
         }
     }

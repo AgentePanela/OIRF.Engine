@@ -32,7 +32,7 @@ public sealed partial class ViewVariablesWindow
         windows.WindowRoot.AddChild(_addComponentCatcher);
         LayoutContainer.SetAnchorPreset(_addComponentCatcher, LayoutPreset.Wide);
 
-        var search = new LineEdit { PlaceholderText = "Search component...", HorizontalExpand = true };
+        var search = new LineEdit { PlaceholderText = Loc.GetString("engine-vv-search-component"), HorizontalExpand = true };
         var list = new ItemList { VerticalExpand = true, HorizontalExpand = true };
 
         void Populate(string filter)
@@ -69,7 +69,7 @@ public sealed partial class ViewVariablesWindow
         if (side.Access.TryAddComponent(side.Path.Root, name, out var error))
             Rebuild(side);
         else
-            _statusLabel.Text = error ?? "couldn't add component";
+            _statusLabel.Text = error ?? Loc.GetString("engine-vv-fail-add-component");
     }
 
     private void CloseAddComponentPopup()

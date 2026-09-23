@@ -55,7 +55,7 @@ public sealed partial class ViewVariablesWindow : Window
 
         _path = path;
 
-        Title = "View Variables";
+        Title = Loc.GetString("engine-vv-window-title");
         MinWidth = 520;
         MinHeight = 480;
 
@@ -106,7 +106,7 @@ public sealed partial class ViewVariablesWindow : Window
         // space among HorizontalExpand children, it has no float-right of its own
         header.AddChild(new PanelContainer { HorizontalExpand = true });
 
-        var refreshButton = new Button("Refresh");
+        var refreshButton = new Button(Loc.GetString("engine-vv-refresh"));
         refreshButton.OnClick += _ =>
         {
             // a remote snapshot answers from a cache, so Refresh has to ask for a new one
@@ -120,7 +120,7 @@ public sealed partial class ViewVariablesWindow : Window
 
         if (path.Parent is { } parent)
         {
-            var upButton = new Button("Up");
+            var upButton = new Button(Loc.GetString("engine-vv-up"));
             upButton.OnClick += _ => Open(parent);
             header.AddChild(upButton);
         }
@@ -136,10 +136,10 @@ public sealed partial class ViewVariablesWindow : Window
         var serverPath = path.Root.Side == VVSide.Server ? path : counterpart;
 
         if (clientPath is not null)
-            _sides.Add(new SideView("Client", clientPath, manager.For(clientPath.Root), this));
+            _sides.Add(new SideView(Loc.GetString("engine-vv-tab-client"), clientPath, manager.For(clientPath.Root), this));
 
         if (serverPath is not null)
-            _sides.Add(new SideView("Server", serverPath, manager.For(serverPath.Root), this));
+            _sides.Add(new SideView(Loc.GetString("engine-vv-tab-server"), serverPath, manager.For(serverPath.Root), this));
     }
 
     /// <summary>
@@ -205,7 +205,9 @@ public sealed partial class ViewVariablesWindow : Window
     private void ApplyTitle()
     {
         var title = Current.SnapshotTitle;
-        Title = string.IsNullOrEmpty(title) ? "View Variables" : $"View Variables - {title}";
+        Title = string.IsNullOrEmpty(title)
+            ? Loc.GetString("engine-vv-window-title")
+            : Loc.GetString("engine-vv-window-title-target", ("target", title));
     }
 
     private void OnRemoteError(string error) => _statusLabel.Text = error;

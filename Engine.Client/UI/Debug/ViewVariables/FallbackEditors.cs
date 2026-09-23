@@ -99,7 +99,7 @@ public sealed class NullableEditorDecorator : VVEditorControl
         Orientation = Orientation.Horizontal;
         Separation = 4;
 
-        _hasValue = new CheckBox { Text = "set", Disabled = !ctx.Member.CanWrite };
+        _hasValue = new CheckBox { Text = Loc.GetString("engine-vv-nullable-set"), Disabled = !ctx.Member.CanWrite };
         _hasValue.OnToggled += pressed =>
         {
 #pragma warning disable CS8602 // Dereference of a possibly null reference.

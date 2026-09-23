@@ -75,14 +75,14 @@ public sealed class LocalViewVariablesAccess : IViewVariablesAccess
     {
         if (!_compFac.ComponentsSanitized.TryGetValue(sanitizedName, out var type))
         {
-            error = $"Unknown component '{sanitizedName}'.";
+            error = Loc.GetString("engine-vv-error-unknown-component", ("name", sanitizedName));
             return false;
         }
 
         var uid = new EntityUid(entityRoot.Uid);
         if (_entMan.TryComp(uid, type, out _))
         {
-            error = $"Entity already has '{sanitizedName}'.";
+            error = Loc.GetString("engine-vv-error-already-has-component", ("name", sanitizedName));
             return false;
         }
 
@@ -95,14 +95,14 @@ public sealed class LocalViewVariablesAccess : IViewVariablesAccess
     {
         if (componentRoot.Kind != VVRootKind.Component || componentRoot.ComponentTypeName is null)
         {
-            error = "Not a component.";
+            error = Loc.GetString("engine-vv-error-not-a-component");
             return false;
         }
 
         var type = _compFac.GetTypeByString(componentRoot.ComponentTypeName);
         if (type is null)
         {
-            error = $"Unknown component type '{componentRoot.ComponentTypeName}'.";
+            error = Loc.GetString("engine-vv-error-unknown-component-type", ("name", componentRoot.ComponentTypeName));
             return false;
         }
 
@@ -176,7 +176,7 @@ public sealed class RemoteViewVariablesAccess : IViewVariablesAccess
             Request(path);
         }
 
-        return cached ?? new VVSnapshot { Path = path, Title = path.ToString(), Error = "Waiting on the server..." };
+        return cached ?? new VVSnapshot { Path = path, Title = path.ToString(), Error = Loc.GetString("engine-vv-waiting-server") };
     }
 
     public bool TryRead(VVPath path, out VVValue value)
@@ -187,7 +187,7 @@ public sealed class RemoteViewVariablesAccess : IViewVariablesAccess
             return true;
         }
 
-        value = VVValue.Error("Waiting on the server...");
+        value = VVValue.Error(Loc.GetString("engine-vv-waiting-server"));
         return false;
     }
 
@@ -243,7 +243,7 @@ public sealed class RemoteViewVariablesAccess : IViewVariablesAccess
     {
         if (_netMan.MySession is not { } session)
         {
-            error = "Not connected.";
+            error = Loc.GetString("engine-vv-error-not-connected");
             return false;
         }
 
@@ -439,7 +439,7 @@ public sealed class ViewVariablesManager
                 _local.TryRemoveComponent(localPath!.Root, out error);
                 break;
             default:
-                error = $"Unknown VV write op {msg.Op}.";
+                error = Loc.GetString("engine-vv-error-unknown-write-op", ("op", msg.Op));
                 break;
         }
 
@@ -456,26 +456,26 @@ public sealed class ViewVariablesManager
 
         if (path is null)
         {
-            error = "Malformed VV path.";
+            error = Loc.GetString("engine-vv-error-malformed-path");
             return false;
         }
 
         if (path.Root.Side != VVSide.Server)
         {
-            error = "That path is not addressed at the server.";
+            error = Loc.GetString("engine-vv-error-not-server-path");
             return false;
         }
 
         if (path.Root.Kind == VVRootKind.Detached)
         {
-            error = "Detached roots are local-only.";
+            error = Loc.GetString("engine-vv-error-detached-local-only");
             return false;
         }
 
         var netEnt = new NetEntity(path.Root.Uid);
         if (!_entMan.TryGetEntity(netEnt, out var uid))
         {
-            error = $"{netEnt} does not exist here.";
+            error = Loc.GetString("engine-vv-error-net-entity-missing", ("netEntity", netEnt));
             return false;
         }
 
