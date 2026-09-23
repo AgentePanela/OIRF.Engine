@@ -97,6 +97,9 @@ internal sealed partial class NetManager : INetManager
         config.EnableMessageType(NetIncomingMessageType.ErrorMessage);
         config.EnableMessageType(NetIncomingMessageType.ConnectionApproval);
 
+        config.SendBufferSize = _configMan.Get(NetworkingCvars.NetSendBufferSize);
+        config.ReceiveBufferSize = _configMan.Get(NetworkingCvars.NetReceiveBufferSize);
+
         config.ConnectionTimeout = _configMan.Get(NetworkingCvars.NetConnectionTimeout);
         config.MaximumConnections = _configMan.Get(NetworkingCvars.NetMaxConnections);
 

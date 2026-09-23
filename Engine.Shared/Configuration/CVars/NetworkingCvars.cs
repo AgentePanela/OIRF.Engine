@@ -76,4 +76,16 @@ public static class NetworkingCvars
     /// </summary>
     public static readonly CVarDef<float> NetPingInterval =
         CVarDef.Create("net.ping-interval", 4.0f, CVar.REPLICATED | CVar.SERVER);
+
+    /// <summary>
+    /// Send buffer size on the UDP sockets used for main game networking.
+    /// </summary>
+    public static readonly CVarDef<int> NetSendBufferSize =
+        CVarDef.Create("net.send-buffersize", 131071);
+
+    /// <summary>
+    /// Receive buffer size on the UDP sockets used for main game networking.
+    /// </summary>
+    public static readonly CVarDef<int> NetReceiveBufferSize =
+        CVarDef.Create("net.receive-buffersize", 131071);
 }

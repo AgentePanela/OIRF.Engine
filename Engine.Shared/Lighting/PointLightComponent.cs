@@ -6,34 +6,34 @@ namespace Engine.Shared.Lighting;
 /// <summary>
 /// Represents a point light source.
 /// </summary>
-[RegisterComponent("PointLight")]
-public sealed class PointLightComponent : Component, IRadialLight
+[RegisterComponent("PointLight"), NetworkedComponent]
+public sealed partial class PointLightComponent : Component, IRadialLight
 {
-    public Color Color { get; set; } = Color.White;
-    public float Radius { get; set; } = 256f;
-    public float Intensity { get; set; } = 1f;
+    [NetField] public Color Color { get; set; } = Color.White;
+    [NetField] public float Radius { get; set; } = 256f;
+    [NetField] public float Intensity { get; set; } = 1f;
 
     /// <summary>
     /// When true, the light is occluded by world geometry and casts shadows.
     /// </summary>
-    public bool CastShadows { get; set; } = true;
+    [NetField] public bool CastShadows { get; set; } = true;
 
     /// <summary>
     /// Local offset relative to the entity transform.
     /// </summary>
-    public Vector2 Offset { get; set; } = Vector2.Zero;
+    [NetField] public Vector2 Offset { get; set; } = Vector2.Zero;
 
     /// <summary>
     /// Falloff curve. Quadratic is the most physical, linear is faster.
     /// </summary>
-    public FalloffMode Falloff { get; set; } = FalloffMode.Quadratic;
+    [NetField] public FalloffMode Falloff { get; set; } = FalloffMode.Quadratic;
 
     /// <summary>
     /// Softness multiplier for the shadow PCF kernel. 0 = hard edges
     /// (single-sample), 1 = default soft penumbra, larger = wider.
     /// Combined with <see cref="LightingManager.LightSoftness"/>.
     /// </summary>
-    public float Softness { get; set; } = 1.0f;
+    [NetField] public float Softness { get; set; } = 1.0f;
 }
 
 public enum FalloffMode

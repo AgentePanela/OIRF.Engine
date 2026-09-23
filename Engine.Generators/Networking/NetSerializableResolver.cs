@@ -96,6 +96,10 @@ internal static class NetSerializableResolver
                 new List<string> { $"buffer.WriteVariableInt32({entMan}.GetNetEntity({accessPath}).Id);" });
         }
 
+        var protoIdPlan = GetProtoIdPlan(type, typeName, accessPath);
+        if (protoIdPlan is not null)
+            return protoIdPlan;
+
         // Small math types are sent field by field instead of going through NetSerializer (a MemoryStream per value)
         var mathPlan = GetMathPlan(typeName, accessPath);
         if (mathPlan is not null)
@@ -119,6 +123,32 @@ internal static class NetSerializableResolver
         var writeLine = $"global::Engine.Shared.Networking.NetFallbackHelpers.Write(buffer, {accessPath});";
         var readExpr = $"global::Engine.Shared.Networking.NetFallbackHelpers.Read<{typeName}>(buffer)";
         return new FieldPlan(readExpr, new List<string> { writeLine });
+    }
+
+    private static readonly Dictionary<string, string> CollectionReadHelpers = new()
+    {
+        ["System.Collections.Generic.List<T>"] = "ReadList",
+        ["System.Collections.Generic.HashSet<T>"] = "ReadHashSet",
+    };
+
+    /// <summary>
+    /// ProtoId and ProtoId&lt;T&gt; are both a single string underneath.
+    /// </summary>
+    private static FieldPlan? GetProtoIdPlan(ITypeSymbol type, string typeName, string accessPath)
+    {
+        if (typeName == "ProtoId")
+            return new FieldPlan("new global::ProtoId(buffer.ReadString())", new List<string> { $"buffer.Write({accessPath}.Value);" });
+
+        if (type is not INamedTypeSymbol { TypeArguments.Length: 1 } named ||
+            named.OriginalDefinition.ToDisplayString() != "ProtoId<T>")
+        {
+            return null;
+        }
+
+        var argName = named.TypeArguments[0].ToDisplayString();
+        return new FieldPlan(
+            $"new global::ProtoId<global::{argName}>(buffer.ReadString())",
+            new List<string> { $"buffer.Write({accessPath}.Id);" });
     }
 
     private static FieldPlan? GetMathPlan(string typeName, string accessPath)
@@ -183,10 +213,10 @@ internal static class NetSerializableResolver
             readHelper = "ReadArray";
         }
         else if (type is INamedTypeSymbol { TypeArguments.Length: 1 } namedType &&
-                 namedType.OriginalDefinition.ToDisplayString() == "System.Collections.Generic.List<T>")
+                 CollectionReadHelpers.TryGetValue(namedType.OriginalDefinition.ToDisplayString(), out var helper))
         {
             elementType = namedType.TypeArguments[0];
-            readHelper = "ReadList";
+            readHelper = helper;
         }
         else
         {

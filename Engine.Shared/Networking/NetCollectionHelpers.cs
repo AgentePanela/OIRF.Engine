@@ -26,6 +26,16 @@ public static class NetCollectionHelpers
         return list;
     }
 
+    public static HashSet<T> ReadHashSet<T>(NetBuffer buffer, Func<NetBuffer, T> readItem)
+    {
+        var count = buffer.ReadVariableInt32();
+        var set = new HashSet<T>(count);
+        for (var i = 0; i < count; i++)
+            set.Add(readItem(buffer));
+
+        return set;
+    }
+
     public static T[] ReadArray<T>(NetBuffer buffer, Func<NetBuffer, T> readItem)
     {
         var count = buffer.ReadVariableInt32();

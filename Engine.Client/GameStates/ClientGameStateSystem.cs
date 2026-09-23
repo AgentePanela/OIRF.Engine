@@ -21,7 +21,7 @@ public sealed partial class ClientGameStateSystem : EntitySystem, IGameStateAppl
     [Dependency] private readonly INetManager _net = default!;
     [Dependency] private readonly IGameTiming _timing = default!;
     [Dependency] private readonly ComponentFactory _compFac = default!;
-    [Dependency] private readonly SceneManager _sceneMan = default!;
+    //[Dependency] private readonly SceneManager _sceneMan = default!;
     [Dependency] private readonly IRoomManager _rooms = default!;
     [Dependency] private readonly ClientGameStateMetrics _metrics = default!;
 

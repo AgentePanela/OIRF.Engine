@@ -67,8 +67,8 @@ public sealed partial class ClientGameStateSystem
             return;
 
         var uid = entering.ProtoId.Length == 0
-            ? CreateEmptyEntity(null, _sceneMan.CurrentScene)
-            : CreateEntity(entering.ProtoId, _sceneMan.CurrentScene);
+            ? CreateEmptyEntity(null/*, _sceneMan.CurrentScene*/)
+            : CreateEntity(entering.ProtoId/*, _sceneMan.CurrentScene*/);
 
         _entManager.RegisterNetEntity(uid, entering.NetEntity);
         _entering.Add(entering.NetEntity);

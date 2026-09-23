@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
 using Engine.Shared.Serializer.TypeSerializers;
 using NetSerializer;
 
@@ -13,7 +15,8 @@ internal sealed class SerializerManager : ISerializationManager
 {
     private NetSerializer.Serializer? _serializer;
     private List<Type> _types = new();
-    public List<ITypeSerializer> CustomSerializers { get; set; } = new() { new MonoGameTypeSerializer() };
+    private string _hash = string.Empty;
+    public List<ITypeSerializer> CustomSerializers { get; set; } = new() { new MonoGameTypeSerializer(), new HashSetTypeSerializer() };
 
     public void Init(IEnumerable<Assembly> assemblies)
     {
@@ -45,8 +48,9 @@ internal sealed class SerializerManager : ISerializationManager
         };
 
         _serializer = new NetSerializer.Serializer(_types, settings);
+        _hash = BuildHash();
 
-        Log.Debug($"Serializer hash: {GetHash()}");
+        Log.Debug($"Serializer types: {_types.Count}, hash: {_hash}");
     }
 
     public void Serialize(Stream stream, object message)
@@ -56,7 +60,27 @@ internal sealed class SerializerManager : ISerializationManager
         => Instance.Deserialize(stream);
 
     public string GetHash()
-        => Instance.GetSHA256();
+    {
+        if (_serializer is null)
+            throw new InvalidOperationException("SerializerManager is not inited!");
+
+        return _hash;
+    }
+
+    private string BuildHash()
+    {
+        // net serializer always return a empty hash :(
+        var sb = new StringBuilder();
+        foreach (var type in _types)
+        {
+            if (type.IsEnum)
+                continue;
+
+            sb.Append(type.FullName).Append(';');
+        }
+
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString())));
+    }
 
     public void SelfTest()
     {
