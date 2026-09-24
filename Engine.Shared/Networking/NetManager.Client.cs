@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using Engine.Shared.GameObjects.Factories;
+using Engine.Shared.IoC;
 using Lidgren.Network;
 
 namespace Engine.Shared.Networking;
@@ -42,6 +44,7 @@ internal sealed partial class NetManager : INetManager
 
         var msg = Client.CreateMessage();
         msg.Write(_seriMan.GetHash());
+        msg.Write(_compFac.GetNetworkedHash());
         msg.Write(hailMessage is not null);
         if (hailMessage is not null)
             hailMessage?.WriteToBuffer(msg);

@@ -40,7 +40,7 @@ internal sealed class NetSession : INetSession
         var outgoing = _connection.Peer.CreateMessage();
         outgoing.Write(message.GetType().FullName); // message header
         message.WriteToBuffer(outgoing); // generatedd
-        _connection.Peer.SendMessage(outgoing, _connection, message.DeliveryMethod.ToLidgren());
+        _connection.Peer.SendMessage(outgoing, _connection, message.DeliveryMethod.ToLidgren(outgoing.LengthBits));
     }
 
     public void Disconnect(string reason) => _connection.Disconnect(reason);

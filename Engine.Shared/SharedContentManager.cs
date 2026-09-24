@@ -74,6 +74,7 @@ public sealed class SharedContentManager
         IoCManager.Resolve<ViewVariablesManager>().Init();
         IoCManager.Resolve<IPrototypeManager>().Load();
         IoCManager.Resolve<SharedAudioManifest>().Load();
+        IoCManager.Resolve<INetManager>().Init();
 
         var serializerMan = IoCManager.Resolve<ISerializationManager>();
         serializerMan.Init(_assemblies);

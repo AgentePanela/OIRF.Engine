@@ -5,32 +5,32 @@ namespace Engine.Shared.Lighting;
 /// <summary>
 /// Marks an entity as a light occluder.
 /// </summary>
-[RegisterComponent("Occluder")]
-public sealed class OccluderComponent : Component
+[RegisterComponent("Occluder"), NetworkedComponent]
+public sealed partial class OccluderComponent : Component
 {
     /// <summary>
     /// Shape of the occluder used for shadow casting.
     /// </summary>
-    public OccluderShape Shape { get; set; } = OccluderShape.Rectangle;
+    [NetField] public OccluderShape Shape { get; set; } = OccluderShape.Rectangle;
 
     /// <summary>
     /// Local offset relative to the entity transform. Lets the mask sit off
     /// center, e.g. a thin strip along the top of a tall sprite instead of
     /// the sprite's full footprint.
     /// </summary>
-    public Microsoft.Xna.Framework.Vector2 Offset { get; set; } = Microsoft.Xna.Framework.Vector2.Zero;
+    [NetField] public Microsoft.Xna.Framework.Vector2 Offset { get; set; } = Microsoft.Xna.Framework.Vector2.Zero;
 
     /// <summary>
     /// Radius (in world units) of the occluder. Used when
     /// <see cref="Shape"/> is <see cref="OccluderShape.Circle"/>.
     /// </summary>
-    public float Radius { get; set; } = 32f;
+    [NetField] public float Radius { get; set; } = 32f;
 
     /// <summary>
     /// Width/height (in world units) of the occluder. Used when
     /// <see cref="Shape"/> is <see cref="OccluderShape.Rectangle"/>.
     /// </summary>
-    public Microsoft.Xna.Framework.Vector2 Size { get; set; } = new(64, 64);
+    [NetField] public Microsoft.Xna.Framework.Vector2 Size { get; set; } = new(64, 64);
 
     /// <summary>
     /// Half-extent last resolved for a <see cref="OccluderShape.Sprite"/>

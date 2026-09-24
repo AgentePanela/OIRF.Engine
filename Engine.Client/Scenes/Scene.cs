@@ -5,10 +5,10 @@ using Engine.Client.Graphics;
 using Engine.Client.UI;
 using Engine.Shared.GameObjects;
 using Engine.Shared.IoC;
+using Engine.Shared.Prototypes;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace Engine.Client.Scenes;
@@ -35,9 +35,7 @@ public abstract class Scene : IEntityScene, IDisposable
     [Dependency] protected EntityManager _entManager;
     public Color? BackgroundColor;
     public bool IsDisposed { get; private set; }
-    public ConcurrentDictionary<EntityUid, Entity> Entities { get; private set; } = new();
-    public int EntUidIndex { get; set; } = 0;
-    public ConcurrentDictionary<Type, Dictionary<EntityUid, Component>> Components { get; private set; } = new();
+    public HashSet<EntityUid> OwnedEntities { get; } = new();
 
     /// <summary>
     /// Scene's own HUD/Overlay displayed after the game world.
@@ -74,8 +72,7 @@ public abstract class Scene : IEntityScene, IDisposable
             if (Layout is not null)
                 GameClient.InterfaceManager.RemoveChild(Layout);
 
-            Components.Clear();
-            Entities.Clear();
+            _entManager.WipeEntities(this);
             //UnloadContent();
             //Content.Dispose();
         }
@@ -87,9 +84,6 @@ public abstract class Scene : IEntityScene, IDisposable
         IoCManager.ResolveDependencies(this);
         _content = GameClient.Content;
         _game = GameClient.Instance;
-        _entManager.ForceScene(this);
-
-        BootstrapLoadedEntities();
 
         OnSceneStart();
 
@@ -97,53 +91,23 @@ public abstract class Scene : IEntityScene, IDisposable
             GameClient.InterfaceManager.AddChild(Layout);
     }
 
-    internal Entity CreateLoadedEntity(string? name = default)
+    // ==== entities (owned by this scene, not global - see EntityManager for the raw API)
+
+    /// <inheritdoc cref="EntityManager.CreateEmptyEntity(string?, IEntityScene?)"/>
+    protected EntityUid CreateEmptyEntity(string? name = default)
+        => _entManager.CreateEmptyEntity(name, this);
+
+    /// <inheritdoc cref="EntityManager.CreateEntity(ProtoId{EntityPrototype}, IEntityScene?, string?)"/>
+    protected EntityUid CreateEntity(ProtoId<EntityPrototype> protoId, string? nameOverride = null)
+        => _entManager.CreateEntity(protoId, this, nameOverride);
+
+    /// <inheritdoc cref="CreateEntity(ProtoId{EntityPrototype}, string?)"/>
+    protected EntityUid CreateEntity(ProtoId<EntityPrototype> protoId, Vector2 pos, string? nameOverride = null)
     {
-        var uid = new EntityUid(++EntUidIndex);
-        var entity = string.IsNullOrWhiteSpace(name)
-            ? new Entity(uid)
-            : new Entity(uid, name);
-
-        entity.SetScene(this);
-        Entities[uid] = entity;
-        return entity;
-    }
-
-    internal void AttachLoadedComponent(EntityUid uid, Component comp)
-    {
-        if (!Entities.ContainsKey(uid))
-            throw new InvalidOperationException($"Cannot attach component '{comp.GetType().Name}' to unknown entity '{uid}'.");
-
-        var pool = Components.GetOrAdd(comp.GetType(), _ => new Dictionary<EntityUid, Component>());
-
-        if (pool.ContainsKey(uid))
-            throw new InvalidOperationException($"Entity '{uid}' already has component '{comp.GetType().Name}'.");
-
-        comp.Owner = uid;
-        comp.State = Component.CompState.Running;
-        pool[uid] = comp;
-    }
-
-    private void BootstrapLoadedEntities()
-    {
-        if (Entities.Count == 0)
-            return;
-
-        foreach (var (uid, _) in Entities)
-        {
-            foreach (var pool in Components.Values)
-            {
-                if (!pool.TryGetValue(uid, out var comp))
-                    continue;
-
-                _entManager.EventBus.RaiseEvent(uid, new CompAddedEvent()
-                {
-                    Component = comp
-                });
-            }
-
-            _entManager.EventBus.RaiseEvent(uid, new EntityAddedEvent());
-        }
+        var uid = CreateEntity(protoId, nameOverride);
+        var trans = _entManager.EnsureComp<TransformComponent>(uid);
+        trans.Position = pos;
+        return uid;
     }
 
     /// <summary>

@@ -13,7 +13,6 @@ namespace Engine.Client.Scenes;
 /// </summary>
 public sealed class SceneManager : DrawableGameComponent
 {    
-    [Dependency] private readonly EntityManager _entMan = default!;
     public Scene? CurrentScene {get; private set;}
     private Scene? _nextScene;
     public event SceneChangeAction? OnBeforeSceneChange;
@@ -125,7 +124,6 @@ public sealed class SceneManager : DrawableGameComponent
             throw new Exception("Current scene is null during a scene transition!");
         
         OnBeforeSceneInit?.Invoke(CurrentScene!);
-        _entMan.ForceScene(CurrentScene);
         CurrentScene?.Initialize();
         OnSceneChanged?.Invoke(CurrentScene!);
     }

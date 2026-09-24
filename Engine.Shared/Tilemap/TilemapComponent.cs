@@ -5,22 +5,22 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace Engine.Shared.Tilemap;
 
-[RegisterComponent("Tilemap")]
-public sealed class TilemapComponent : Component
+[RegisterComponent("Tilemap"), NetworkedComponent]
+public sealed partial class TilemapComponent : Component
 {
-    public int TileSize { get; set; } = 128;
-    public int ChunkSize { get; set; } = 16;
-    public int Layer { get; set; } = 0;
+    [NetField] public int TileSize { get; set; } = 128;
+    [NetField] public int ChunkSize { get; set; } = 16;
+    [NetField] public int Layer { get; set; } = 0;
 
     #region  Client-Side
     public SamplerState? SamplerState { get; set; }
     public bool TileBlending { get; set; } = true;
     
-    [ShaderKey]
+    [ShaderKey, NetField]
     public string? Shader { get; set; }
     #endregion
 
-    public Dictionary<(int, int), TilemapChunk> Chunks { get; } = new();
+    public Dictionary<(int, int), TilemapChunk> Chunks { get; set; } = new();
 }
 
 public sealed class TilemapChunk

@@ -11,6 +11,7 @@ using Engine.Client.UI;
 using Engine.Client.UI.Debug;
 //using Engine.Client.UI.Fonts;
 using Engine.Client.Scenes;
+using Engine.Client.Rooms;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Content;
 using Microsoft.Xna.Framework.Graphics;
@@ -108,6 +109,7 @@ public class GameClient : Game
     public static WindowManager WindowManager { get; private set; }
     public static ILocalizationManager LocalizationManager { get; private set; }
     public static INetManager Networking { get; private set; }
+    public static IRoomManager RoomManager { get; private set; }
     
     public static IGameTiming Timing { get; private set; }
     public static GameState GameState = GameState.Booting;
@@ -170,6 +172,7 @@ public class GameClient : Game
         IoCManager.Register<IVirtualKeyboard, NullVirtualKeyboard>(); // platform-specific mobile backends override this
         IoCManager.Register<UIManager>();
         IoCManager.Register<WindowManager>();
+        IoCManager.Register<IRoomManager, RoomManager>();
 
         IoCManager.AutoRegister(Assembly.GetExecutingAssembly());
 
@@ -189,6 +192,7 @@ public class GameClient : Game
         ConfigManager = IoCManager.Resolve<IConfigurationManager>();
         LocalizationManager = IoCManager.Resolve<ILocalizationManager>();
         Networking = IoCManager.Resolve<INetManager>();
+        RoomManager = IoCManager.Resolve<IRoomManager>();
 
         ConfigManager.ForceDefaultValue(GameCVars.GameVersion, Options.Version);
         ConfigManager.ForceDefaultValue(GameCVars.ResolutionWidth, Options.Width);
@@ -200,7 +204,8 @@ public class GameClient : Game
 
         sharedContent.PostInit();
         InputManager.Init();
-        
+        RoomManager.Init();
+
         var display = GraphicsAdapter.DefaultAdapter.CurrentDisplayMode;
         if (Options.Width > display.Width || Options.Height > display.Height)
         {

@@ -1,5 +1,7 @@
 using System;
 using System.Net;
+using Engine.Shared.GameObjects.Factories;
+using Engine.Shared.IoC;
 using Lidgren.Network;
 
 namespace Engine.Shared.Networking;
@@ -16,7 +18,13 @@ internal sealed partial class NetManager : INetManager
             args.Deny(Loc.GetString("engine-netman-server-hail-fail-hash-not-sync-reason"));
             return false;
         }
-        
+
+        if (args.ComponentHash != _compFac.GetNetworkedHash())
+        {
+            args.Deny(Loc.GetString("engine-netman-server-hail-fail-components-not-sync-reason"));
+            return false;
+        }
+
         args.Approve();
         return true;
     }
@@ -29,6 +37,7 @@ public sealed class NetConnectingArgs : EventArgs
 {
     public IPEndPoint RemoteEndPoint { get; }
     public string SerializerHash { get; }
+    public string ComponentHash { get; }
     public bool IsDenied { get; private set; }
     public string? DenyReason { get; private set; }
 
@@ -40,6 +49,7 @@ public sealed class NetConnectingArgs : EventArgs
     {
         RemoteEndPoint = remoteEndPoint;
         SerializerHash = rawMessage.ReadString();
+        ComponentHash = rawMessage.ReadString();
         _hasMessage = rawMessage.ReadBoolean();
         _rawMessage = rawMessage;
     }

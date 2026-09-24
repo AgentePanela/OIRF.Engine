@@ -4,6 +4,7 @@ using System;
 
 namespace Engine.Shared.Physics.Fixtures;
 
+[Serializable]
 public abstract class CollisionShape
 {
     public Vector2 Offset { get; set; } = Vector2.Zero;
@@ -21,6 +22,7 @@ public abstract class CollisionShape
         out float minX, out float minY, out float maxX, out float maxY);
 }
 
+[Serializable]
 public sealed class BoxShape : CollisionShape
 {
     public Vector2 Size { get; set; } = Vector2.One;
@@ -63,6 +65,7 @@ public sealed class BoxShape : CollisionShape
     // }
 }
 
+[Serializable]
 public sealed class CircleShape : CollisionShape
 {
     public float Radius { get; set; } = 1f;
@@ -94,6 +97,7 @@ public sealed class CircleShape : CollisionShape
     // }
 }
 
+[Serializable]
 public sealed class PolygonShape : CollisionShape
 {
     public Vector2[] Vertices { get; set; } = Array.Empty<Vector2>();

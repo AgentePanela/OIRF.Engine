@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using Engine.Shared.GameObjects;
@@ -82,12 +83,14 @@ public static class ViewVariablesConvert
                 null => "null",
                 string s => s,
                 IDictionary or IEnumerable => value.GetType().Name,
+                // invariant, because TryParse below is invariant
+                IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
                 var raw => raw.ToString() ?? "null",
             };
         }
         catch (Exception ex)
         {
-            return $"<error: {ex.Message}>";
+            return Loc.GetString("engine-vv-error-text", ("message", ex.Message));
         }
     }
 
@@ -119,7 +122,7 @@ public static class ViewVariablesConvert
             if (!EntityUid.TryParse(text, out var uid))
             {
                 value = null;
-                error = $"'{text}' is not a valid entity uid.";
+                error = Loc.GetString("engine-vv-error-invalid-uid", ("text", text));
                 return false;
             }
 

@@ -17,14 +17,14 @@ public static class NetworkingCvars
     /// Applies live to already-running peers (NetManager subscribes to it) - no restart needed.
     /// </summary>
     public static readonly CVarDef<float> NetConnectionTimeout =
-        CVarDef.Create("net.connection_timeout", 25.0f, CVar.SERVER | CVar.REPLICATED);
+        CVarDef.Create("net.connection-timeout", 25.0f, CVar.SERVER | CVar.REPLICATED);
 
     /// <summary>
     /// Hard max-cap of concurrent connections for the main game networking. Lidgren locks this once the
     /// peer has started, so changing it only takes effect on the next StartServer call.
     /// </summary>
     public static readonly CVarDef<int> NetMaxConnections =
-        CVarDef.Create("net.max_connections", 128, CVar.REPLICATED | CVar.SERVER);
+        CVarDef.Create("net.max-connections", 128, CVar.REPLICATED | CVar.SERVER);
 
     /// <summary>
     /// Simulated chance (0.0 to 1.0) that an outgoing packet is dropped. Local testing tool, not replicated -
@@ -32,14 +32,14 @@ public static class NetworkingCvars
     /// Applies live to an already-running peer - no restart needed.
     /// </summary>
     public static readonly CVarDef<float> NetFakeLoss =
-        CVarDef.Create("net.fake_loss", 0f);
+        CVarDef.Create("net.fake-loss", 0f);
 
     /// <summary>
     /// Minimum simulated one-way latency (in seconds) added to outgoing packets. Local testing tool, not replicated.
     /// Applies live to an already-running peer - no restart needed.
     /// </summary>
     public static readonly CVarDef<float> NetFakeLagMin =
-        CVarDef.Create("net.fake_lag_min", 0f);
+        CVarDef.Create("net.fake-lag-min", 0f);
 
     /// <summary>
     /// Extra random one-way latency (in seconds, uniform between 0 and this value on top of
@@ -47,14 +47,14 @@ public static class NetworkingCvars
     /// Applies live to an already-running peer - no restart needed.
     /// </summary>
     public static readonly CVarDef<float> NetFakeLagRandom =
-        CVarDef.Create("net.fake_lag_random", 0f);
+        CVarDef.Create("net.fake-lag-random", 0f);
 
     /// <summary>
     /// Simulated chance (0.0 to 1.0) that an outgoing packet is duplicated. Local testing tool, not replicated.
     /// Applies live to an already-running peer - no restart needed.
     /// </summary>
     public static readonly CVarDef<float> NetFakeDuplicates =
-        CVarDef.Create("net.fake_duplicates", 0f);
+        CVarDef.Create("net.fake-duplicates", 0f);
 
     /// <summary>
     /// Whether to attempt UPnP port forwarding automatically (useful for self-hosted servers behind a router
@@ -64,9 +64,28 @@ public static class NetworkingCvars
         CVarDef.Create("net.upnp", false, CVar.SERVERONLY);
 
     /// <summary>
+    /// How many ticks a session can go without asking for a game state before the next one is sent reliably. so if a client
+    /// that is dropping packets is not left behind forever.
+    /// </summary>
+    public static readonly CVarDef<int> NetForceAckThreshold =
+        CVarDef.Create("net.force-ack-after", 60, CVar.SERVERONLY);
+
+    /// <summary>
     /// How often (in seconds) connected peers ping each other to measure round-trip time.
     /// Applies live to already-running peers (NetManager subscribes to it) - no restart needed.
     /// </summary>
     public static readonly CVarDef<float> NetPingInterval =
-        CVarDef.Create("net.ping_interval", 4.0f, CVar.REPLICATED | CVar.SERVER);
+        CVarDef.Create("net.ping-interval", 4.0f, CVar.REPLICATED | CVar.SERVER);
+
+    /// <summary>
+    /// Send buffer size on the UDP sockets used for main game networking.
+    /// </summary>
+    public static readonly CVarDef<int> NetSendBufferSize =
+        CVarDef.Create("net.send-buffersize", 131071);
+
+    /// <summary>
+    /// Receive buffer size on the UDP sockets used for main game networking.
+    /// </summary>
+    public static readonly CVarDef<int> NetReceiveBufferSize =
+        CVarDef.Create("net.receive-buffersize", 131071);
 }

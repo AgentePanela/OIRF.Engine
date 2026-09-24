@@ -1,14 +1,15 @@
+using System;
 using Engine.Shared.GameObjects;
 using System.Collections.Generic;
 
 namespace Engine.Shared.Physics.Fixtures;
 
-[RegisterComponent("Collision")]
-public sealed class CollisionComponent : Component
+[RegisterComponent("Collision"), NetworkedComponent]
+public sealed partial class CollisionComponent : Component
 {
-    public Dictionary<string, CollisionFixture> Fixtures { get; set; } = new();
+    [NetField] public Dictionary<string, CollisionFixture> Fixtures { get; set; } = new();
 
-    public bool Active { get; set; } = true;
+    [NetField] public bool Active { get; set; } = true;
  
     public CollisionFixture? GetFixture(string id)
         => Fixtures.GetValueOrDefault(id);
@@ -23,6 +24,7 @@ public sealed class CollisionComponent : Component
         => Fixtures.Remove(id);
 }
 
+[Serializable]
 public sealed class CollisionFixture
 {
     public CollisionShape Shape { get; set; } = new BoxShape();

@@ -25,7 +25,7 @@ public abstract class NetMessage
 /// </summary>
 public static class NetFallbackHelpers
 {
-    public static void Write<T>(NetOutgoingMessage buffer, T value)
+    public static void Write<T>(NetBuffer buffer, T value)
     {
         using var ms = new MemoryStream();
         IoCManager.Resolve<ISerializationManager>().Serialize(ms, value!);
@@ -33,7 +33,7 @@ public static class NetFallbackHelpers
         buffer.Write(ms.GetBuffer(), 0, (int)ms.Length);
     }
 
-    public static T Read<T>(NetIncomingMessage buffer)
+    public static T Read<T>(NetBuffer buffer)
     {
         var length = buffer.ReadVariableInt32();
         var bytes = buffer.ReadBytes(length);

@@ -88,6 +88,45 @@ public readonly struct EntityUid : IEquatable<EntityUid>, IComparable<EntityUid>
     }
 }
 
+/// <summary>
+/// The ID of an entity over the network. Used by networking to recognise a netid into a entity uid
+/// </summary>
+[Serializable]
+public readonly struct NetEntity : IEquatable<NetEntity>, IComparable<NetEntity>, ISpanFormattable
+{
+    public readonly int Id;
+
+    /// <summary>
+    /// An Invalid net entity you can compare against. It is also default.
+    /// </summary>
+    public static readonly NetEntity Invalid = new(0);
+
+    public static bool operator ==(NetEntity l, NetEntity r) => l.Id == r.Id;
+    public static bool operator !=(NetEntity l, NetEntity r) => l.Id != r.Id;
+
+    public NetEntity(int id)
+    {
+        Id = id;
+    }
+
+    public bool IsValid => Id > 0;
+
+    public int CompareTo(NetEntity other) => Id.CompareTo(other.Id);
+
+    public bool Equals(NetEntity other) => Id == other.Id;
+
+    public override bool Equals(object? obj) => obj is NetEntity other && Equals(other);
+
+    public override int GetHashCode() => Id;
+
+    public override string ToString() => Id.ToString();
+
+    public string ToString(string? format, IFormatProvider? formatProvider) => Id.ToString();
+
+    public bool TryFormat(Span<char> destination, out int charsWritten, ReadOnlySpan<char> format, IFormatProvider? provider)
+        => Id.TryFormat(destination, out charsWritten);
+}
+
 [Serializable]
 public readonly record struct ProtoId(string Value);
 

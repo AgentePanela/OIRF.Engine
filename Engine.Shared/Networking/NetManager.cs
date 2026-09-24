@@ -6,6 +6,8 @@ using System.Linq;
 using System.Net;
 using Engine.Shared.Configuration;
 using Engine.Shared.Configuration.CVars;
+using Engine.Shared.GameObjects.Factories;
+using Engine.Shared.GameStates;
 using Engine.Shared.IoC;
 using Engine.Shared.Serializer;
 using Lidgren.Network;
@@ -17,7 +19,8 @@ internal sealed partial class NetManager : INetManager
     [Dependency] private readonly ISerializationManager _seriMan = default!;
     [Dependency] private readonly IConfigurationManager _configMan = default!; // registered before INetManager (see SharedContentManager.Init) - safe to resolve here
     [Dependency] private readonly SharedContentManager _sharedContent = default!; // registered even earlier, by GameServer/GameClient - also safe here
-    
+    [Dependency] private readonly ComponentFactory _compFac = default!;
+
     public NetServer? Server { get; private set; }= default;
     public NetClient? Client { get; private set; } = default;
 
@@ -36,10 +39,14 @@ internal sealed partial class NetManager : INetManager
 
     public IReadOnlyList<INetSession> Sessions => _sessions.Values.ToList();
 
-    public NetManager()
+    void INetManager.Init()
     {
         IoCManager.ResolveDependencies(this);
         RegisterNetMessage<ClientHandshakeMessage>(ClientHandshakeCompleted);
+
+        RegisterNetMessage<GameStateMessage>();
+        RegisterNetMessage<StateAckMessage>();
+        RegisterNetMessage<RequestFullStateMessage>();
 
         SubscribeLiveConfig(NetworkingCvars.NetFakeLoss, (c, v) => c.SimulatedLoss = v);
         SubscribeLiveConfig(NetworkingCvars.NetFakeLagMin, (c, v) => c.SimulatedMinimumLatency = v);
@@ -89,6 +96,9 @@ internal sealed partial class NetManager : INetManager
         config.EnableMessageType(NetIncomingMessageType.WarningMessage);
         config.EnableMessageType(NetIncomingMessageType.ErrorMessage);
         config.EnableMessageType(NetIncomingMessageType.ConnectionApproval);
+
+        config.SendBufferSize = _configMan.Get(NetworkingCvars.NetSendBufferSize);
+        config.ReceiveBufferSize = _configMan.Get(NetworkingCvars.NetReceiveBufferSize);
 
         config.ConnectionTimeout = _configMan.Get(NetworkingCvars.NetConnectionTimeout);
         config.MaximumConnections = _configMan.Get(NetworkingCvars.NetMaxConnections);

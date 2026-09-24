@@ -81,25 +81,22 @@ public sealed class EntityDebugTab
         _entityRows.Clear();
         _dirty = false;
 
-        var scene = _sceneManager.CurrentScene;
-        if (scene is null)
-        {
-            _entityInfo.Text = "No current scene";
-            return;
-        }
+        var entities = _entManager.GetEntities();
 
         var filter = _searchBox.Text.Trim().ToLowerInvariant();
-        if (filter.Length == 0)
-        {
-            _entityInfo.Text = $"Type to search ({scene.Entities.Count} entities)";
-            return;
-        }
+        // if (filter.Length == 0)
+        // {
+        //     _entityInfo.Text = $"Type to search ({entities.Count} entities)";
+        //     return;
+        // }
 
         var count = 0;
-        foreach (var kv in scene.Entities.OrderBy(k => k.Key.Id))
+        foreach (var uid in entities.OrderBy(u => u.Id))
         {
-            var uid = kv.Key;
-            var ent = kv.Value;
+            var ent = _entManager.GetEntity(uid);
+            if (ent is null)
+                continue;
+
             var display = string.IsNullOrWhiteSpace(ent.Name) ? $"Entity {uid.Id}" : $"{ent.Name} ({uid.Id})";
 
             if (!display.ToLowerInvariant().Contains(filter))

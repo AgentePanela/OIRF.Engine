@@ -10,7 +10,7 @@ public sealed partial class ViewVariablesWindow
     private ClickCatcher? _addComponentCatcher;
     private PanelContainer? _addComponentPopup;
 
-    private void ToggleAddComponentPopup(Button anchor)
+    private void ToggleAddComponentPopup(Button anchor, SideView side)
     {
         if (_addComponentPopup is not null)
         {
@@ -18,12 +18,12 @@ public sealed partial class ViewVariablesWindow
             return;
         }
 
-        OpenAddComponentPopup(anchor);
+        OpenAddComponentPopup(anchor, side);
     }
 
-    private void OpenAddComponentPopup(Button anchor)
+    private void OpenAddComponentPopup(Button anchor, SideView side)
     {
-        var addable = IoCManager.Resolve<ViewVariablesManager>().GetAddableComponents(new EntityUid(_path.Root.Uid));
+        var addable = side.Access.GetAddableComponents(side.Path.Root);
 
         var windows = IoCManager.Resolve<WindowManager>();
 
@@ -32,7 +32,7 @@ public sealed partial class ViewVariablesWindow
         windows.WindowRoot.AddChild(_addComponentCatcher);
         LayoutContainer.SetAnchorPreset(_addComponentCatcher, LayoutPreset.Wide);
 
-        var search = new LineEdit { PlaceholderText = "Search component...", HorizontalExpand = true };
+        var search = new LineEdit { PlaceholderText = Loc.GetString("engine-vv-search-component"), HorizontalExpand = true };
         var list = new ItemList { VerticalExpand = true, HorizontalExpand = true };
 
         void Populate(string filter)
@@ -46,7 +46,7 @@ public sealed partial class ViewVariablesWindow
         }
 
         search.OnTextChanged += Populate;
-        list.OnSelectionChanged += index => OnComponentPicked(list.GetItemText(index));
+        list.OnSelectionChanged += index => OnComponentPicked(list.GetItemText(index), side);
 
         Populate("");
 
@@ -62,14 +62,14 @@ public sealed partial class ViewVariablesWindow
         LayoutContainer.SetSize(_addComponentPopup, new(240, 280));
     }
 
-    private void OnComponentPicked(string name)
+    private void OnComponentPicked(string name, SideView side)
     {
         CloseAddComponentPopup();
 
-        if (IoCManager.Resolve<ViewVariablesManager>().TryAddComponent(new EntityUid(_path.Root.Uid), name, out var error))
-            Rebuild();
+        if (side.Access.TryAddComponent(side.Path.Root, name, out var error))
+            Rebuild(side);
         else
-            _statusLabel.Text = error ?? "couldn't add component";
+            _statusLabel.Text = error ?? Loc.GetString("engine-vv-fail-add-component");
     }
 
     private void CloseAddComponentPopup()

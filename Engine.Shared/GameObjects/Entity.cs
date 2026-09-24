@@ -2,6 +2,7 @@ using Engine.Shared.Debug.ViewVariables;
 using Engine.Shared.IoC;
 using Engine.Shared.Prototypes;
 using Engine.Shared.Threading;
+using Engine.Shared.Timing;
 using System.Text.Json.Serialization;
 
 namespace Engine.Shared.GameObjects;
@@ -32,10 +33,28 @@ public sealed class Entity
     public EntityUid Uid { get; private set; } = EntityUid.Empty;
 
     /// <summary>
+    /// The id of this entity over the network. <see cref="NetEntity.Invalid"/> if it is a client-only entity.
+    /// </summary>
+    [ViewVariablesReadOnly]
+    public NetEntity NetId { get; internal set; } = NetEntity.Invalid;
+
+    /// <summary>
     /// The prototype id that this entity has used while being created.
     /// </summary>
     [ViewVariablesReadOnly]
     public ProtoId<EntityPrototype> Id { get; private set; } = new ProtoId<EntityPrototype>();
+
+    /// <summary>
+    /// The tick this entity was created on.
+    /// </summary>
+    [ViewVariablesReadOnly]
+    public GameTick CreationTick { get; internal set; } = GameTick.Zero;
+
+    /// <summary>
+    /// The newest <see cref="Component.LastModifiedTick"/> of this entity components.
+    /// </summary>
+    [ViewVariablesReadOnly]
+    public GameTick LastModifiedTick { get; internal set; } = GameTick.Zero;
 
     /// <summary>
     /// Marks if this entity will be deleted in the next tick.
