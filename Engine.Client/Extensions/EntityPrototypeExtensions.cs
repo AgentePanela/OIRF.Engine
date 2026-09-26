@@ -4,6 +4,7 @@ using Engine.Client.Graphics;
 using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.IoC;
 using Engine.Shared.Prototypes;
+using Engine.Shared.Graphics;
 
 [EditorBrowsable(EditorBrowsableState.Never)]
 public static class EntityPrototypeExtensions
