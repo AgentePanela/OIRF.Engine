@@ -3,7 +3,7 @@ using Microsoft.Xna.Framework;
 
 namespace Engine.Shared.Physics;
 
-[RegisterComponent("Physics"), NetworkedComponent]
+[RegisterComponent("Physics"), NetworkedComponent, AutoDirty]
 public sealed partial class PhysicsComponent : Component
 {
     /// <summary>
@@ -12,29 +12,29 @@ public sealed partial class PhysicsComponent : Component
     /// Movement systems (player, AI) can write here or move the transform directly —
     /// but not both, to avoid double-moving.
     /// </summary>
-    [NetField] public Vector2 Velocity { get; set; } = Vector2.Zero;
+    [NetField] public partial Vector2 Velocity { get; set; } = Vector2.Zero;
 
     /// <summary>
     /// If true, this entity is never moved by collision resolution.
     /// The full push is transferred to the other body.
     /// </summary>
-    [NetField] public bool Static { get; set; } = false;
+    [NetField] public partial bool Static { get; set; } = false;
 
     /// <summary>
     /// Mass in kg. 
     /// todo: Reserved for future impulse-based resolution.
     /// </summary>
-    [NetField] public float Mass { get; set; } = 1f;
+    [NetField] public partial float Mass { get; set; } = 1f;
 
     /// <summary>
     /// Linear drag applied to Velocity every frame (0 = no drag, 1 = instant stop).
     /// Simulates ground friction without a full physics engine.
     /// </summary>
-    [NetField] public float Friction { get; set; } = 0.3f;
+    [NetField] public partial float Friction { get; set; } = 0.3f;
 
     /// <summary>
     /// Bounciness (0 = no bounce, 1 = perfect bounce). 
     /// todo: Reserved for future use.
     /// </summary>
-    [NetField] public float Restitution { get; set; } = 0f;
+    [NetField] public partial float Restitution { get; set; } = 0f;
 }

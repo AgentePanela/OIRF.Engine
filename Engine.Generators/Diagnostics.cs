@@ -7,4 +7,5 @@ public static class Diagnostics
     public const string MessageNotPartialID = "EA003";
     public const string NetworkedComponentInvalidID = "EA004";
     public const string NetworkedFieldInvalidID = "EA005";
+    public const string AutoDirtyCollectionID = "EA006";
 }

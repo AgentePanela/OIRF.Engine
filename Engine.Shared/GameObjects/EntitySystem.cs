@@ -135,6 +135,9 @@ public abstract class EntitySystem
     /// <inheritdoc cref="EntityManager.Dirty(EntityUid, Component)"/>
     protected void Dirty(EntityUid uid, Component comp) => _entManager.Dirty(uid, comp);
 
+    /// <inheritdoc cref="EntityManager.Dirty(Component, int)"/>
+    protected void Dirty(Component comp, int fieldIndex) => _entManager.Dirty(comp, fieldIndex);
+
     /// <inheritdoc cref="EntityManager.GetEntityComps(EntityUid)"/>
     public List<Component>? GetEntityComps(EntityUid uid)
         => _entManager.GetEntityComps(uid);

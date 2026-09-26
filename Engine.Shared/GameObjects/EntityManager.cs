@@ -34,6 +34,7 @@ public sealed partial class EntityManager
     public void Init()
     {
         IoCManager.ResolveDependencies(this);
+        Instance = this;
         EventBus = new EventBus();
         EventBus.Init();
     }
@@ -86,6 +87,7 @@ public sealed partial class EntityManager
                 foreach (var comp in snapshot)
                 {
                     EventBus.RaiseEvent(comp.Owner, new CompRemovedEvent() { Component = comp });
+                    RecordComponentRemoval(comp);
                     if (_components.TryGetValue(comp.GetType(), out var pool))
                         pool.Remove(comp.Owner);
                 }

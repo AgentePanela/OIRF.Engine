@@ -10,3 +10,4 @@ EA002 | Engine.Generators | Error | Unsupported type on a networked message prop
 EA003 | Engine.Generators | Warning | The message should be a partial class.
 EA004 | Engine.Generators | Error | Invalid [NetworkedComponent] - must be a top-level, non-generic partial class deriving directly from Component.
 EA005 | Engine.Generators | Error | Invalid [NetworkedField] - must be a property with a getter and a (non init-only) setter, or a non readonly/const field.
+EA006 | Engine.Generators | Warning | [AutoDirty] on a collection member only catches replacing the whole collection - mutating it in place still needs Dirty.

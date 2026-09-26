@@ -25,6 +25,14 @@ public sealed class NetFieldAttribute : Attribute
 }
 
 /// <summary>
+/// Make the property/field or component auto dirty when the setter of one NetField is called.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Property | AttributeTargets.Field, Inherited = false)]
+public sealed class AutoDirtyAttribute : Attribute
+{
+}
+
+/// <summary>
 /// Makes EntityManager.Systems ignore this system registry during loading.<para/>
 /// This also makes the system do not registry a IoC container or parent registry. Even if it is abstracted.
 /// </summary>

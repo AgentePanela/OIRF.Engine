@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace Engine.Generators.Networking;
 
@@ -16,9 +17,24 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
 {
     private const string NetworkedAttributeFullName = "Engine.Shared.GameObjects.NetworkedComponentAttribute";
     private const string FieldAttributeFullName = "Engine.Shared.GameObjects.NetFieldAttribute";
+    private const string AutoDirtyAttributeFullName = "Engine.Shared.GameObjects.AutoDirtyAttribute";
     private const string ComponentFullName = "Engine.Shared.GameObjects.Component";
+    private const string GameTickFullName = "global::Engine.Shared.Timing.GameTick";
     private const string EntityManagerParam = "entMan";
     private static readonly string[] ManualStateMethodNames = { "GetNetState", "HandleNetState" };
+
+    // the generated file has no usings, so every type it names has to be fully qualified
+    private static readonly SymbolDisplayFormat FullyQualified = SymbolDisplayFormat.FullyQualifiedFormat
+        .WithMiscellaneousOptions(
+            SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier |
+            SymbolDisplayMiscellaneousOptions.UseSpecialTypes);
+
+    private static readonly string[] CollectionTypes =
+    {
+        "System.Collections.Generic.List<T>",
+        "System.Collections.Generic.HashSet<T>",
+        "System.Collections.Generic.Dictionary<TKey, TValue>",
+    };
 
     private static readonly DiagnosticDescriptor InvalidComponent = new(
         id: Diagnostics.NetworkedComponentInvalidID,
@@ -34,6 +50,14 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
         messageFormat: "The [NetworkedField] '{0}' {1}",
         category: "Engine.Generators",
         DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor AutoDirtyCollection = new(
+        id: Diagnostics.AutoDirtyCollectionID,
+        title: "[AutoDirty] on a collection",
+        messageFormat: "'{0}' is a collection, so [AutoDirty] only catches replacing it whole - adding, removing or changing an item runs no setter and still needs EntityManager.Dirty",
+        category: "Engine.Generators",
+        DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
@@ -85,7 +109,13 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
                 ? $"{comp.ClassName}.ComponentState.g.cs"
                 : $"{comp.Namespace}.{comp.ClassName}.ComponentState.g.cs";
 
-            spc.AddSource(hintName, GenerateClass(comp.Namespace, comp.ClassName, writeLines, readLines));
+            foreach (var member in comp.Members)
+            {
+                if (member.AutoDirty && IsCollection(member.Type))
+                    spc.ReportDiagnostic(Diagnostic.Create(AutoDirtyCollection, member.Location ?? Location.None, member.Name));
+            }
+
+            spc.AddSource(hintName, GenerateClass(comp.Namespace, comp.ClassName, comp.Members, writeLines, readLines));
         });
     }
 
@@ -131,6 +161,8 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
                 errors.Add(new ErrorData(false, fullName, "must derive directly from Component", classLocation));
         }
 
+        var classAutoDirty = NetSerializableResolver.HasAttribute(classSymbol, AutoDirtyAttributeFullName);
+
         var members = new List<MemberData>();
         foreach (var member in classSymbol.GetMembers())
         {
@@ -138,6 +170,7 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
                 continue;
 
             var location = member.Locations.FirstOrDefault();
+            var autoDirty = classAutoDirty || NetSerializableResolver.HasAttribute(member, AutoDirtyAttributeFullName);
 
             switch (member)
             {
@@ -148,13 +181,33 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
                         break;
                     }
 
-                    members.Add(new MemberData(prop.Name, prop.Type, location));
+                    // the generator writes the body, so it has to be the other half of a partial property - and a
+                    // partial property we don't implement would not compile at all
+                    if (autoDirty && !prop.IsPartialDefinition)
+                    {
+                        errors.Add(new ErrorData(true, $"{fullName}.{prop.Name}", "is [AutoDirty], so it has to be declared 'partial' - the generator writes the setter that stamps the tick", location));
+                        break;
+                    }
+
+                    if (!autoDirty && prop.IsPartialDefinition)
+                    {
+                        errors.Add(new ErrorData(true, $"{fullName}.{prop.Name}", "is partial but not [AutoDirty], so nothing implements it - add [AutoDirty] or drop the partial", location));
+                        break;
+                    }
+
+                    members.Add(new MemberData(prop.Name, prop.Type, location, autoDirty, AccessibilityOf(prop.DeclaredAccessibility)));
                     break;
 
                 case IFieldSymbol field:
                     if (field.IsReadOnly || field.IsConst)
                     {
                         errors.Add(new ErrorData(true, $"{fullName}.{field.Name}", "cannot be readonly or const", location));
+                        break;
+                    }
+
+                    if (autoDirty)
+                    {
+                        errors.Add(new ErrorData(true, $"{fullName}.{field.Name}", "cannot be [AutoDirty] as a field - there is no setter to own, make it a partial property", location));
                         break;
                     }
 
@@ -176,7 +229,7 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
         return new ComponentData(classSymbol.Name, namespaceName, members, errors, isManual);
     }
 
-    private static string GenerateClass(string @namespace, string className, List<string> writeLines, List<string> readLines)
+    private static string GenerateClass(string @namespace, string className, List<MemberData> members, List<string> writeLines, List<string> readLines)
     {
         var writes = writeLines.Count == 0 ? "" : string.Join("\n        ", writeLines);
         var reads = readLines.Count == 0 ? "" : string.Join("\n        ", readLines);
@@ -189,7 +242,7 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
 
             {{namespaceDecl}}partial class {{className}}
             {
-                public override void WriteNetState(global::Lidgren.Network.NetBuffer buffer, global::Engine.Shared.GameObjects.EntityManager {{EntityManagerParam}})
+                {{GenerateFieldTicks(members)}}public override void WriteNetState(global::Lidgren.Network.NetBuffer buffer, global::Engine.Shared.GameObjects.EntityManager {{EntityManagerParam}})
                 {
                     {{writes}}
                 }
@@ -202,22 +255,98 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
             """;
     }
 
+    /// <summary>
+    /// The per field ticks a delta is built from, plus the setters of the [AutoDirty] members.
+    /// </summary>
+    private static string GenerateFieldTicks(List<MemberData> members)
+    {
+        if (members.Count == 0)
+            return "";
+
+        var sb = new StringBuilder();
+        sb.Append("public override int NetFieldCount => ").Append(members.Count).Append(";\n\n    ");
+
+        if (!members.Any(static m => m.AutoDirty))
+            return sb.ToString();
+
+        foreach (var member in members)
+            sb.Append("private ").Append(GameTickFullName).Append(" __netTick_").Append(member.Name).Append(";\n    ");
+
+        sb.Append("\n    public override ").Append(GameTickFullName).Append(" GetFieldTick(int index) => index switch\n    {\n");
+        for (var i = 0; i < members.Count; i++)
+            sb.Append("        ").Append(i).Append(" => __netTick_").Append(members[i].Name).Append(",\n");
+        sb.Append("        _ => LastModifiedTick,\n    };\n\n    ");
+
+        sb.Append("public override void SetFieldTick(int index, ").Append(GameTickFullName).Append(" tick)\n    {\n        switch (index)\n        {\n");
+        for (var i = 0; i < members.Count; i++)
+            sb.Append("            case ").Append(i).Append(": __netTick_").Append(members[i].Name).Append(" = tick; break;\n");
+        sb.Append("        }\n    }\n\n    ");
+
+        for (var i = 0; i < members.Count; i++)
+        {
+            var member = members[i];
+            if (!member.AutoDirty)
+                continue;
+
+            sb.Append(member.Accessibility).Append(" partial ").Append(member.Type.ToDisplayString(FullyQualified))
+                .Append(' ').Append(NetSerializableResolver.EscapeIdentifier(member.Name)).Append("\n    {\n")
+                .Append("        get => field;\n")
+                .Append("        set { field = value; DirtyField(").Append(i).Append("); }\n")
+                .Append("    }\n\n    ");
+        }
+
+        return sb.ToString();
+    }
+
+    private static string AccessibilityOf(Accessibility accessibility) => accessibility switch
+    {
+        Accessibility.Private => "private",
+        Accessibility.Protected => "protected",
+        Accessibility.Internal => "internal",
+        Accessibility.ProtectedOrInternal => "protected internal",
+        Accessibility.ProtectedAndInternal => "private protected",
+        _ => "public",
+    };
+
+    private static bool IsCollection(ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol)
+            return true;
+
+        var definition = (type as INamedTypeSymbol)?.OriginalDefinition.ToDisplayString();
+        return definition is not null && CollectionTypes.Contains(definition);
+    }
+
     private sealed class MemberData : IEquatable<MemberData>
     {
         public readonly string Name;
         public readonly ITypeSymbol Type;
         public readonly Location? Location;
 
-        public MemberData(string name, ITypeSymbol type, Location? location)
+        /// <summary>
+        /// The generator owns this member's setter
+        /// </summary>
+        public readonly bool AutoDirty;
+
+        /// <summary>
+        /// Accessibility to repeat on the implementing declaration.
+        /// </summary>
+        public readonly string Accessibility;
+
+        public MemberData(string name, ITypeSymbol type, Location? location, bool autoDirty = false, string accessibility = "public")
         {
             Name = name;
             Type = type;
             Location = location;
+            AutoDirty = autoDirty;
+            Accessibility = accessibility;
         }
 
         public bool Equals(MemberData? other)
             => other is not null
                && Name == other.Name
+               && AutoDirty == other.AutoDirty
+               && Accessibility == other.Accessibility
                && SymbolEqualityComparer.Default.Equals(Type, other.Type)
                && Equals(Location, other.Location);
 
