@@ -7,6 +7,7 @@ using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using System.Collections.Generic;
+using Engine.Shared.Graphics;
 
 namespace Engine.Client.UI;
 

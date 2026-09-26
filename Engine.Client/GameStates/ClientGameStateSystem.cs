@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using Engine.Client.Rooms;
 using Engine.Client.Scenes;
+using Engine.Shared.Configuration;
+using Engine.Shared.Configuration.CVars;
 using Engine.Shared.GameObjects;
 using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.GameStates;
@@ -23,6 +25,7 @@ public sealed partial class ClientGameStateSystem : EntitySystem, IGameStateAppl
     [Dependency] private readonly ComponentFactory _compFac = default!;
     //[Dependency] private readonly SceneManager _sceneMan = default!;
     [Dependency] private readonly IRoomManager _rooms = default!;
+    [Dependency] private readonly IConfigurationManager _configMan = default!;
     [Dependency] private readonly ClientGameStateMetrics _metrics = default!;
 
     private readonly GameStateProcessor _processor = new();
@@ -47,6 +50,8 @@ public sealed partial class ClientGameStateSystem : EntitySystem, IGameStateAppl
 
         _net.OnDisconnected += (_, _) => ClearReplicated(null);
         _rooms.OnLeft += (_, _) => ClearReplicated(EntityBlockKind.Room);
+
+        _configMan.Subs(NetworkingCvars.Tickrate, rate => _timing.SetTickRate(rate));
     }
 
     public override void Update(float dt)

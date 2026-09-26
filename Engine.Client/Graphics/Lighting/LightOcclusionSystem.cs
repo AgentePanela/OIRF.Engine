@@ -1,6 +1,7 @@
 using System;
 using Engine.Client.Assets;
 using Engine.Shared.GameObjects;
+using Engine.Shared.Graphics;
 using Engine.Shared.Lighting;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
@@ -13,6 +14,7 @@ namespace Engine.Client.Graphics.Lighting;
 public sealed class LightOcclusionSystem : EntitySystem
 {
     [Dependency] private readonly IAssetManager _assetMan = default!;
+    private SpriteSystem? _sprites;
 
     public LightOcclusionSystem()
     {
@@ -110,7 +112,8 @@ public sealed class LightOcclusionSystem : EntitySystem
 
         if (entMan.TryComp<SpriteComponent>(uid, out var spriteComp))
         {
-            if (spriteComp.Spr is { CachedRegion: var region } && region.Width > 0 && region.Height > 0)
+            _sprites ??= IoCManager.Resolve<SpriteSystem>();
+            if (_sprites.GetSprite(spriteComp) is { CachedRegion: var region } && region.Width > 0 && region.Height > 0)
                 return CacheExtent(occluder, center, region.Width, region.Height);
 
             if (!string.IsNullOrEmpty(spriteComp.Key) &&
