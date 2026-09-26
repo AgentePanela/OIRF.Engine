@@ -10,6 +10,7 @@ public interface IGameTiming
     /// <summary>
     /// The tick currently being simulated by server.
     /// </summary>
+    // fun fact: the server has 4.5 years of life in a 60 t/s (tickrate), after this we will get out-of-ticks.
     GameTick CurTick { get; }
 
     /// <summary>

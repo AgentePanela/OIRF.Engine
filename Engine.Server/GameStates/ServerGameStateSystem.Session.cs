@@ -103,7 +103,7 @@ public sealed partial class ServerGameStateSystem
                 var uid = _entManager.GetEntity(ent.NetEntity);
                 var protoId = _entManager.HasEntity(uid, out var entity) ? entity.Id.Id ?? string.Empty : string.Empty;
                 state.Entering.Add(new EnteringEntity(ent.NetEntity, protoId));
-                session.Sent[ent.NetEntity] = state.ToTick;
+                session.Sent.TryAdd(ent.NetEntity, state.ToTick);
             }
         }
 

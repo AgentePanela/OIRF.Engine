@@ -69,7 +69,7 @@ public class GameServer : IDisposable
     public IConfigurationManager ConfigManager { get; private set; } = default!;
     public IPrototypeManager Prototypes { get; private set; } = default!;
     public ILocalizationManager LocalizationManager { get; private set; } = default!;
-    public IGameTiming Timing { get; private set; } = default!;
+    public static IGameTiming Timing { get; private set; } = default!;
     public INetManager Networking { get; private set; } = default!;
     public IRoomManager RoomManager { get; private set; } = default!;
 
