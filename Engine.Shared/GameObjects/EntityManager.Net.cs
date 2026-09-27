@@ -141,6 +141,10 @@ public sealed partial class EntityManager
         if (netId == 0)
             return;
 
+        // losing a component is a change to the entity, and the entity tick is what decides whether a session skips
+        // it entirely when building a delta
+        ent.LastModifiedTick = _timing.CurTick;
+
         if (!_compRemovalHistory.TryGetValue(ent.NetId, out var removals))
             _compRemovalHistory[ent.NetId] = removals = new List<(GameTick, int)>();
 

@@ -64,9 +64,10 @@ public class Component
     protected void Dirty() => EntityManager.Instance?.Dirty(this);
 
     /// <summary>
-    /// AUTO GENERATED: Writes the state of this component that goes to the clients.
+    /// AUTO GENERATED: Writes the state of this component that goes to the clients. Only the fields that changed
+    /// after <paramref name="fromTick"/> are written, behind a mask - <see cref="GameTick.Zero"/> writes them all.
     /// </summary>
-    public virtual void WriteNetState(NetBuffer buffer, EntityManager entMan)
+    public virtual void WriteNetState(NetBuffer buffer, EntityManager entMan, GameTick fromTick)
     {
     }
 
@@ -93,6 +94,26 @@ public class Component
     /// </summary>
     public virtual void HandleNetState(IComponentState state)
     {
+    }
+
+    internal IComponentState? LastServerState;
+
+    /// <summary>
+    /// AUTO GENERATED: copies the live values into the shadow of what the server last said, right after a state is
+    /// applied. A component that builds its own state keeps <see cref="LastServerState"/> instead.
+    /// </summary>
+    public virtual void SaveServerState()
+    {
+    }
+
+    /// <summary>
+    /// Puts the last value the server sent back into the component.
+    /// AUTO GENERATED for a component with <see cref="NetFieldAttribute"/> members.
+    /// </summary>
+    public virtual void RestoreServerState()
+    {
+        if (LastServerState is not null)
+            HandleNetState(LastServerState);
     }
 
     internal void RemoveComponent()

@@ -37,5 +37,15 @@ public sealed class PvsSession(INetSession session)
     public bool Knows(NetEntity netEntity)
         => Sent.TryGetValue(netEntity, out var sentAt) && sentAt <= LastReceivedAck;
 
+    /// <summary>
+    /// When the last full state this session asked for was granted.
+    /// </summary>
+    public GameTick LastFullStateRequest = GameTick.Zero;
+
+    /// <summary>
+    /// How many full state requests were turned down for asking too fast.
+    /// </summary>
+    public int IgnoredFullStateRequests;
+
     public readonly GameState State = new();
 }

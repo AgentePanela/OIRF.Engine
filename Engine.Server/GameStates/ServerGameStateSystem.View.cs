@@ -2,20 +2,19 @@ using System.Collections.Generic;
 using Engine.Server.Rooms;
 using Engine.Shared.GameObjects;
 using Engine.Shared.GameStates;
+using Engine.Shared.Timing;
 
 namespace Engine.Server.GameStates;
 
 public sealed partial class ServerGameStateSystem
 {
-    // entities with no scene. kept as we go instead of walking every entity each tick just to find them
+    // entities with no scene. kept as we go instead of walking every entity each tick just to find them.
     private readonly HashSet<EntityUid> _globals = new();
-
-    private readonly EntityBlock _globalBlock = new();
-    private readonly Dictionary<Room, EntityBlock> _roomBlocks = new();
-    private readonly List<Room> _staleRooms = new();
 
     private readonly Stack<EntityState> _statePool = new();
     private readonly List<EntityState> _rentedStates = new();
+    private readonly Stack<EntityBlock> _blockPool = new();
+    private readonly List<EntityBlock> _rentedBlocks = new();
 
     private void InitView()
     {
@@ -31,50 +30,40 @@ public sealed partial class ServerGameStateSystem
     }
 
     /// <summary>
-    /// What a session is allowed to see. This is the only place that decides it
+    /// What a session is allowed to see. This is the only place that decides it 
     /// </summary>
     private void GetVisibleBlocks(PvsSession session, List<EntityBlock> output)
     {
-        output.Add(_globalBlock);
+        output.Add(FillBlock(EntityBlockKind.Global, _globals));
 
-        if (_rooms.IsInRoom(session.Session, out var room) && _roomBlocks.TryGetValue(room, out var block))
-            output.Add(block);
+        if (_rooms.IsInRoom(session.Session, out var room))
+            output.Add(FillBlock(EntityBlockKind.Room, room.OwnedEntities));
     }
 
-    private void BuildBlocks()
+    /// <summary>
+    /// Returns a block holding every replicated entity of a group, with no state built yet.
+    /// </summary>
+    private EntityBlock FillBlock(EntityBlockKind kind, IReadOnlyCollection<EntityUid> uids)
     {
-        ReturnEntityStates();
+        var block = RentBlock(kind);
 
-        _globalBlock.Reset(EntityBlockKind.Global);
-        BuildBlock(_globalBlock, _globals);
-
-        foreach (var (_, room) in _rooms.AvailableRooms)
+        foreach (var uid in uids)
         {
-            if (room.Sessions.Count == 0)
+            if (!_entManager.HasEntity(uid, out var ent) || !IsReplicated(ent))
                 continue;
 
-            if (!_roomBlocks.TryGetValue(room, out var block))
-                _roomBlocks[room] = block = new EntityBlock();
-
-            block.Reset(EntityBlockKind.Room);
-            BuildBlock(block, room.OwnedEntities);
+            block.Entities.Add(RentEntityState(ent.NetId));
         }
 
-        DropEmptyRoomBlocks();
+        return block;
     }
 
-    private void DropEmptyRoomBlocks()
+    private EntityBlock RentBlock(EntityBlockKind kind)
     {
-        foreach (var (room, _) in _roomBlocks)
-        {
-            if (room.Sessions.Count == 0)
-                _staleRooms.Add(room);
-        }
-
-        foreach (var room in _staleRooms)
-            _roomBlocks.Remove(room);
-
-        _staleRooms.Clear();
+        var block = _blockPool.Count > 0 ? _blockPool.Pop() : new EntityBlock();
+        block.Reset(kind);
+        _rentedBlocks.Add(block);
+        return block;
     }
 
     private EntityState RentEntityState(NetEntity netEntity)
@@ -85,12 +74,16 @@ public sealed partial class ServerGameStateSystem
         return state;
     }
 
-    private void ReturnEntityStates()
+    private void ReturnRented()
     {
         foreach (var state in _rentedStates)
             _statePool.Push(state);
 
+        foreach (var block in _rentedBlocks)
+            _blockPool.Push(block);
+
         _rentedStates.Clear();
+        _rentedBlocks.Clear();
     }
 
     private void OnEntityAdded(EntityAddedEvent ev)

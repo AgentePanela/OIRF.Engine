@@ -11,5 +11,5 @@ public sealed partial class TagComponent : Component
     /// will not replicate to the clients!!!
     /// </summary>
     [NetField]
-    public partial HashSet<ProtoId<TagPrototype>> Tags { get; set; } = new();
+    public HashSet<ProtoId<TagPrototype>> Tags { get; set; } = new();
 }

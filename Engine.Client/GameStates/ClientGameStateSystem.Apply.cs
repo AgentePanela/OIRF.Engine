@@ -23,7 +23,7 @@ public sealed partial class ClientGameStateSystem
         _isFullState = msg.State.IsFullState;
         _seen.Clear();
         _entering.Clear();
-        _metrics.BeginApply(msg.State.ToTick);
+        _metrics.BeginApply(msg.State.ToTick, msg.State.FromTick);
 
         // everything the state mentions has to exist before any component is read, since a component state can
         // point at another entity of the same state
@@ -31,9 +31,6 @@ public sealed partial class ClientGameStateSystem
             EnterEntity(entering);
 
         foreach (var netEnt in msg.State.Deletions)
-            DropEntity(netEnt);
-
-        foreach (var netEnt in msg.State.LeftView)
             DropEntity(netEnt);
 
         var buffer = new NetBuffer();
@@ -143,6 +140,7 @@ public sealed partial class ClientGameStateSystem
 
         var comp = EnsureComponent(type, out var created);
         comp.HandleNetState(state);
+        comp.LastServerState = state;
 
         _currentComps.Add(netId);
         RaiseEvent(_currentUid, new ComponentStateAppliedEvent { Component = comp, FirstState = created });
@@ -162,6 +160,7 @@ public sealed partial class ClientGameStateSystem
 
         var comp = EnsureComponent(type, out var created);
         comp.ReadNetState(buffer, _entManager);
+        comp.SaveServerState();
 
         _currentComps.Add(netId);
         RaiseEvent(_currentUid, new ComponentStateAppliedEvent { Component = comp, FirstState = created });
@@ -206,10 +205,6 @@ public sealed partial class ClientGameStateSystem
     {
         foreach (var type in _compFac.NetworkedTypes)
         {
-            // a manual component returning null means nothing to send
-            if (_compFac.IsManualState(type))
-                continue;
-
             if (!_entManager.TryComp(_currentUid, type, out _))
                 continue;
 

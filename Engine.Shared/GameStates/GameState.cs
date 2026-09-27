@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using Engine.Shared.GameObjects;
 using Engine.Shared.Timing;
-using Lidgren.Network;
 
 namespace Engine.Shared.GameStates;
 
@@ -36,11 +35,6 @@ public sealed class GameState
     public readonly List<NetEntity> Deletions = new();
 
     /// <summary>
-    /// Entities that left the session view without being deleted.
-    /// </summary>
-    public readonly List<NetEntity> LeftView = new(); //todo pvs
-
-    /// <summary>
     /// The entities this session is seeing for the first time, with the prototype to build them from.
     /// </summary>
     public readonly List<EnteringEntity> Entering = new();
@@ -52,7 +46,6 @@ public sealed class GameState
         FromTick = GameTick.Zero;
         ToTick = GameTick.Zero;
         Deletions.Clear();
-        LeftView.Clear();
         Entering.Clear();
         Blocks.Clear();
     }
@@ -68,8 +61,8 @@ public readonly struct EnteringEntity(NetEntity netEntity, string protoId)
 }
 
 /// <summary>
-/// A group of entities that every session seeing it gets the exact same bytes for, so it is serialized once per tick
-/// and reused: the globals are one block shared by everyone, each room is another.
+/// A group of entities inside a state: the globals are one, the session's room is another. It is what lets the client
+/// drop only a room's entities when it leaves, without touching the globals.
 /// </summary>
 public sealed class EntityBlock
 {
@@ -77,17 +70,10 @@ public sealed class EntityBlock
 
     public readonly List<EntityState> Entities = new();
 
-    /// <summary>
-    /// The serialized form of <see cref="Entities"/>, filled once per tick by <see cref="GameStateSerializer"/>.
-    /// </summary>
-    public readonly NetBuffer Data = new();
-
     public void Reset(EntityBlockKind kind)
     {
         Kind = kind;
         Entities.Clear();
-        Data.LengthBits = 0;
-        Data.Position = 0;
     }
 }
 
@@ -144,17 +130,24 @@ public readonly struct ComponentChange
     /// </summary>
     public readonly Component? Source;
 
+    /// <summary>
+    /// Used when the session dont have the component already
+    /// </summary>
+    public readonly bool FullState;
+
     public ComponentChange(int netId, IComponentState state)
     {
         NetId = netId;
         State = state;
         Source = null;
+        FullState = true;
     }
 
-    public ComponentChange(int netId, Component source)
+    public ComponentChange(int netId, Component source, bool fullState)
     {
         NetId = netId;
         State = null;
         Source = source;
+        FullState = fullState;
     }
 }

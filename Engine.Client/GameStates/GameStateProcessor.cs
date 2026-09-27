@@ -71,6 +71,9 @@ public sealed class GameStateProcessor
         NeedsFullState = false;
     }
 
+    /// <summary>
+    /// Verify if this delta is older than the actual applied delta.
+    /// </summary>
     private bool CanApply(GameStateMessage msg)
-        => msg.State.IsFullState || msg.State.FromTick == LastAppliedTick;
+        => msg.State.IsFullState || msg.State.FromTick <= LastAppliedTick;
 }

@@ -91,6 +91,11 @@ public sealed class ClientGameStateMetrics
     /// </summary>
     public bool AwaitingFull { get; set; }
 
+    /// <summary>
+    /// The baseline the last applied state was built on. <see cref="GameTick.Zero"/ > means it was a full state.
+    /// </summary>
+    public GameTick LastFromTick { get; private set; } = GameTick.Zero;
+
     public int SampleCount => _history.Count;
 
     public StateSample this[int index] => _history[index];
@@ -121,8 +126,10 @@ public sealed class ClientGameStateMetrics
         _receivedBlocks = blocks;
     }
 
-    public void BeginApply(GameTick tick)
+    public void BeginApply(GameTick tick, GameTick fromTick)
     {
+        LastFromTick = fromTick;
+
         _applying = tick;
         _entering = 0;
         _leaving = 0;
@@ -172,6 +179,7 @@ public sealed class ClientGameStateMetrics
     {
         _entities.Clear();
         LastAppliedTick = GameTick.Zero;
+        LastFromTick = GameTick.Zero;
         AwaitingFull = false;
     }
 

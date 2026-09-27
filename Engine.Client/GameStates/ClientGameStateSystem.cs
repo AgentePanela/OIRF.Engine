@@ -47,6 +47,7 @@ public sealed partial class ClientGameStateSystem : EntitySystem, IGameStateAppl
         _net.RegisterNetMessage<GameStateMessage>(OnGameState);
         _net.RegisterNetMessage<StateAckMessage>();
         _net.RegisterNetMessage<RequestFullStateMessage>();
+        _net.RegisterNetMessage<LeaveViewMessage>(OnLeaveView);
 
         _net.OnDisconnected += (_, _) => ClearReplicated(null);
         _rooms.OnLeft += (_, _) => ClearReplicated(EntityBlockKind.Room);
@@ -77,6 +78,15 @@ public sealed partial class ClientGameStateSystem : EntitySystem, IGameStateAppl
         _timing.SetTick(msg.State.ToTick);
 
         Ack(msg.State.ToTick);
+    }
+
+    /// <summary>
+    /// Not a deletion! the entity is still alive on the server, this session just cannot see it anymore.
+    /// </summary>
+    private void OnLeaveView(LeaveViewMessage msg, INetSession? session)
+    {
+        foreach (var netEnt in msg.Entities)
+            DropEntity(netEnt);
     }
 
     private void OnGameState(GameStateMessage msg, INetSession? session)

@@ -84,7 +84,7 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
             if (comp.IsManual)
                 return;
 
-            var writeLines = new List<string>();
+            var writePlans = new List<List<string>>();
             var readLines = new List<string>();
             var anyBad = false;
 
@@ -98,7 +98,7 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                writeLines.AddRange(plan.WriteLines);
+                writePlans.Add(plan.WriteLines);
                 readLines.Add($"{accessPath} = {plan.ReadExpr};");
             }
 
@@ -115,7 +115,7 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
                     spc.ReportDiagnostic(Diagnostic.Create(AutoDirtyCollection, member.Location ?? Location.None, member.Name));
             }
 
-            spc.AddSource(hintName, GenerateClass(comp.Namespace, comp.ClassName, comp.Members, writeLines, readLines));
+            spc.AddSource(hintName, GenerateClass(comp.Namespace, comp.ClassName, comp.Members, writePlans, readLines));
         });
     }
 
@@ -220,6 +220,9 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
             }
         }
 
+        if (members.Count > 32)
+            errors.Add(new ErrorData(false, fullName, "cannot have more than 32 [NetField] members - the delta mask is a 32 bit int", classLocation));
+
         if (isManual && members.Count > 0)
             errors.Add(new ErrorData(false, fullName, "implements GetNetState/HandleNetState manually AND has [NetField] members - pick one, the fields would be silently ignored", classLocation));
 
@@ -229,11 +232,8 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
         return new ComponentData(classSymbol.Name, namespaceName, members, errors, isManual);
     }
 
-    private static string GenerateClass(string @namespace, string className, List<MemberData> members, List<string> writeLines, List<string> readLines)
+    private static string GenerateClass(string @namespace, string className, List<MemberData> members, List<List<string>> writePlans, List<string> readLines)
     {
-        var writes = writeLines.Count == 0 ? "" : string.Join("\n        ", writeLines);
-        var reads = readLines.Count == 0 ? "" : string.Join("\n        ", readLines);
-
         var namespaceDecl = @namespace.Length == 0 ? "" : $"namespace {@namespace};\n\n";
 
         return $$"""
@@ -242,17 +242,94 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
 
             {{namespaceDecl}}partial class {{className}}
             {
-                {{GenerateFieldTicks(members)}}public override void WriteNetState(global::Lidgren.Network.NetBuffer buffer, global::Engine.Shared.GameObjects.EntityManager {{EntityManagerParam}})
+                {{GenerateFieldTicks(members)}}{{GenerateServerStateShadow(members)}}public override void WriteNetState(global::Lidgren.Network.NetBuffer buffer, global::Engine.Shared.GameObjects.EntityManager {{EntityManagerParam}}, {{GameTickFullName}} fromTick)
                 {
-                    {{writes}}
+                    {{GenerateWrite(members, writePlans)}}
                 }
 
                 public override void ReadNetState(global::Lidgren.Network.NetBuffer buffer, global::Engine.Shared.GameObjects.EntityManager {{EntityManagerParam}})
                 {
-                    {{reads}}
+                    {{GenerateRead(members, readLines)}}
                 }
             }
             """;
+    }
+
+    /// <summary>
+    /// Gen a mask of the fields that changed after fromTick.
+    /// </summary>
+    private static string GenerateWrite(List<MemberData> members, List<List<string>> writePlans)
+    {
+        if (members.Count == 0)
+            return "";
+
+        var sb = new StringBuilder();
+        sb.Append("var full = fromTick == ").Append(GameTickFullName).Append(".Zero;\n        var mask = 0u;\n");
+
+        for (var i = 0; i < members.Count; i++)
+            sb.Append("        if (full || GetFieldTick(").Append(i).Append(") >= fromTick) mask |= ").Append(1u << i).Append("u;\n");
+
+        sb.Append("\n        buffer.WriteVariableUInt32(mask);\n");
+
+        for (var i = 0; i < members.Count; i++)
+        {
+            sb.Append("\n        if ((mask & ").Append(1u << i).Append("u) != 0)\n        {\n");
+            foreach (var line in writePlans[i])
+                sb.Append("            ").Append(line).Append('\n');
+            sb.Append("        }\n");
+        }
+
+        return sb.ToString().TrimStart();
+    }
+
+    private static string GenerateRead(List<MemberData> members, List<string> readLines)
+    {
+        if (members.Count == 0)
+            return "";
+
+        var sb = new StringBuilder();
+        sb.Append("var mask = buffer.ReadVariableUInt32();\n");
+
+        for (var i = 0; i < members.Count; i++)
+        {
+            sb.Append("\n        if ((mask & ").Append(1u << i).Append("u) != 0)\n        {\n");
+            sb.Append("            ").Append(readLines[i]).Append('\n');
+            sb.Append("        }\n");
+        }
+
+        return sb.ToString().TrimStart();
+    }
+
+    /// <summary>
+    /// generate the shadow of what the server last said
+    /// </summary>
+    private static string GenerateServerStateShadow(List<MemberData> members)
+    {
+        if (members.Count == 0)
+            return "";
+
+        var sb = new StringBuilder();
+
+        foreach (var member in members)
+            sb.Append("private ").Append(member.Type.ToDisplayString(FullyQualified)).Append(" __netSaved_").Append(member.Name).Append(";\n    ");
+
+        sb.Append("\n    public override void SaveServerState()\n    {\n");
+        foreach (var member in members)
+        {
+            var name = NetSerializableResolver.EscapeIdentifier(member.Name);
+            sb.Append("        __netSaved_").Append(member.Name).Append(" = this.").Append(name).Append(";\n");
+        }
+        sb.Append("    }\n\n    ");
+
+        sb.Append("public override void RestoreServerState()\n    {\n");
+        foreach (var member in members)
+        {
+            var name = NetSerializableResolver.EscapeIdentifier(member.Name);
+            sb.Append("        this.").Append(name).Append(" = __netSaved_").Append(member.Name).Append(";\n");
+        }
+        sb.Append("    }\n\n    ");
+
+        return sb.ToString();
     }
 
     /// <summary>

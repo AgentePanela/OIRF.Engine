@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Engine.Shared.Networking;
 using NetDeliveryMethod = Engine.Shared.Networking.NetDeliveryMethod;
 using Engine.Shared.Timing;
@@ -18,6 +19,29 @@ public sealed class StateAckMessage : NetMessage
     public override void WriteToBuffer(NetOutgoingMessage buffer) => buffer.WriteVariableUInt32(Tick.Value);
 
     public override void ReadFromBuffer(NetIncomingMessage buffer) => Tick = new GameTick(buffer.ReadVariableUInt32());
+}
+
+/// <summary>
+/// Server to client: these entities are not in view anymore.
+/// </summary>
+public sealed class LeaveViewMessage : NetMessage
+{
+    public readonly List<NetEntity> Entities = new();
+
+    public override void WriteToBuffer(NetOutgoingMessage buffer)
+    {
+        buffer.WriteVariableInt32(Entities.Count);
+        foreach (var netEnt in Entities)
+            buffer.WriteVariableInt32(netEnt.Id);
+    }
+
+    public override void ReadFromBuffer(NetIncomingMessage buffer)
+    {
+        Entities.Clear();
+        var count = buffer.ReadVariableInt32();
+        for (var i = 0; i < count; i++)
+            Entities.Add(new NetEntity(buffer.ReadVariableInt32()));
+    }
 }
 
 /// <summary>
