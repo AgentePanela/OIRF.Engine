@@ -13,15 +13,31 @@ namespace Engine.Shared.GameStates;
 /// </summary>
 public static class GameStateSerializer
 {
-    /// <summary>
-    /// Serializes a block into its own <see cref="EntityBlock.Data"/>, so every session that can see it writes the
-    /// same bytes out without building them again.
-    /// </summary>
-    public static void WriteBlock(EntityBlock block, EntityManager entMan, ComponentFactory compFac)
+    public static void WriteHeader(NetBuffer buffer, GameState state)
     {
-        var buffer = block.Data;
-        buffer.LengthBits = 0;
-        buffer.Position = 0;
+        buffer.WriteVariableUInt32(state.ToTick.Value);
+        buffer.WriteVariableUInt32(state.FromTick.Value);
+
+        buffer.WriteVariableInt32(state.Deletions.Count);
+        foreach (var netEnt in state.Deletions)
+            buffer.WriteVariableInt32(netEnt.Id);
+
+        buffer.WriteVariableInt32(state.Entering.Count);
+        foreach (var entering in state.Entering)
+        {
+            buffer.WriteVariableInt32(entering.NetEntity.Id);
+            buffer.Write(entering.ProtoId);
+        }
+
+        buffer.WriteVariableInt32(state.Blocks.Count);
+    }
+
+    /// <summary>
+    /// Writes one block, right after <see cref="WriteHeader"/> wrote how many there are.
+    /// </summary>
+    public static void WriteBlock(NetBuffer buffer, EntityBlock block, EntityManager entMan, GameTick fromTick)
+    {
+        buffer.Write((byte)block.Kind);
 
         buffer.WriteVariableInt32(block.Entities.Count);
         foreach (var ent in block.Entities)
@@ -40,45 +56,12 @@ public static class GameStateSerializer
                 if (change.State is not null)
                     NetFallbackHelpers.Write(buffer, change.State);
                 else
-                    change.Source!.WriteNetState(buffer, entMan);
+                    change.Source!.WriteNetState(buffer, entMan, change.FullState ? GameTick.Zero : fromTick);
             }
         }
 
         // generated states write single bits, so a block rarely ends on a byte boundary 
         buffer.WritePadBits();
-    }
-
-    public static void WriteHeader(NetBuffer buffer, GameState state)
-    {
-        buffer.WriteVariableUInt32(state.ToTick.Value);
-        buffer.WriteVariableUInt32(state.FromTick.Value);
-
-        buffer.WriteVariableInt32(state.Deletions.Count);
-        foreach (var netEnt in state.Deletions)
-            buffer.WriteVariableInt32(netEnt.Id);
-
-        buffer.WriteVariableInt32(state.LeftView.Count);
-        foreach (var netEnt in state.LeftView)
-            buffer.WriteVariableInt32(netEnt.Id);
-
-        buffer.WriteVariableInt32(state.Entering.Count);
-        foreach (var entering in state.Entering)
-        {
-            buffer.WriteVariableInt32(entering.NetEntity.Id);
-            buffer.Write(entering.ProtoId);
-        }
-
-        buffer.WriteVariableInt32(state.Blocks.Count);
-    }
-
-    /// <summary>
-    /// Writes one block into a message, right after <see cref="WriteHeader"/> wrote how many there are.
-    /// </summary>
-    public static void WriteBlockInto(NetBuffer buffer, EntityBlock block)
-    {
-        buffer.Write((byte)block.Kind);
-        buffer.WritePadBits();
-        buffer.Write(block.Data.Data, 0, block.Data.LengthBytes);
     }
 
     public static void ReadHeader(NetBuffer buffer, GameState state, out int blockCount)
@@ -91,10 +74,6 @@ public static class GameStateSerializer
         var deletions = buffer.ReadVariableInt32();
         for (var i = 0; i < deletions; i++)
             state.Deletions.Add(new NetEntity(buffer.ReadVariableInt32()));
-
-        var leftView = buffer.ReadVariableInt32();
-        for (var i = 0; i < leftView; i++)
-            state.LeftView.Add(new NetEntity(buffer.ReadVariableInt32()));
 
         var entering = buffer.ReadVariableInt32();
         for (var i = 0; i < entering; i++)
@@ -111,7 +90,6 @@ public static class GameStateSerializer
         for (var b = 0; b < blockCount; b++)
         {
             var kind = (EntityBlockKind)buffer.ReadByte();
-            buffer.SkipPadBits();
 
             var entityCount = buffer.ReadVariableInt32();
             for (var e = 0; e < entityCount; e++)

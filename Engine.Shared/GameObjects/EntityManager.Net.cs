@@ -22,13 +22,30 @@ public sealed partial class EntityManager
 
     private readonly List<(GameTick Tick, NetEntity NetEntity)> _deletionHistory = new(); // server only: what was deleted and when
 
+    // server only: which components left which entity and when.
+    private readonly Dictionary<NetEntity, List<(GameTick Tick, int NetId)>> _compRemovalHistory = new();
+    private readonly List<NetEntity> _emptyRemovalEntries = new();
+
     /// <summary>
-    /// Marks a component as changed on this tick.
+    /// The instance the generated dirty setters reach for, so they don't pay an IoC lookup per assignment.
+    /// </summary>
+    internal static EntityManager? Instance { get; private set; }
+
+    /// <summary>
+    /// The tick being current being simulated.
+    /// </summary>
+    internal GameTick CurTick => _timing.CurTick;
+
+    /// <summary>
+    /// Marks a component as changed on this tick, without saying which field
     /// </summary>
     public void Dirty(Component comp)
     {
         var tick = _timing.CurTick;
         comp.LastModifiedTick = tick;
+
+        for (var i = 0; i < comp.NetFieldCount; i++)
+            comp.SetFieldTick(i, tick);
 
         if (_entities.TryGetValue(comp.Owner, out var ent))
             ent.LastModifiedTick = tick;
@@ -37,10 +54,27 @@ public sealed partial class EntityManager
     /// <inheritdoc cref="Dirty(Component)"/>
     public void Dirty(EntityUid uid, Component comp)
     {
-        comp.LastModifiedTick = _timing.CurTick;
+        var tick = _timing.CurTick;
+        comp.LastModifiedTick = tick;
+
+        for (var i = 0; i < comp.NetFieldCount; i++)
+            comp.SetFieldTick(i, tick);
 
         if (_entities.TryGetValue(uid, out var ent))
-            ent.LastModifiedTick = comp.LastModifiedTick;
+            ent.LastModifiedTick = tick;
+    }
+
+    /// <summary>
+    /// Marks a single field of a component as changed on this tick, so a delta only carries that one.
+    /// </summary>
+    public void Dirty(Component comp, int fieldIndex)
+    {
+        var tick = _timing.CurTick;
+        comp.LastModifiedTick = tick;
+        comp.SetFieldTick(fieldIndex, tick);
+
+        if (_entities.TryGetValue(comp.Owner, out var ent))
+            ent.LastModifiedTick = tick;
     }
 
     /// <summary>
@@ -67,6 +101,59 @@ public sealed partial class EntityManager
             return;
 
         _deletionHistory.RemoveAll(entry => entry.Tick < oldestAck);
+
+        foreach (var (netEnt, removals) in _compRemovalHistory)
+        {
+            removals.RemoveAll(entry => entry.Tick < oldestAck);
+            if (removals.Count == 0)
+                _emptyRemovalEntries.Add(netEnt);
+        }
+
+        foreach (var netEnt in _emptyRemovalEntries)
+            _compRemovalHistory.Remove(netEnt);
+
+        _emptyRemovalEntries.Clear();
+    }
+
+    /// <summary>
+    /// Server only. The net ids of the components an entity lost after <paramref name="fromTick"/>.
+    /// </summary>
+    public void GetComponentsRemovedSince(NetEntity netEntity, GameTick fromTick, List<int> output)
+    {
+        if (fromTick == GameTick.Zero || !_compRemovalHistory.TryGetValue(netEntity, out var removals))
+            return;
+
+        foreach (var (tick, netId) in removals)
+        {
+            if (tick >= fromTick)
+                output.Add(netId);
+        }
+    }
+
+    /// <summary>
+    /// Server only. Called as a component actually leaves an entity.
+    /// </summary>
+    internal void RecordComponentRemoval(Component comp)
+    {
+        if (!_contentMan.IsServer())
+            return;
+
+        // a deleted entity takes its components with it, and the entity deletion already tells the peers about it
+        if (!_entities.TryGetValue(comp.Owner, out var ent) || !ent.NetId.IsValid || ent.Deleting)
+            return;
+
+        var netId = _compFac.GetNetId(comp.GetType());
+        if (netId == 0)
+            return;
+
+        // losing a component is a change to the entity, and the entity tick is what decides whether a session skips
+        // it entirely when building a delta
+        ent.LastModifiedTick = _timing.CurTick;
+
+        if (!_compRemovalHistory.TryGetValue(ent.NetId, out var removals))
+            _compRemovalHistory[ent.NetId] = removals = new List<(GameTick, int)>();
+
+        removals.Add((_timing.CurTick, netId));
     }
 
     /// <summary>
@@ -131,6 +218,7 @@ public sealed partial class EntityManager
             return;
 
         _netToUid.Remove(ent.NetId);
+        _compRemovalHistory.Remove(ent.NetId);
 
         if (_contentMan.IsServer())
             _deletionHistory.Add((_timing.CurTick, ent.NetId));

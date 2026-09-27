@@ -34,9 +34,40 @@ public class Component
     public GameTick LastModifiedTick { get; internal set; } = GameTick.Zero;
 
     /// <summary>
-    /// AUTO GENERATED: Writes the state of this component that goes to the clients.
+    /// AUTO GENERATED: How many <see cref="NetFieldAttribute"/> members this component has. The generated state
+    /// writes them ordered by name, and that order is what every field index here refers to.
     /// </summary>
-    public virtual void WriteNetState(NetBuffer buffer, EntityManager entMan)
+    public virtual int NetFieldCount => 0;
+
+    /// <summary>
+    /// AUTO GENERATED: The tick a single field last changed on, used to pick what goes in a delta. Falls back to the
+    /// whole component's <see cref="LastModifiedTick"/> when the component does not track its fields apart - see
+    /// <see cref="AutoDirtyAttribute"/>.
+    /// </summary>
+    public virtual GameTick GetFieldTick(int index) => LastModifiedTick;
+
+    /// <summary>
+    /// AUTO GENERATED: for the dirty machinery, use <see cref="EntityManager.Dirty(Component, int)"/> instead.
+    /// </summary>
+    public virtual void SetFieldTick(int index, GameTick tick)
+    {
+    }
+
+    /// <summary>
+    /// Called by the setter the generator writes for an <see cref="AutoDirtyAttribute"/> field.
+    /// </summary>
+    protected void DirtyField(int index) => EntityManager.Instance?.Dirty(this, index);
+
+    /// <summary>
+    /// Marks the whole component as changed. For a component that mutates a collection of its own.
+    /// </summary>
+    protected void Dirty() => EntityManager.Instance?.Dirty(this);
+
+    /// <summary>
+    /// AUTO GENERATED: Writes the state of this component that goes to the clients. Only the fields that changed
+    /// after <paramref name="fromTick"/> are written, behind a mask - <see cref="GameTick.Zero"/> writes them all.
+    /// </summary>
+    public virtual void WriteNetState(NetBuffer buffer, EntityManager entMan, GameTick fromTick)
     {
     }
 
@@ -63,6 +94,26 @@ public class Component
     /// </summary>
     public virtual void HandleNetState(IComponentState state)
     {
+    }
+
+    internal IComponentState? LastServerState;
+
+    /// <summary>
+    /// AUTO GENERATED: copies the live values into the shadow of what the server last said, right after a state is
+    /// applied. A component that builds its own state keeps <see cref="LastServerState"/> instead.
+    /// </summary>
+    public virtual void SaveServerState()
+    {
+    }
+
+    /// <summary>
+    /// Puts the last value the server sent back into the component.
+    /// AUTO GENERATED for a component with <see cref="NetFieldAttribute"/> members.
+    /// </summary>
+    public virtual void RestoreServerState()
+    {
+        if (LastServerState is not null)
+            HandleNetState(LastServerState);
     }
 
     internal void RemoveComponent()

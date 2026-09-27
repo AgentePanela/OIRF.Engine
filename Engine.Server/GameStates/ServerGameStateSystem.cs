@@ -24,9 +24,6 @@ public sealed partial class ServerGameStateSystem : EntitySystem
     {
         base.Init();
 
-        if (!_net.IsServer)
-            return;
-
         InitView();
         InitSessions();
     }
@@ -40,58 +37,80 @@ public sealed partial class ServerGameStateSystem : EntitySystem
         if (_sessions.Count == 0)
             return;
 
-        BuildBlocks();
-
         foreach (var session in _sessions.Values)
         {
             ComputeSessionState(session);
             Send(session);
+            ReturnRented();
         }
 
         CullHistory();
     }
 
     /// <summary>
-    /// Fills a block's <see cref="EntityBlock.Entities"/> and serializes it. A block is built once per tick and every
-    /// session that can see it sends the same bytes.
+    /// Fills in what each visible entity has to say to this session, dropping the ones with nothing to say.
     /// </summary>
-    private void BuildBlock(EntityBlock block, IReadOnlyCollection<EntityUid> uids)
+    private void BuildBlocks(PvsSession session, GameState state)
     {
-        foreach (var uid in uids)
+        foreach (var block in state.Blocks)
         {
-            if (!_entManager.HasEntity(uid, out var ent) || !IsReplicated(ent))
-                continue;
+            for (var i = block.Entities.Count - 1; i >= 0; i--)
+            {
+                var entState = block.Entities[i];
+                if (BuildEntityState(session, entState, state.FromTick))
+                    continue;
 
-            block.Entities.Add(BuildEntityState(ent));
+                // nothing changed and the session already has it
+                block.Entities.RemoveAt(i);
+            }
         }
-
-        GameStateSerializer.WriteBlock(block, _entManager, _compFac);
     }
 
-    private EntityState BuildEntityState(Entity ent)
+    /// <summary>
+    /// False when the entity has nothing to send to this session.
+    /// </summary>
+    private bool BuildEntityState(PvsSession session, EntityState entState, GameTick fromTick)
     {
-        var state = RentEntityState(ent.NetId);
+        if (!_entManager.TryGetEntity(entState.NetEntity, out var uid) || !_entManager.HasEntity(uid, out var ent))
+            return false;
+
+        var entering = _enteringNow.Contains(entState.NetEntity);
+
+        if (!entering && ent.LastModifiedTick < fromTick)
+            return false;
+
+        _entManager.GetComponentsRemovedSince(entState.NetEntity, fromTick, entState.Removed);
 
         foreach (var type in _compFac.NetworkedTypes)
         {
-            if (!_entManager.TryComp(ent.Uid, type, out var comp) || comp.Deleted)
+            if (!_entManager.TryComp(uid, type, out var comp) || comp.Deleted)
                 continue;
 
             var netId = _compFac.GetNetId(type);
 
-            if (!_compFac.IsManualState(type))
+            // a component the session never saw has to go whole, whatever its fields say about the baseline
+            var full = entering || fromTick == GameTick.Zero || comp.CreationTick >= fromTick;
+
+            if (_compFac.IsManualState(type))
             {
-                state.Changes.Add(new ComponentChange(netId, comp));
+                if (!full && comp.LastModifiedTick < fromTick)
+                    continue;
+
+                // a manual component says "nothing to send" by returning null
+                var manual = comp.GetNetState(full ? GameTick.Zero : fromTick);
+                if (manual is not null)
+                    entState.Changes.Add(new ComponentChange(netId, manual));
+
                 continue;
             }
 
-            // a manual component says "nothing to send" by returning null, so it simply does not show up in the state
-            var manual = comp.GetNetState(GameTick.Zero);
-            if (manual is not null)
-                state.Changes.Add(new ComponentChange(netId, manual));
+            if (!full && comp.LastModifiedTick < fromTick)
+                continue;
+
+            entState.Changes.Add(new ComponentChange(netId, comp, full));
         }
 
-        return state;
+        return entState.Changes.Count > 0 || entState.Removed.Count > 0;
     }
 
     private static bool IsReplicated(Entity ent)

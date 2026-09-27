@@ -20,21 +20,21 @@ public class AnimationComponent : Component
     /// Leave empty if this entity only animates via <see cref="Layers"/>.
     /// </summary>
     [AnimationKey]
-    public string Key { get; set; } = string.Empty;
+    public string Key { get; set { field = value; Dirty(); } } = string.Empty;
 
-    public bool Playing { get; set; } = true;
+    public bool Playing { get; set { field = value; Dirty(); } } = true;
 
     /// <summary>
     /// Per-entity speed override, in frames per second. Null means "use the speed from info.yml".
     /// Use AnimationSystem.SetSpeed to change it.
     /// </summary>
-    public float? SpeedOverride { get; set; } = null;
+    public float? SpeedOverride { get; set { field = value; Dirty(); } } = null;
 
     /// <summary>
     /// Per-entity loop override. Null means "use the value from info.yml".
     /// Use AnimationSystem.SetLoop to change it.
     /// </summary>
-    public bool? LoopOverride { get; set; } = null;
+    public bool? LoopOverride { get; set { field = value; Dirty(); } } = null;
 
     /// <summary>
     /// The tick playback started on. <see cref="GameTick.Zero"/> until the AnimationSystem stamps it.
@@ -52,7 +52,12 @@ public class AnimationComponent : Component
     /// SpriteLayer.Id; entries whose id doesn't match any layer are skipped.
     /// Use AnimationSystem.SetLayerAnimation to add/change one.
     /// </summary>
-    public List<LayerAnimation> Layers { get; set; } = new();
+    public List<LayerAnimation> Layers { get; set { field = value; Dirty(); } } = new();
+
+    /// <summary>
+    /// A layer animation changed something of itself.
+    /// </summary>
+    internal void OnLayerChanged() => Dirty();
 
     public override IComponentState? GetNetState(GameTick fromTick)
     {
@@ -103,19 +108,23 @@ public class LayerAnimation
     /// <summary>
     /// Id of the SpriteLayer (SpriteComponent.Layers) this animation drives.
     /// </summary>
-    public string LayerId { get; set; } = string.Empty;
+    public string LayerId { get; set { field = value; Dirty(); } } = string.Empty;
 
     /// <inheritdoc cref="AnimationComponent.Key"/>
     [AnimationKey]
-    public string Key { get; set; } = string.Empty;
+    public string Key { get; set { field = value; Dirty(); } } = string.Empty;
 
-    public bool Playing { get; set; } = true;
+    public bool Playing { get; set { field = value; Dirty(); } } = true;
 
     /// <inheritdoc cref="AnimationComponent.SpeedOverride"/>
-    public float? SpeedOverride { get; set; } = null;
+    public float? SpeedOverride { get; set { field = value; Dirty(); } } = null;
 
     /// <inheritdoc cref="AnimationComponent.LoopOverride"/>
-    public bool? LoopOverride { get; set; } = null;
+    public bool? LoopOverride { get; set { field = value; Dirty(); } } = null;
+
+    internal AnimationComponent? Owner;
+
+    private void Dirty() => Owner?.OnLayerChanged();
 
     /// <inheritdoc cref="AnimationComponent.StartTick"/>
     internal GameTick StartTick;

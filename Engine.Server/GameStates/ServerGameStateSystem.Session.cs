@@ -17,9 +17,12 @@ public sealed partial class ServerGameStateSystem
     private readonly Dictionary<INetSession, PvsSession> _sessions = new();
     private readonly List<INetSession> _goneSessions = new();
     private readonly HashSet<NetEntity> _visibleNow = new();
+    private readonly HashSet<NetEntity> _enteringNow = new();
     private readonly List<NetEntity> _goneEntities = new();
 
     private int _forceAckThreshold;
+    private int _fullStateCooldown;
+    private bool _deltaEnabled = true;
 
     private void InitSessions()
     {
@@ -27,6 +30,8 @@ public sealed partial class ServerGameStateSystem
         _net.RegisterNetMessage<RequestFullStateMessage>(OnRequestFull);
 
         _configMan.Subs(NetworkingCvars.NetForceAckThreshold, value => _forceAckThreshold = value);
+        _configMan.Subs(NetworkingCvars.NetFullStateCooldown, value => _fullStateCooldown = value);
+        _configMan.Subs(NetworkingCvars.NetDelta, value => _deltaEnabled = value);
     }
 
     private void EnsureSessions()
@@ -55,8 +60,16 @@ public sealed partial class ServerGameStateSystem
             return;
 
         // acks are unreliable, so they can show up out of order
-        if (msg.Tick > pvs.LastReceivedAck)
-            pvs.LastReceivedAck = msg.Tick;
+        if (msg.Tick <= pvs.LastReceivedAck)
+            return;
+
+        pvs.LastReceivedAck = msg.Tick;
+
+        // the session confirmed a state, this is what turns delta on
+        if (pvs.RequestedFull)
+            Log.Debug($"{pvs.Session.RemoteEndPoint} acked for {msg.Tick}.");
+
+        pvs.RequestedFull = false;
     }
 
     private void OnRequestFull(RequestFullStateMessage msg, INetSession? session)
@@ -64,6 +77,17 @@ public sealed partial class ServerGameStateSystem
         if (session is null || !_sessions.TryGetValue(session, out var pvs))
             return;
 
+        if (pvs.LastFullStateRequest != GameTick.Zero &&
+            _timing.CurTick - pvs.LastFullStateRequest < (uint)_fullStateCooldown)
+        {
+            pvs.IgnoredFullStateRequests++;
+            if (pvs.IgnoredFullStateRequests % 100 == 0)
+                Log.Warn($"{pvs.Session.RemoteEndPoint} asked for {pvs.IgnoredFullStateRequests} full states faster than the cooldown allows! Maybe a malicious client?");
+
+            return;
+        }
+
+        pvs.LastFullStateRequest = _timing.CurTick;
         pvs.RequestedFull = true;
         pvs.ForceSendReliably = true;
         pvs.LastReceivedAck = GameTick.Zero;
@@ -76,20 +100,23 @@ public sealed partial class ServerGameStateSystem
         state.Reset();
 
         state.ToTick = _timing.CurTick;
-        state.FromTick = session.RequestedFull ? GameTick.Zero : session.LastReceivedAck;
+        state.FromTick = session.RequestedFull || !_deltaEnabled ? GameTick.Zero : session.LastReceivedAck;
 
         _entManager.GetDeletedSince(state.FromTick, state.Deletions);
+
         GetVisibleBlocks(session, state.Blocks);
         CollectEntering(session, state);
+        BuildBlocks(session, state);
     }
 
     /// <summary>
-    /// Works out which of the visible entities this session does not have yet, so the prototype id and others only travels until
-    /// the session confirms it instead of every tick.
+    /// Works out which of the visible entities this session does not have yet, so the prototype id and others only
+    /// travel until the session confirms it, and which ones it has but cannot see anymore.
     /// </summary>
     private void CollectEntering(PvsSession session, GameState state)
     {
         _visibleNow.Clear();
+        _enteringNow.Clear();
 
         foreach (var block in state.Blocks)
         {
@@ -103,7 +130,8 @@ public sealed partial class ServerGameStateSystem
                 var uid = _entManager.GetEntity(ent.NetEntity);
                 var protoId = _entManager.HasEntity(uid, out var entity) ? entity.Id.Id ?? string.Empty : string.Empty;
                 state.Entering.Add(new EnteringEntity(ent.NetEntity, protoId));
-                session.Sent[ent.NetEntity] = state.ToTick;
+                _enteringNow.Add(ent.NetEntity);
+                session.Sent.TryAdd(ent.NetEntity, state.ToTick);
             }
         }
 
@@ -115,8 +143,6 @@ public sealed partial class ServerGameStateSystem
 
         foreach (var netEnt in _goneEntities)
             session.Sent.Remove(netEnt);
-
-        _goneEntities.Clear();
     }
 
     private void Send(PvsSession session)
@@ -127,23 +153,41 @@ public sealed partial class ServerGameStateSystem
         session.Session.SendMessage(new GameStateMessage
         {
             State = session.State,
+            EntMan = _entManager,
             Delivery = session.ForceSendReliably || stale
                 ? NetDeliveryMethod.ReliableOrdered
                 : NetDeliveryMethod.Unreliable,
         });
 
         session.ForceSendReliably = false;
+
+        SendLeftView(session);
     }
 
     /// <summary>
-    /// Drops the deletions every session has already been told about.
+    /// Leaving the view goes in its own reliable message so dont get lost in the networking :(
+    /// </summary>
+    private void SendLeftView(PvsSession session)
+    {
+        if (_goneEntities.Count == 0)
+            return;
+
+        var msg = new LeaveViewMessage();
+        msg.Entities.AddRange(_goneEntities);
+        session.Session.SendMessage(msg);
+
+        _goneEntities.Clear();
+    }
+
+    /// <summary>
+    /// Drops the history every session has already been told about.
     /// </summary>
     private void CullHistory()
     {
         var oldest = _timing.CurTick;
         foreach (var (_, session) in _sessions)
         {
-            // a session with no baseline is never told about deletions!!!
+            // a session with no baseline is never told about deletions in the first place
             if (session.RequestedFull)
                 continue;
 

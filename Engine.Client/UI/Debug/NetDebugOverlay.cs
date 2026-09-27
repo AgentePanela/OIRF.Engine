@@ -115,7 +115,8 @@ public sealed class NetDebugOverlay : Overlay
         var latest = _metrics.Latest;
         _headerLabel.Text =
             $"ping {session.Ping}ms | {FormatBytes(_metrics.BytesPerSecond(_timing.TickRate))}/s | " +
-            $"tick {_metrics.LastAppliedTick} | queued {latest.Queued}" +
+            $"tick {_metrics.LastAppliedTick} | queued {latest.Queued} | " +
+            (_metrics.LastFromTick == GameTick.Zero ? "FULL" : $"delta from {_metrics.LastFromTick}") +
             (_metrics.AwaitingFull ? " | FULL STATE PENDING" : "");
 
         RefreshEntities();

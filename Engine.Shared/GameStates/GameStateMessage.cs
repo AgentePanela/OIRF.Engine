@@ -30,12 +30,14 @@ public sealed class GameStateMessage : NetMessage
     public int BlocksLength;
     public int BlockCount;
 
+    public global::Engine.Shared.GameObjects.EntityManager? EntMan;
+
     public override void WriteToBuffer(NetOutgoingMessage buffer)
     {
         GameStateSerializer.WriteHeader(buffer, State);
 
         foreach (var block in State.Blocks)
-            GameStateSerializer.WriteBlockInto(buffer, block);
+            GameStateSerializer.WriteBlock(buffer, block, EntMan!, State.FromTick);
     }
 
     public override void ReadFromBuffer(NetIncomingMessage buffer)

@@ -47,6 +47,7 @@ internal sealed partial class NetManager : INetManager
         RegisterNetMessage<GameStateMessage>();
         RegisterNetMessage<StateAckMessage>();
         RegisterNetMessage<RequestFullStateMessage>();
+        RegisterNetMessage<LeaveViewMessage>();
 
         SubscribeLiveConfig(NetworkingCvars.NetFakeLoss, (c, v) => c.SimulatedLoss = v);
         SubscribeLiveConfig(NetworkingCvars.NetFakeLagMin, (c, v) => c.SimulatedMinimumLatency = v);

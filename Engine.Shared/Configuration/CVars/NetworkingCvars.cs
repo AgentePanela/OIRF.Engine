@@ -64,6 +64,18 @@ public static class NetworkingCvars
         CVarDef.Create("net.upnp", false, CVar.SERVERONLY);
 
     /// <summary>
+    /// Turning this off makes every session get a full state every tick. ONLY SET THIS IF YOU ARE DEBUGGING.
+    /// </summary>
+    public static readonly CVarDef<bool> NetDelta =
+        CVarDef.Create("net.delta", true, CVar.SERVERONLY);
+
+    /// <summary>
+    /// How many ticks a session has to wait between two full states it asked for.
+    /// </summary>
+    public static readonly CVarDef<int> NetFullStateCooldown =
+        CVarDef.Create("net.full-state-cooldown", 30, CVar.SERVERONLY);
+
+    /// <summary>
     /// How many ticks a session can go without asking for a game state before the next one is sent reliably. so if a client
     /// that is dropping packets is not left behind forever.
     /// </summary>

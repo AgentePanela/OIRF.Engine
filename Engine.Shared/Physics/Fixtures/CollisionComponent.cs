@@ -4,12 +4,12 @@ using System.Collections.Generic;
 
 namespace Engine.Shared.Physics.Fixtures;
 
-[RegisterComponent("Collision"), NetworkedComponent]
+[RegisterComponent("Collision"), NetworkedComponent, AutoDirty]
 public sealed partial class CollisionComponent : Component
 {
-    [NetField] public Dictionary<string, CollisionFixture> Fixtures { get; set; } = new();
+    [NetField] public partial Dictionary<string, CollisionFixture> Fixtures { get; set; } = new();
 
-    [NetField] public bool Active { get; set; } = true;
+    [NetField] public partial bool Active { get; set; } = true;
  
     public CollisionFixture? GetFixture(string id)
         => Fixtures.GetValueOrDefault(id);
@@ -17,11 +17,18 @@ public sealed partial class CollisionComponent : Component
     public CollisionFixture AddFixture(string id, CollisionFixture fixture)
     {
         Fixtures[id] = fixture;
+        Dirty(); // the dictionary is the same instance, so the generated setter never runs
         return fixture;
     }
  
     public bool RemoveFixture(string id)
-        => Fixtures.Remove(id);
+    {
+        if (!Fixtures.Remove(id))
+            return false;
+
+        Dirty();
+        return true;
+    }
 }
 
 [Serializable]

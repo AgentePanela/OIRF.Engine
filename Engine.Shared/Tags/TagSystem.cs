@@ -55,14 +55,16 @@ public sealed class TagSystem : EntitySystem
     {
         var comp = EnsureComp<TagComponent>(uid);
         comp.Tags.Add(tag);
-        AssertInvalidTag(tag, uid);
+        Dirty(uid, comp); 
     }
 
     public void RemoveTag(EntityUid uid, ProtoId<TagPrototype> tag)
     {
         if (!TryComp<TagComponent>(uid, out var comp))
             return;
-        comp.Tags.Remove(tag);
+
+        if (comp.Tags.Remove(tag))
+            Dirty(uid, comp);
     }
 
     public IEnumerable<EntityUid> GetEntitiesWithTag(ProtoId<TagPrototype> tag)

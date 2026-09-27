@@ -110,19 +110,22 @@ public static class IoCManager
     /// </summary>
     public static void ResolveDependencies(object obj)
     {
-        var type = obj.GetType();
-
-        foreach (var field in type.GetFields(
-            BindingFlags.Instance |
-            BindingFlags.NonPublic |
-            BindingFlags.Public))
+        // walk the hierarchy by skipping base class private fields
+        for (var type = obj.GetType(); type is not null; type = type.BaseType)
         {
-            if (!Attribute.IsDefined(field, typeof(DependencyAttribute)))
-                continue;
+            foreach (var field in type.GetFields(
+                BindingFlags.Instance |
+                BindingFlags.NonPublic |
+                BindingFlags.Public |
+                BindingFlags.DeclaredOnly))
+            {
+                if (!Attribute.IsDefined(field, typeof(DependencyAttribute)))
+                    continue;
 
-            var dep = Resolve(field.FieldType);
+                var dep = Resolve(field.FieldType);
 
-            field.SetValue(obj, dep);
+                field.SetValue(obj, dep);
+            }
         }
     }
 
