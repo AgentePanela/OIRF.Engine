@@ -37,6 +37,8 @@ public sealed partial class ServerGameStateSystem : EntitySystem
         if (_sessions.Count == 0)
             return;
 
+        RebuildIndex();
+
         foreach (var session in _sessions.Values)
         {
             ComputeSessionState(session);

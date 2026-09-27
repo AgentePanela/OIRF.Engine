@@ -34,6 +34,13 @@ public sealed class PvsSession(INetSession session)
     /// </summary>
     public readonly Dictionary<NetEntity, GameTick> Sent = new();
 
+    /// <summary>
+    /// The chunks this session saw last tick.
+    /// </summary>
+    public readonly HashSet<PvsChunkKey> SeenChunks = new();
+
+    public readonly HashSet<EntityUid> Viewers = new();
+
     public bool Knows(NetEntity netEntity)
         => Sent.TryGetValue(netEntity, out var sentAt) && sentAt <= LastReceivedAck;
 

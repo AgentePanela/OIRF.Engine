@@ -34,12 +34,19 @@ public sealed partial class ServerGameStateSystem
         _configMan.Subs(NetworkingCvars.NetDelta, value => _deltaEnabled = value);
     }
 
+    internal PvsSession GetSession(INetSession session)
+    {
+        if (!_sessions.TryGetValue(session, out var pvs))
+            _sessions[session] = pvs = new PvsSession(session);
+
+        return pvs;
+    }
+
     private void EnsureSessions()
     {
         foreach (var session in _net.Sessions)
         {
-            if (!_sessions.ContainsKey(session))
-                _sessions[session] = new PvsSession(session);
+            GetSession(session);
         }
 
         foreach (var (session, _) in _sessions)
@@ -49,7 +56,10 @@ public sealed partial class ServerGameStateSystem
         }
 
         foreach (var session in _goneSessions)
+        {
             _sessions.Remove(session);
+            _pvs.ClearSession(session);
+        }
 
         _goneSessions.Clear();
     }
@@ -92,6 +102,7 @@ public sealed partial class ServerGameStateSystem
         pvs.ForceSendReliably = true;
         pvs.LastReceivedAck = GameTick.Zero;
         pvs.Sent.Clear();
+        pvs.SeenChunks.Clear();
     }
 
     private void ComputeSessionState(PvsSession session)

@@ -61,19 +61,17 @@ public static class NetworkingCvars
 
     /// <summary>
     /// The MAXIMUM a player can see of the world.
-    /// </summary>
     public static readonly CVarDef<float> NetPvsRange =
-        CVarDef.Create("net.pvs-range", 1536f, CVar.SERVERONLY);
+        CVarDef.Create("net.pvs-range", 750f, CVar.REPLICATED | CVar.SERVER);
 
     /// <summary>
-    /// Side of a PVS chunk, in world units. Visibility is chunk-granular, so a bigger chunk sends more than needed and
-    /// a smaller one makes the query touch more buckets.
+    /// Side of a PVS chunk (what the server will send of entities to the session), in world units. A big chunk can sends more than needed.
     /// </summary>
     public static readonly CVarDef<int> NetPvsChunkSize =
-        CVarDef.Create("net.pvs-chunk-size", 512, CVar.SERVERONLY);
+        CVarDef.Create("net.pvs-chunk-size", 512, CVar.REPLICATED | CVar.SERVER);
 
     public static readonly CVarDef<float> NetPvsLeaveMargin =
-        CVarDef.Create("net.pvs-leave-margin", 512f, CVar.SERVERONLY);
+        CVarDef.Create("net.pvs-leave-margin", 150f, CVar.REPLICATED | CVar.SERVER);
 
     /// <summary>
     /// How many entities may enter a session's view in a single tick, 0 for no limit.
