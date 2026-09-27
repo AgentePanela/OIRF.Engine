@@ -139,6 +139,20 @@ public sealed partial class ClientGameStateSystem
             return;
 
         var comp = EnsureComponent(type, out var created);
+
+        // a delta is merged onto the last full state here, so the component only ever sees a full one
+        if (state is IComponentDeltaState delta)
+        {
+            if (delta.ApplyToFull(comp.LastServerState) is not { } merged)
+            {
+                Log.Error($"Receiving a delta for {type.Name} with no full state to merge it onto!");
+                RequestFullState();
+                return;
+            }
+
+            state = merged;
+        }
+
         comp.HandleNetState(state);
         comp.LastServerState = state;
 

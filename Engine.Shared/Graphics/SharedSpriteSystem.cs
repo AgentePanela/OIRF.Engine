@@ -14,6 +14,18 @@ public abstract class SharedSpriteSystem : EntitySystem
     /// </summary>
     protected virtual bool LayersAreLocal => false;
 
+    public override void Init()
+    {
+        base.Init();
+        SubscribeEvent<SpriteComponent, CompAddedEvent>(OnSpriteAdded);
+    }
+
+    private void OnSpriteAdded(EntityUid uid, SpriteComponent comp, CompAddedEvent args)
+    {
+        foreach (var layer in comp.Layers)
+            layer.Owner = comp;
+    }
+
     public SpriteLayer? GetLayer(SpriteComponent comp, string id)
     {
         if (comp.Layers is null)
@@ -45,9 +57,7 @@ public abstract class SharedSpriteSystem : EntitySystem
         layer.Owner = comp;
         layer.Local = LayersAreLocal;
         comp.Layers.Add(layer);
-        comp.LayersDirty = true;
-
-        Dirty(comp);
+        comp.OnLayerSetChanged();
         return layer;
     }
 
@@ -58,7 +68,7 @@ public abstract class SharedSpriteSystem : EntitySystem
             return false;
 
         comp.Layers.Remove(layer);
-        Dirty(comp);
+        comp.OnLayerSetChanged();
         return true;
     }
 
@@ -68,7 +78,6 @@ public abstract class SharedSpriteSystem : EntitySystem
     public void BringToFront(SpriteComponent comp)
     {
         comp.Depth = float.MaxValue;
-        Dirty(comp);
     }
 
     /// <summary>
@@ -77,6 +86,5 @@ public abstract class SharedSpriteSystem : EntitySystem
     public void SendToBack(SpriteComponent comp)
     {
         comp.Depth = float.MinValue;
-        Dirty(comp);
     }
 }

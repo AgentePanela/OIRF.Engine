@@ -14,59 +14,125 @@ public class SpriteComponent : Component
 {
     // devnote: everything that is here that sprite2d already have is for easily prototype component serialization.
     [TextureKey]
-    public string Key { get; set; } = "";
+    public string Key { get; set { field = value; DirtyBase(); } } = "";
 
     /// <summary>
     /// The layer where this sprite will be drawed
     /// </summary>
-    public int Layer { get; set; } = 0;
+    public int Layer { get; set { field = value; DirtyBase(); } } = 0;
 
     /// <summary>
     /// Z-order inside Layer, higher draws on top. See SpriteSystem.BringToFront/SendToBack.
     /// </summary>
-    public float Depth { get; set; } = 0f;
-    public Color Color { get; set; } = Color.White;
-    public Vector2? Origin { get; set; }
+    public float Depth { get; set { field = value; DirtyBase(); } } = 0f;
+    public Color Color { get; set { field = value; DirtyBase(); } } = Color.White;
+    public Vector2? Origin { get; set { field = value; DirtyBase(); } }
 
-    public SamplerState? SamplerState { get; set; }
-    public SpriteEffects Effects { get; set; } = SpriteEffects.None;
+    public SamplerState? SamplerState { get; set { field = value; DirtyBase(); } }
+    public SpriteEffects Effects { get; set { field = value; DirtyBase(); } } = SpriteEffects.None;
 
     /// <summary>
     /// Name of the shader to render this sprite with.
     /// </summary>
     [ShaderKey]
-    public string? Shader { get; set; }
+    public string? Shader { get; set { field = value; DirtyBase(); } }
 
-    public List<SpriteLayer> Layers { get; set; } = new();
+    public List<SpriteLayer> Layers
+    {
+        get;
+        set
+        {
+            field = value;
+            foreach (var layer in field)
+                layer.Owner = this;
+
+            OnLayerSetChanged();
+        }
+    } = new();
+
+    private void DirtyBase()
+    {
+        BaseTick = EntityManager.Instance?.CurTick ?? GameTick.Zero;
+        Dirty();
+    }
+
+    internal void OnLayerChanged(bool reordered = false)
+    {
+        if (reordered)
+            LayersDirty = true;
+
+        Dirty();
+    }
+
+    internal void OnLayerSetChanged()
+    {
+        LayerSetTick = EntityManager.Instance?.CurTick ?? GameTick.Zero;
+        LayersDirty = true;
+        Dirty();
+    }
 
     /// <summary>
     /// set when a layer Order changes so SpriteSystem re-sorts before the next draw.
     /// </summary>
     internal bool LayersDirty = true;
 
+    internal GameTick BaseTick;
+    internal GameTick LayerSetTick;
+
     public override IComponentState? GetNetState(GameTick fromTick)
+    {
+        if (fromTick == GameTick.Zero)
+            return BuildBase(CollectLayers(GameTick.Zero));
+
+        var delta = new SpriteComponentDeltaState
+        {
+            Base = BaseTick >= fromTick ? BuildBase([]) : null,
+            Layers = CollectLayers(fromTick),
+        };
+
+        if (LayerSetTick >= fromTick)
+            delta.LayerIds = CollectLayerIds();
+
+        return delta;
+    }
+
+    private SpriteLayerState[] CollectLayers(GameTick since)
     {
         var layers = new List<SpriteLayerState>(Layers.Count);
         foreach (var layer in Layers)
         {
-            if (!layer.Local)
+            if (!layer.Local && layer.LastModifiedTick >= since)
                 layers.Add(SpriteLayerState.From(layer));
         }
 
-        return new SpriteComponentState
-        {
-            Key = Key,
-            Layer = Layer,
-            Depth = Depth,
-            Color = Color,
-            HasOrigin = Origin is not null,
-            Origin = Origin ?? Vector2.Zero,
-            Sampler = SamplerPresets.IndexOf(SamplerState),
-            Effects = (byte)Effects,
-            Shader = Shader,
-            Layers = layers.ToArray(),
-        };
+        return layers.ToArray();
     }
+
+    private string[] CollectLayerIds()
+    {
+        var ids = new List<string>(Layers.Count);
+        foreach (var layer in Layers)
+        {
+            if (!layer.Local)
+                ids.Add(layer.Id);
+        }
+
+        return ids.ToArray();
+    }
+
+    private SpriteComponentState BuildBase(SpriteLayerState[] layers) => new()
+    {
+        Key = Key,
+        Layer = Layer,
+        Depth = Depth,
+        Color = Color,
+        HasOrigin = Origin is not null,
+        Origin = Origin ?? Vector2.Zero,
+        Sampler = SamplerPresets.IndexOf(SamplerState),
+        Effects = (byte)Effects,
+        Shader = Shader,
+        Layers = layers,
+    };
 
     public override void HandleNetState(IComponentState state)
     {
@@ -94,7 +160,7 @@ public class SpriteComponent : Component
             {
                 layer = new SpriteLayer { Owner = this };
                 Layers.Add(layer);
-                LayersDirty = true;
+                OnLayerSetChanged();
             }
 
             state.ApplyTo(layer);
@@ -107,7 +173,7 @@ public class SpriteComponent : Component
                 continue;
 
             Layers.RemoveAt(i);
-            LayersDirty = true;
+            OnLayerSetChanged();
         }
     }
 
@@ -131,48 +197,52 @@ public sealed class SpriteLayer
     /// Made on this client through its SpriteSystem, so states never replace it.
     /// </summary>
     internal bool Local;
+    internal GameTick LastModifiedTick;
 
     /// <summary>
     /// Used to identify layers in the SpriteSystem api - e.g. ID = Clotching (for a clotching layer)
     /// </summary>
-    public string Id { get; set; } = Guid.NewGuid().ToString();
-
-    private int _order;
+    public string Id { get; set { field = value; Dirty(); } } = Guid.NewGuid().ToString();
 
     /// <summary>
     /// Define the sprite layer order in the component.
     /// </summary>
     public int Order
     {
-        get => _order;
+        get;
         set
         {
-            if (_order == value)
+            if (field == value)
                 return;
 
-            _order = value;
-            if (Owner is not null)
-                Owner.LayersDirty = true;
+            field = value;
+            Dirty(reordered: true);
         }
     }
 
-    public bool Visible { get; set; } = true;
+    public bool Visible { get; set { field = value; Dirty(); } } = true;
 
     [TextureKey]
-    public string Key { get; set; } = "";
+    public string Key { get; set { field = value; Dirty(); } } = "";
     
-    public Color Color { get; set; } = Color.White;
-    public Vector2? Origin { get; set; }
-    public SamplerState? SamplerState { get; set; }
+    public Color Color { get; set { field = value; Dirty(); } } = Color.White;
+    public Vector2? Origin { get; set { field = value; Dirty(); } }
+    public SamplerState? SamplerState { get; set { field = value; Dirty(); } }
 
     /// <summary>
     /// Offset based on the main layer.
     /// </summary>
-    public Vector2 Offset { get; set; } = Vector2.Zero;
+    public Vector2 Offset { get; set { field = value; Dirty(); } } = Vector2.Zero;
 
     /// <inheritdoc cref="SpriteComponent.Shader"/>
     [ShaderKey]
-    public string? Shader { get; set; }
+    public string? Shader { get; set { field = value; Dirty(); } }
+
+    private void Dirty(bool reordered = false)
+    {
+        LastModifiedTick = EntityManager.Instance?.CurTick ?? GameTick.Zero;
+        Owner?.OnLayerChanged(reordered);
+    }
 }
 
 [Serializable]
@@ -188,6 +258,55 @@ public sealed class SpriteComponentState : IComponentState
     public byte Effects;
     public string? Shader;
     public SpriteLayerState[] Layers = [];
+
+    public SpriteComponentState WithLayers(SpriteLayerState[] layers) => new()
+    {
+        Key = Key,
+        Layer = Layer,
+        Depth = Depth,
+        Color = Color,
+        HasOrigin = HasOrigin,
+        Origin = Origin,
+        Sampler = Sampler,
+        Effects = Effects,
+        Shader = Shader,
+        Layers = layers,
+    };
+}
+
+/// <summary>
+/// Only what changed since the session first appearance.
+/// </summary>
+[Serializable]
+public sealed class SpriteComponentDeltaState : IComponentDeltaState<SpriteComponentState>
+{
+    public SpriteComponentState? Base;
+
+    public SpriteLayerState[] Layers = [];
+
+    /// <summary>
+    /// Every replicated layer id, sent only when a layer was added or removed. Null when not changed.
+    /// </summary>
+    public string[]? LayerIds;
+
+    public SpriteComponentState CreateNewFullState(SpriteComponentState full)
+    {
+        var merged = new List<SpriteLayerState>(full.Layers);
+
+        foreach (var layer in Layers)
+        {
+            var index = merged.FindIndex(l => l.Id == layer.Id);
+            if (index >= 0)
+                merged[index] = layer;
+            else
+                merged.Add(layer);
+        }
+
+        if (LayerIds is not null)
+            merged.RemoveAll(l => Array.IndexOf(LayerIds, l.Id) < 0);
+
+        return (Base ?? full).WithLayers(merged.ToArray());
+    }
 }
 
 [Serializable]

@@ -32,6 +32,11 @@ public sealed partial class EntityManager
     internal static EntityManager? Instance { get; private set; }
 
     /// <summary>
+    /// The tick being current being simulated.
+    /// </summary>
+    internal GameTick CurTick => _timing.CurTick;
+
+    /// <summary>
     /// Marks a component as changed on this tick, without saying which field
     /// </summary>
     public void Dirty(Component comp)

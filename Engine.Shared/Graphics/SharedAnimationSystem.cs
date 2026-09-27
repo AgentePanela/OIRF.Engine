@@ -25,6 +25,8 @@ public abstract class SharedAnimationSystem : EntitySystem
 
         foreach (var layer in comp.Layers)
         {
+            layer.Owner = comp;
+
             if (layer.StartTick == GameTick.Zero)
                 layer.StartTick = Timing.CurTick;
         }
@@ -183,8 +185,11 @@ public abstract class SharedAnimationSystem : EntitySystem
                 return layerAnim;
         }
 
-        var created = new LayerAnimation { LayerId = layerId };
+        var created = new LayerAnimation { LayerId = layerId, Owner = comp };
         comp.Layers.Add(created);
+
+        // the callers can return early without changing anything else, and the list still grew
+        comp.OnLayerChanged();
         return created;
     }
 }

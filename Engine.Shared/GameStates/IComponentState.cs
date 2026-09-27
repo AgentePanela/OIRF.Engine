@@ -10,15 +10,22 @@ public interface IComponentState
 /// <summary>
 /// A state that only carries what changed since some tick.
 /// </summary>
-public interface IComponentDeltaState<TFullState> : IComponentState where TFullState : IComponentState
+public interface IComponentDeltaState : IComponentState
 {
     /// <summary>
-    /// Merges this delta into <paramref name="full"/>, in place.
+    /// The new full state, from this delta and what the peer already had. Returns null when there is nothing to merge onto.
     /// </summary>
-    void ApplyToFullState(TFullState full);
+    IComponentState? ApplyToFull(IComponentState? full);
+}
 
+/// <inheritdoc cref="IComponentDeltaState"/>
+public interface IComponentDeltaState<TFullState> : IComponentDeltaState where TFullState : IComponentState
+{
     /// <summary>
-    /// Same as <see cref="ApplyToFullState"/>, but leaves <paramref name="full"/> untouched.
+    /// Merges this delta with <paramref name="full"/> into a new state, leaving <paramref name="full"/> untouched.
     /// </summary>
     TFullState CreateNewFullState(TFullState full);
+
+    IComponentState? IComponentDeltaState.ApplyToFull(IComponentState? full)
+        => full is TFullState typed ? CreateNewFullState(typed) : null;
 }

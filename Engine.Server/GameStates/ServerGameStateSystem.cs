@@ -93,6 +93,9 @@ public sealed partial class ServerGameStateSystem : EntitySystem
 
             if (_compFac.IsManualState(type))
             {
+                if (!full && comp.LastModifiedTick < fromTick)
+                    continue;
+
                 // a manual component says "nothing to send" by returning null
                 var manual = comp.GetNetState(full ? GameTick.Zero : fromTick);
                 if (manual is not null)
