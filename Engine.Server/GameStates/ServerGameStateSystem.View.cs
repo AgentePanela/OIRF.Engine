@@ -18,17 +18,6 @@ public sealed partial class ServerGameStateSystem
 
     private readonly PvsChunkIndex _index = new();
 
-    private readonly Stack<EntityState> _statePool = new();
-    private readonly List<EntityState> _rentedStates = new();
-    private readonly Stack<EntityBlock> _blockPool = new();
-    private readonly List<EntityBlock> _rentedBlocks = new();
-
-    // per session, reused
-    private readonly List<PvsChunkHit> _hits = new();
-    private readonly HashSet<PvsChunkKey> _chunksNow = new();
-    private readonly HashSet<EntityUid> _accepted = new();
-    private int _enterBudgetLeft;
-
     private bool _pvsEnabled;
     private float _pvsRange;
     private float _pvsLeaveMargin;
@@ -88,74 +77,75 @@ public sealed partial class ServerGameStateSystem
         _index.Add(scene, uid, xform.Position);
     }
 
-    private void GetVisibleBlocks(PvsSession session, List<EntityBlock> output)
+    private void GetVisibleBlocks(PvsSession session, PvsBuildContext ctx)
     {
+        var output = ctx.State.Blocks;
         _rooms.IsInRoom(session.Session, out var room);
 
         if (!_pvsEnabled)
         {
-            output.Add(FillWholeBlock(EntityBlockKind.Global, _globals));
+            output.Add(FillWholeBlock(ctx, EntityBlockKind.Global, _globals));
 
             if (room is not null)
-                output.Add(FillWholeBlock(EntityBlockKind.Room, room.OwnedEntities));
+                output.Add(FillWholeBlock(ctx, EntityBlockKind.Room, room.OwnedEntities));
 
             return;
         }
 
-        var globals = RentBlock(EntityBlockKind.Global);
+        var globals = ctx.RentBlock(EntityBlockKind.Global);
         output.Add(globals);
 
         EntityBlock? roomBlock = null;
         if (room is not null)
         {
-            roomBlock = RentBlock(EntityBlockKind.Room);
+            roomBlock = ctx.RentBlock(EntityBlockKind.Room);
             output.Add(roomBlock);
         }
 
-        _accepted.Clear();
-        _chunksNow.Clear();
-        _enterBudgetLeft = _pvsEnterBudget <= 0 ? int.MaxValue : _pvsEnterBudget;
+        ctx.Accepted.Clear();
+        ctx.ChunksNow.Clear();
+        ctx.EnterBudgetLeft = _pvsEnterBudget <= 0 ? int.MaxValue : _pvsEnterBudget;
 
         // what the session looks through and what was forced to it are never culled, and go in before anything else
         // can eat the budget
         foreach (var uid in session.Viewers)
-            Accept(session, uid, globals, roomBlock, room, forced: true);
+            Accept(session, ctx, uid, globals, roomBlock, room, forced: true);
 
         foreach (var uid in _pvs.GetGlobal())
-            Accept(session, uid, globals, roomBlock, room, forced: true);
+            Accept(session, ctx, uid, globals, roomBlock, room, forced: true);
 
         if (room is not null)
         {
             foreach (var uid in _pvs.GetForScene(room))
-                Accept(session, uid, globals, roomBlock, room, forced: true);
+                Accept(session, ctx, uid, globals, roomBlock, room, forced: true);
         }
 
         foreach (var uid in _pvs.GetForSession(session.Session))
-            Accept(session, uid, globals, roomBlock, room, forced: true);
+            Accept(session, ctx, uid, globals, roomBlock, room, forced: true);
 
-        CollectChunks(session);
+        CollectChunks(session, ctx);
 
-        foreach (var hit in _hits)
+        foreach (var hit in ctx.Hits)
         {
             // two eyes can reach the same chunk
-            if (!_chunksNow.Add(hit.Key))
+            if (!ctx.ChunksNow.Add(hit.Key))
                 continue;
 
             foreach (var uid in hit.Entities)
-                Accept(session, uid, globals, roomBlock, room, forced: false);
+                Accept(session, ctx, uid, globals, roomBlock, room, forced: false);
         }
 
         session.SeenChunks.Clear();
-        foreach (var key in _chunksNow)
+        foreach (var key in ctx.ChunksNow)
             session.SeenChunks.Add(key);
     }
 
     /// <summary>
     /// Every chunk the session's eyes reach, closest first
     /// </summary>
-    private void CollectChunks(PvsSession session)
+    private void CollectChunks(PvsSession session, PvsBuildContext ctx)
     {
-        _hits.Clear();
+        ctx.Hits.Clear();
 
         foreach (var uid in session.Viewers)
         {
@@ -168,39 +158,39 @@ public sealed partial class ServerGameStateSystem
             var center = xform.Position + eye.Offset;
             var range = MathF.Min(eye.Range ?? _pvsRange, _pvsRange);
 
-            AddHits(session, null, center, range);
+            AddHits(session, ctx, null, center, range);
 
             // the eye own scene, not the session room
             if (ent.Scene is not null)
-                AddHits(session, ent.Scene, center, range);
+                AddHits(session, ctx, ent.Scene, center, range);
         }
 
-        _hits.Sort(static (a, b) => a.DistanceSq.CompareTo(b.DistanceSq));
+        ctx.Hits.Sort(static (a, b) => a.DistanceSq.CompareTo(b.DistanceSq));
     }
 
-    private void AddHits(PvsSession session, IEntityScene? scene, Vector2 center, float range)
+    private void AddHits(PvsSession session, PvsBuildContext ctx, IEntityScene? scene, Vector2 center, float range)
     {
-        var first = _hits.Count;
-        _index.GetChunksInRange(scene, center, range + _pvsLeaveMargin, _hits);
+        var first = ctx.Hits.Count;
+        _index.GetChunksInRange(scene, center, range + _pvsLeaveMargin, ctx.Hits);
 
         // a chunk enters within range, but only leaves past range + margin - without that, walking the edge of the
         // view makes everything flip in and out every tick
         var rangeSq = range * range;
-        for (var i = _hits.Count - 1; i >= first; i--)
+        for (var i = ctx.Hits.Count - 1; i >= first; i--)
         {
-            if (_hits[i].DistanceSq <= rangeSq || session.SeenChunks.Contains(_hits[i].Key))
+            if (ctx.Hits[i].DistanceSq <= rangeSq || session.SeenChunks.Contains(ctx.Hits[i].Key))
                 continue;
 
-            _hits.RemoveAt(i);
+            ctx.Hits.RemoveAt(i);
         }
     }
 
     /// <summary>
     /// Takes an entity into the session's view, with its ancestors. <paramref name="forced"/> skips the enter budget.
     /// </summary>
-    private void Accept(PvsSession session, EntityUid uid, EntityBlock globals, EntityBlock? roomBlock, Room? room, bool forced)
+    private void Accept(PvsSession session, PvsBuildContext ctx, EntityUid uid, EntityBlock globals, EntityBlock? roomBlock, Room? room, bool forced)
     {
-        if (_accepted.Contains(uid))
+        if (ctx.Accepted.Contains(uid))
             return;
 
         if (!_entManager.HasEntity(uid, out var ent) || !IsReplicated(ent))
@@ -218,65 +208,40 @@ public sealed partial class ServerGameStateSystem
         // not confirmed keeps counting
         if (!forced && !session.Knows(ent.NetId))
         {
-            if (_enterBudgetLeft <= 0)
+            if (ctx.EnterBudgetLeft <= 0)
                 return;
 
-            _enterBudgetLeft--;
+            ctx.EnterBudgetLeft--;
         }
 
-        _accepted.Add(uid);
-        block.Entities.Add(RentEntityState(ent.NetId));
+        ctx.Accepted.Add(uid);
+        block.Entities.Add(ctx.RentEntityState(ent.NetId));
 
         // a child whose parent was culled would arrive pointing at a NetEntity the client does not have.
         if (_entManager.TryComp<TransformComponent>(uid, out var xform) && xform.Parent is { } parent)
-            Accept(session, parent, globals, roomBlock, room, forced: true);
+            Accept(session, ctx, parent, globals, roomBlock, room, forced: true);
     }
 
     /// <summary>
     /// Everything replicated. Only reachable with net.pvs off.
     /// </summary>
-    private EntityBlock FillWholeBlock(EntityBlockKind kind, IReadOnlyCollection<EntityUid> uids)
+    private EntityBlock FillWholeBlock(PvsBuildContext ctx, EntityBlockKind kind, IReadOnlyCollection<EntityUid> uids)
     {
-        var block = RentBlock(kind);
+        var block = ctx.RentBlock(kind);
 
         foreach (var uid in uids)
         {
             if (!_entManager.HasEntity(uid, out var ent) || !IsReplicated(ent))
                 continue;
 
-            block.Entities.Add(RentEntityState(ent.NetId));
+            block.Entities.Add(ctx.RentEntityState(ent.NetId));
         }
 
         return block;
     }
 
-    private EntityBlock RentBlock(EntityBlockKind kind)
-    {
-        var block = _blockPool.Count > 0 ? _blockPool.Pop() : new EntityBlock();
-        block.Reset(kind);
-        _rentedBlocks.Add(block);
-        return block;
-    }
 
-    private EntityState RentEntityState(NetEntity netEntity)
-    {
-        var state = _statePool.Count > 0 ? _statePool.Pop() : new EntityState();
-        state.Reset(netEntity);
-        _rentedStates.Add(state);
-        return state;
-    }
 
-    private void ReturnRented()
-    {
-        foreach (var state in _rentedStates)
-            _statePool.Push(state);
-
-        foreach (var block in _rentedBlocks)
-            _blockPool.Push(block);
-
-        _rentedStates.Clear();
-        _rentedBlocks.Clear();
-    }
 
     private void OnEntityAdded(EntityAddedEvent ev)
     {

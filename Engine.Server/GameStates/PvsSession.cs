@@ -54,5 +54,8 @@ public sealed class PvsSession(INetSession session)
     /// </summary>
     public int IgnoredFullStateRequests;
 
-    public readonly GameState State = new();
+    /// <summary>
+    /// The scratch this session state is built in, so the build can run off the main thread.
+    /// </summary>
+    public readonly PvsBuildContext Build = new();
 }

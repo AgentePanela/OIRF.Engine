@@ -5,6 +5,7 @@ using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.GameStates;
 using Engine.Shared.IoC;
 using Engine.Shared.Networking;
+using Engine.Shared.Threading;
 using Engine.Shared.Timing;
 
 namespace Engine.Server.GameStates;
@@ -19,6 +20,10 @@ public sealed partial class ServerGameStateSystem : EntitySystem
     [Dependency] private readonly IGameTiming _timing = default!;
     [Dependency] private readonly ComponentFactory _compFac = default!;
     [Dependency] private readonly IRoomManager _rooms = default!;
+    [Dependency] private readonly IParallelManager _parallel = default!;
+    
+    private readonly List<PvsSession> _ordered = new();
+    private SerializeJob _serializeJob = default!;
 
     public override void Init()
     {
@@ -26,6 +31,8 @@ public sealed partial class ServerGameStateSystem : EntitySystem
 
         InitView();
         InitSessions();
+
+        _serializeJob = new SerializeJob(this);
     }
 
     public override void Update(float dt)
@@ -39,12 +46,15 @@ public sealed partial class ServerGameStateSystem : EntitySystem
 
         RebuildIndex();
 
-        foreach (var session in _sessions.Values)
-        {
-            ComputeSessionState(session);
+        _ordered.Clear();
+        foreach (var (_, session) in _sessions)
+            _ordered.Add(session);
+
+        // building and writing a state only reads the world, so every session can do it at once.
+        _parallel.ProcessNow(_serializeJob, _ordered.Count);
+
+        foreach (var session in _ordered)
             Send(session);
-            ReturnRented();
-        }
 
         CullHistory();
     }
@@ -52,14 +62,14 @@ public sealed partial class ServerGameStateSystem : EntitySystem
     /// <summary>
     /// Fills in what each visible entity has to say to this session, dropping the ones with nothing to say.
     /// </summary>
-    private void BuildBlocks(PvsSession session, GameState state)
+    private void BuildBlocks(PvsSession session, PvsBuildContext ctx)
     {
-        foreach (var block in state.Blocks)
+        foreach (var block in ctx.State.Blocks)
         {
             for (var i = block.Entities.Count - 1; i >= 0; i--)
             {
                 var entState = block.Entities[i];
-                if (BuildEntityState(session, entState, state.FromTick))
+                if (BuildEntityState(session, ctx, entState, ctx.State.FromTick))
                     continue;
 
                 // nothing changed and the session already has it
@@ -71,12 +81,12 @@ public sealed partial class ServerGameStateSystem : EntitySystem
     /// <summary>
     /// False when the entity has nothing to send to this session.
     /// </summary>
-    private bool BuildEntityState(PvsSession session, EntityState entState, GameTick fromTick)
+    private bool BuildEntityState(PvsSession session, PvsBuildContext ctx, EntityState entState, GameTick fromTick)
     {
         if (!_entManager.TryGetEntity(entState.NetEntity, out var uid) || !_entManager.HasEntity(uid, out var ent))
             return false;
 
-        var entering = _enteringNow.Contains(entState.NetEntity);
+        var entering = ctx.EnteringNow.Contains(entState.NetEntity);
 
         if (!entering && ent.LastModifiedTick < fromTick)
             return false;
@@ -117,4 +127,18 @@ public sealed partial class ServerGameStateSystem : EntitySystem
 
     private static bool IsReplicated(Entity ent)
         => ent.NetId.IsValid && !ent.Deleting;
+
+    /// <summary>
+    /// Runs <see cref="BuildAndSerialize"/> over a batch of sessions.
+    /// </summary>
+    private sealed class SerializeJob(ServerGameStateSystem system) : IParallelRangeJob
+    {
+        public List<PvsSession> Sessions => system._ordered;
+
+        public void ExecuteRange(int start, int end)
+        {
+            for (var i = start; i < end; i++)
+                system.BuildAndSerialize(Sessions[i]);
+        }
+    }
 }
