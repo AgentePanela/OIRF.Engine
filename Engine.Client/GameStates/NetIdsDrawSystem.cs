@@ -1,9 +1,11 @@
 using Engine.Client.Graphics;
 using Engine.Client.Graphics.Fonts;
+using Engine.Client.Graphics.Shaders;
 using Engine.Shared.GameObjects;
 using Engine.Shared.GameStates;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 
 namespace Engine.Client.GameStates;
 
@@ -25,8 +27,16 @@ public sealed class NetIdsDrawSystem : EntityDrawSystem
     [Dependency] private readonly Camera2D _camera = default!;
     [Dependency] private readonly IFontManager _fonts = default!;
     [Dependency] private readonly ClientGameStateMetrics _metrics = default!;
+    [Dependency] private readonly ShaderManager _shaderMan = default!;
 
     public bool Enabled { get; set; }
+    private Effect? _unshaded;
+
+    public override void Init()
+    {
+        base.Init();
+        _unshaded = _shaderMan.GetShader("Unshaded");
+    }
 
     public override void Draw(float dt)
     {
@@ -56,8 +66,8 @@ public sealed class NetIdsDrawSystem : EntityDrawSystem
                     color = StaleColor;
             }
 
-            _renderer.Submit(new RenderQueue(new Label2D(_fonts.Get(12f), text) { Color = color },
-                transform.Position, unshaded: true));
+            _renderer.Submit(new RenderQueue(new Label2D(_fonts.Get(12f), text) { Color = color, Layer = 9999 },
+                transform.Position, shader: _unshaded));
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Engine.Shared.GameObjects;
 using Engine.Shared.IoC;
 using Engine.Shared.Prototypes;
+using Engine.Shared.Timing;
 using Microsoft.Xna.Framework;
 
 namespace Engine.Shared.Tilemap;
@@ -13,15 +14,22 @@ namespace Engine.Shared.Tilemap;
 public abstract class SharedTilemapSystem : EntitySystem
 {
     [Dependency] protected readonly IPrototypeManager _proto = default!;
+    [Dependency] protected readonly IGameTiming Timing = default!;
 
     public void AddChunk(TilemapComponent comp, TilemapChunk chunk)
     {
         comp.Chunks[(chunk.ChunkX, chunk.ChunkY)] = chunk;
+        chunk.LastModifiedTick = Timing.CurTick;
+        Dirty(comp);
     }
 
     public void RemoveChunk(TilemapComponent comp, int cx, int cy)
     {
-        comp.Chunks.Remove((cx, cy));
+        if (!comp.Chunks.Remove((cx, cy)))
+            return;
+
+        comp.RecordChunkRemoval(cx, cy, Timing.CurTick);
+        Dirty(comp);
     }
 
     public TilemapChunk? GetChunk(TilemapComponent comp, int cx, int cy)
@@ -44,6 +52,9 @@ public abstract class SharedTilemapSystem : EntitySystem
         chunk.Tiles[localX, localY] = tile;
         chunk.Dirty = true;
         chunk.SolidTileCount = null;
+
+        chunk.LastModifiedTick = Timing.CurTick;
+        Dirty(comp);
     }
 
     public ProtoId<TilePrototype>? GetTile(TilemapComponent comp, int worldTileX, int worldTileY)
@@ -62,10 +73,15 @@ public abstract class SharedTilemapSystem : EntitySystem
 
     public void Clear(TilemapComponent comp)
     {
+        var tick = Timing.CurTick;
         foreach (var chunk in comp.Chunks.Values)
+        {
             chunk.Dirty = true;
+            comp.RecordChunkRemoval(chunk.ChunkX, chunk.ChunkY, tick);
+        }
 
         comp.Chunks.Clear();
+        Dirty(comp);
     }
 
     /// <summary>
