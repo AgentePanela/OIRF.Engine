@@ -18,7 +18,13 @@ public sealed class GameStateMessage : NetMessage
     public override NetDeliveryMethod DeliveryMethod => Delivery;
 
     /// <summary>
-    /// Sending side: the state to write
+    /// Sending side: the body, already written while the state was built - see PvsBuildContext.
+    /// </summary>
+    public byte[] Body = [];
+    public int BodyLength;
+
+    /// <summary>
+    /// Receiving side: the header that came in.
     /// </summary>
     public GameState State = new();
 
@@ -30,15 +36,8 @@ public sealed class GameStateMessage : NetMessage
     public int BlocksLength;
     public int BlockCount;
 
-    public global::Engine.Shared.GameObjects.EntityManager? EntMan;
-
     public override void WriteToBuffer(NetOutgoingMessage buffer)
-    {
-        GameStateSerializer.WriteHeader(buffer, State);
-
-        foreach (var block in State.Blocks)
-            GameStateSerializer.WriteBlock(buffer, block, EntMan!, State.FromTick);
-    }
+        => buffer.Write(Body, 0, BodyLength);
 
     public override void ReadFromBuffer(NetIncomingMessage buffer)
     {

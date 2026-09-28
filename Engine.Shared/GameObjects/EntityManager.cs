@@ -2,6 +2,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using Engine.Shared.Configuration;
+using Engine.Shared.Configuration.CVars;
 using Engine.Shared.GameObjects.Factories;
 using Engine.Shared.Prototypes;
 using Engine.Shared;
@@ -17,6 +19,7 @@ public sealed partial class EntityManager
     [Dependency] private readonly IPrototypeManager _proto = default!;
     [Dependency] private readonly SharedContentManager _contentMan = default!;
     [Dependency] private readonly IGameTiming _timing = default!;
+    [Dependency] private readonly IConfigurationManager _configMan = default!;
     public EventBus EventBus;
 
     private readonly ConcurrentDictionary<EntityUid, Entity> _entities = new();
@@ -35,6 +38,9 @@ public sealed partial class EntityManager
     {
         IoCManager.ResolveDependencies(this);
         Instance = this;
+
+        _configMan.Subs(NetworkingCvars.NetMaxPendingRefs, value => _maxPendingRefs = value);
+
         EventBus = new EventBus();
         EventBus.Init();
     }

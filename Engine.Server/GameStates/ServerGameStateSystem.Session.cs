@@ -16,9 +16,6 @@ public sealed partial class ServerGameStateSystem
 
     private readonly Dictionary<INetSession, PvsSession> _sessions = new();
     private readonly List<INetSession> _goneSessions = new();
-    private readonly HashSet<NetEntity> _visibleNow = new();
-    private readonly HashSet<NetEntity> _enteringNow = new();
-    private readonly List<NetEntity> _goneEntities = new();
 
     private int _forceAckThreshold;
     private int _fullStateCooldown;
@@ -34,12 +31,19 @@ public sealed partial class ServerGameStateSystem
         _configMan.Subs(NetworkingCvars.NetDelta, value => _deltaEnabled = value);
     }
 
+    internal PvsSession GetSession(INetSession session)
+    {
+        if (!_sessions.TryGetValue(session, out var pvs))
+            _sessions[session] = pvs = new PvsSession(session);
+
+        return pvs;
+    }
+
     private void EnsureSessions()
     {
         foreach (var session in _net.Sessions)
         {
-            if (!_sessions.ContainsKey(session))
-                _sessions[session] = new PvsSession(session);
+            GetSession(session);
         }
 
         foreach (var (session, _) in _sessions)
@@ -49,7 +53,10 @@ public sealed partial class ServerGameStateSystem
         }
 
         foreach (var session in _goneSessions)
+        {
             _sessions.Remove(session);
+            _pvs.ClearSession(session);
+        }
 
         _goneSessions.Clear();
     }
@@ -92,11 +99,13 @@ public sealed partial class ServerGameStateSystem
         pvs.ForceSendReliably = true;
         pvs.LastReceivedAck = GameTick.Zero;
         pvs.Sent.Clear();
+        pvs.SeenChunks.Clear();
     }
 
-    private void ComputeSessionState(PvsSession session)
+    private void BuildAndSerialize(PvsSession session)
     {
-        var state = session.State;
+        var ctx = session.Build;
+        var state = ctx.State;
         state.Reset();
 
         state.ToTick = _timing.CurTick;
@@ -104,25 +113,34 @@ public sealed partial class ServerGameStateSystem
 
         _entManager.GetDeletedSince(state.FromTick, state.Deletions);
 
-        GetVisibleBlocks(session, state.Blocks);
-        CollectEntering(session, state);
-        BuildBlocks(session, state);
+        GetVisibleBlocks(session, ctx);
+        CollectEntering(session, ctx);
+        BuildBlocks(session, ctx);
+
+        ctx.ResetBody();
+        GameStateSerializer.WriteHeader(ctx.Body, state);
+        foreach (var block in state.Blocks)
+            GameStateSerializer.WriteBlock(ctx.Body, block, _entManager, state.FromTick);
+
+        // the states are written, the entity states they were built from are not needed any more
+        ctx.ReturnRented();
     }
 
     /// <summary>
     /// Works out which of the visible entities this session does not have yet, so the prototype id and others only
     /// travel until the session confirms it, and which ones it has but cannot see anymore.
     /// </summary>
-    private void CollectEntering(PvsSession session, GameState state)
+    private void CollectEntering(PvsSession session, PvsBuildContext ctx)
     {
-        _visibleNow.Clear();
-        _enteringNow.Clear();
+        var state = ctx.State;
+        ctx.VisibleNow.Clear();
+        ctx.EnteringNow.Clear();
 
         foreach (var block in state.Blocks)
         {
             foreach (var ent in block.Entities)
             {
-                _visibleNow.Add(ent.NetEntity);
+                ctx.VisibleNow.Add(ent.NetEntity);
 
                 if (session.Knows(ent.NetEntity))
                     continue;
@@ -130,21 +148,24 @@ public sealed partial class ServerGameStateSystem
                 var uid = _entManager.GetEntity(ent.NetEntity);
                 var protoId = _entManager.HasEntity(uid, out var entity) ? entity.Id.Id ?? string.Empty : string.Empty;
                 state.Entering.Add(new EnteringEntity(ent.NetEntity, protoId));
-                _enteringNow.Add(ent.NetEntity);
+                ctx.EnteringNow.Add(ent.NetEntity);
                 session.Sent.TryAdd(ent.NetEntity, state.ToTick);
             }
         }
 
         foreach (var (netEnt, _) in session.Sent)
         {
-            if (!_visibleNow.Contains(netEnt))
-                _goneEntities.Add(netEnt);
+            if (!ctx.VisibleNow.Contains(netEnt))
+                ctx.GoneEntities.Add(netEnt);
         }
 
-        foreach (var netEnt in _goneEntities)
+        foreach (var netEnt in ctx.GoneEntities)
             session.Sent.Remove(netEnt);
     }
 
+    /// <summary>
+    /// Sends what the build already wrote. Sequential, because the peer is not ours to hand to several threads.
+    /// </summary>
     private void Send(PvsSession session)
     {
         var unacked = _timing.CurTick - session.LastReceivedAck;
@@ -152,8 +173,8 @@ public sealed partial class ServerGameStateSystem
 
         session.Session.SendMessage(new GameStateMessage
         {
-            State = session.State,
-            EntMan = _entManager,
+            Body = session.Build.Body.Data,
+            BodyLength = session.Build.Body.LengthBytes,
             Delivery = session.ForceSendReliably || stale
                 ? NetDeliveryMethod.ReliableOrdered
                 : NetDeliveryMethod.Unreliable,
@@ -169,14 +190,15 @@ public sealed partial class ServerGameStateSystem
     /// </summary>
     private void SendLeftView(PvsSession session)
     {
-        if (_goneEntities.Count == 0)
+        var gone = session.Build.GoneEntities;
+        if (gone.Count == 0)
             return;
 
         var msg = new LeaveViewMessage();
-        msg.Entities.AddRange(_goneEntities);
+        msg.Entities.AddRange(gone);
         session.Session.SendMessage(msg);
 
-        _goneEntities.Clear();
+        gone.Clear();
     }
 
     /// <summary>

@@ -57,3 +57,21 @@ public sealed class NetIdsCommand : IConsoleCommand
         shell.WriteLine($"Net id labels {(system.Enabled ? "on" : "off")}.");
     }
 }
+
+public sealed class PvsChunksCommand : IConsoleCommand
+{
+    public string Name => "pvschunks";
+    public string Description => "Toggles the PVS chunk grid and the range/leave radii drawn around the camera";
+    public string Help => "pvschunks";
+
+    public void Execute(IConsoleShell shell, string[] args)
+    {
+        if (!IoCManager.TryResolve<PvsChunkDrawSystem>(out var system) || system is null)
+        {
+            shell.WriteError("The entity systems are not up yet.");
+            return;
+        }
+
+        system.Enabled = !system.Enabled;
+    }
+}
