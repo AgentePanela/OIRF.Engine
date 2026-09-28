@@ -59,6 +59,14 @@ public class Component
     protected void DirtyField(int index) => EntityManager.Instance?.Dirty(this, index);
 
     /// <summary>
+    /// AUTO GENERATED: fills in an <see cref="EntityUid"/> field whose <see cref="NetEntity"/> was not known yet when
+    /// the state was read.
+    /// </summary>
+    public virtual void ApplyNetFieldEntity(int index, EntityUid uid)
+    {
+    }
+
+    /// <summary>
     /// Marks the whole component as changed. For a component that mutates a collection of its own.
     /// </summary>
     protected void Dirty() => EntityManager.Instance?.Dirty(this);

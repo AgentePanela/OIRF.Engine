@@ -135,6 +135,7 @@ public sealed partial class ClientGameStateSystem : EntitySystem, IGameStateAppl
 
         _toDelete.Clear();
         _processor.Reset();
+        _entManager.ClearPendingEntityRefs();
         _metrics.Reset();
         _lastAckedTick = GameTick.Zero;
 

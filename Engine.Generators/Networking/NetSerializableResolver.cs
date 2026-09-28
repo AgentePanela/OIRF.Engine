@@ -61,15 +61,15 @@ internal static class NetSerializableResolver
     /// Name of an in-scope EntityManager variable. When given, EntityUid is sent as its NetEntity (converted through
     /// it), otherwise EntityUid is treated like any other type.
     /// </param>
-    public static FieldPlan? Resolve(ITypeSymbol type, string accessPath, Location? location, SourceProductionContext spc, string? entMan = null)
+    public static FieldPlan? Resolve(ITypeSymbol type, string accessPath, Location? location, SourceProductionContext spc, string? entMan = null, int fieldIndex = -1)
     {
         // Nullable<T> (int?, EntityUid?)
         if (type is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nullableValueType)
-            return ResolveNullable(nullableValueType.TypeArguments[0], accessPath, location, spc, isValueType: true, entMan);
+            return ResolveNullable(nullableValueType.TypeArguments[0], accessPath, location, spc, isValueType: true, entMan, fieldIndex);
 
         // Nullable reference type (string?, SomeClass?)
         if (type.IsReferenceType && type.NullableAnnotation == NullableAnnotation.Annotated)
-            return ResolveNullable(type.WithNullableAnnotation(NullableAnnotation.NotAnnotated), accessPath, location, spc, isValueType: false, entMan);
+            return ResolveNullable(type.WithNullableAnnotation(NullableAnnotation.NotAnnotated), accessPath, location, spc, isValueType: false, entMan, fieldIndex);
 
         var typeName = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
 
@@ -91,8 +91,12 @@ internal static class NetSerializableResolver
 
         if (entMan is not null && typeName == "EntityUid")
         {
-            return new FieldPlan(
-                $"{entMan}.GetEntity(new global::NetEntity(buffer.ReadVariableInt32()))",
+            // a reference can arrive before the entity it points at
+            var read = fieldIndex >= 0
+                ? $"{entMan}.ResolveEntity(new global::NetEntity(buffer.ReadVariableInt32()), this, {fieldIndex})"
+                : $"{entMan}.GetEntity(new global::NetEntity(buffer.ReadVariableInt32()))";
+
+            return new FieldPlan(read,
                 new List<string> { $"buffer.WriteVariableInt32({entMan}.GetNetEntity({accessPath}).Id);" });
         }
 
@@ -177,10 +181,10 @@ internal static class NetSerializableResolver
         }
     }
 
-    private static FieldPlan? ResolveNullable(ITypeSymbol underlying, string accessPath, Location? location, SourceProductionContext spc, bool isValueType, string? entMan)
+    private static FieldPlan? ResolveNullable(ITypeSymbol underlying, string accessPath, Location? location, SourceProductionContext spc, bool isValueType, string? entMan, int fieldIndex)
     {
         var valueAccessPath = isValueType ? $"{accessPath}.Value" : accessPath;
-        var innerPlan = Resolve(underlying, valueAccessPath, location, spc, entMan);
+        var innerPlan = Resolve(underlying, valueAccessPath, location, spc, entMan, fieldIndex);
         if (innerPlan is null)
             return null;
 

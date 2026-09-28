@@ -88,10 +88,11 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
             var readLines = new List<string>();
             var anyBad = false;
 
-            foreach (var member in comp.Members)
+            for (var i = 0; i < comp.Members.Count; i++)
             {
+                var member = comp.Members[i];
                 var accessPath = "this." + NetSerializableResolver.EscapeIdentifier(member.Name);
-                var plan = NetSerializableResolver.Resolve(member.Type, accessPath, member.Location, spc, EntityManagerParam);
+                var plan = NetSerializableResolver.Resolve(member.Type, accessPath, member.Location, spc, EntityManagerParam, i);
                 if (plan is null)
                 {
                     anyBad = true;
@@ -242,7 +243,7 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
 
             {{namespaceDecl}}partial class {{className}}
             {
-                {{GenerateFieldTicks(members)}}{{GenerateServerStateShadow(members)}}public override void WriteNetState(global::Lidgren.Network.NetBuffer buffer, global::Engine.Shared.GameObjects.EntityManager {{EntityManagerParam}}, {{GameTickFullName}} fromTick)
+                {{GenerateFieldTicks(members)}}{{GenerateEntityFieldApplier(members)}}{{GenerateServerStateShadow(members)}}public override void WriteNetState(global::Lidgren.Network.NetBuffer buffer, global::Engine.Shared.GameObjects.EntityManager {{EntityManagerParam}}, {{GameTickFullName}} fromTick)
                 {
                     {{GenerateWrite(members, writePlans)}}
                 }
@@ -253,6 +254,37 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
                 }
             }
             """;
+    }
+
+    /// <summary>
+    /// Lets the manager fill in an EntityUid field whose NetEntity only resolved later.
+    /// </summary>
+    private static string GenerateEntityFieldApplier(List<MemberData> members)
+    {
+        var sb = new StringBuilder();
+        var any = false;
+
+        for (var i = 0; i < members.Count; i++)
+        {
+            var typeName = members[i].Type.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString();
+            if (typeName != "EntityUid" && typeName != "EntityUid?")
+                continue;
+
+            if (!any)
+            {
+                any = true;
+                sb.Append("public override void ApplyNetFieldEntity(int index, global::EntityUid uid)\n    {\n        switch (index)\n        {\n");
+            }
+
+            sb.Append("            case ").Append(i).Append(": this.")
+                .Append(NetSerializableResolver.EscapeIdentifier(members[i].Name)).Append(" = uid; break;\n");
+        }
+
+        if (!any)
+            return "";
+
+        sb.Append("        }\n    }\n\n    ");
+        return sb.ToString();
     }
 
     /// <summary>

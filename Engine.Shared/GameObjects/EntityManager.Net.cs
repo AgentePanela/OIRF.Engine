@@ -171,6 +171,60 @@ public sealed partial class EntityManager
     /// <summary>
     /// Get the local <see cref="EntityUid"/> of a <see cref="NetEntity"/>. <see cref="EntityUid.Empty"/> if unknown.
     /// </summary>
+    private readonly Dictionary<NetEntity, List<(Component Component, int FieldIndex)>> _pendingRefs = new();
+
+    private bool _pendingRefsWarned;
+
+    private int _maxPendingRefs;
+
+    /// <summary>
+    /// Resolves a <see cref="NetEntity"/> a state pointed at. If it is not known locally yet - a reference can arrive
+    /// before the entity it names - the field is remembered and filled in by
+    /// <see cref="RegisterNetEntity"/> once it does.
+    /// </summary>
+    public EntityUid ResolveEntity(NetEntity netEnt, Component component, int fieldIndex)
+    {
+        if (_netToUid.TryGetValue(netEnt, out var uid))
+            return uid;
+
+        if (!netEnt.IsValid)
+            return EntityUid.Empty;
+
+        if (!_pendingRefs.TryGetValue(netEnt, out var waiting))
+            _pendingRefs[netEnt] = waiting = new List<(Component, int)>();
+
+        waiting.Add((component, fieldIndex));
+
+        if (_pendingRefs.Count > _maxPendingRefs && !_pendingRefsWarned)
+        {
+            _pendingRefsWarned = true;
+            Log.Error($"Over {_maxPendingRefs} entity references are waiting for entities that never arrived.");
+        }
+
+        return EntityUid.Empty;
+    }
+
+    /// <summary>
+    /// Forgets every reference still waiting - the peer is not building on what it had any more.
+    /// </summary>
+    public void ClearPendingEntityRefs()
+    {
+        _pendingRefs.Clear();
+        _pendingRefsWarned = false;
+    }
+
+    private void ResolvePendingRefs(NetEntity netEnt, EntityUid uid)
+    {
+        if (!_pendingRefs.Remove(netEnt, out var waiting))
+            return;
+
+        foreach (var (component, fieldIndex) in waiting)
+        {
+            if (!component.Deleted)
+                component.ApplyNetFieldEntity(fieldIndex, uid);
+        }
+    }
+
     public EntityUid GetEntity(NetEntity netEnt)
         => _netToUid.TryGetValue(netEnt, out var uid) ? uid : EntityUid.Empty;
 
@@ -210,6 +264,8 @@ public sealed partial class EntityManager
 
         _netToUid[netEnt] = uid;
         ent.NetId = netEnt;
+
+        ResolvePendingRefs(netEnt, uid);
     }
 
     private void ReleaseNetEntity(Entity ent)

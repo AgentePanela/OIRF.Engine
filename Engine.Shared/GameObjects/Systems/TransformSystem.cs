@@ -139,7 +139,7 @@ public sealed class TransformSystem : EntitySystem
                 _childrenByParent.Remove(old);
         }
 
-        if (to is not { } parent)
+        if (to is not { } parent || EntityUid.IsInvalid(parent))
             return;
 
         if (!_childrenByParent.TryGetValue(parent, out var children))

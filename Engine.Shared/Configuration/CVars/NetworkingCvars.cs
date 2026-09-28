@@ -74,10 +74,10 @@ public static class NetworkingCvars
         CVarDef.Create("net.pvs-leave-margin", 150f, CVar.REPLICATED | CVar.SERVER);
 
     /// <summary>
-    /// How many entities may enter a session's view in a single tick, 0 for no limit.
+    /// How many entities may enter a session's view in a single tick, 0 for no limit. <para/>
     /// </summary>
     public static readonly CVarDef<int> NetPvsEnterBudget =
-        CVarDef.Create("net.pvs-enter-budget", 200, CVar.SERVERONLY);
+        CVarDef.Create("net.pvs-enter-budget", 40, CVar.SERVERONLY);
 
     #endregion
     #region Lidgren
@@ -87,6 +87,9 @@ public static class NetworkingCvars
     /// </summary>
     public static readonly CVarDef<bool> NetUPnP =
         CVarDef.Create("net.upnp", false, CVar.SERVERONLY);
+
+    public static readonly CVarDef<int> NetMaxPendingRefs =
+        CVarDef.Create("net.max-pending-refs", 4096);
 
     /// <summary>
     /// How often (in seconds) connected peers ping each other to measure round-trip time.

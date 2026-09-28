@@ -43,7 +43,7 @@ public sealed partial class ClientGameStateSystem
         }
         catch (GameStateDesyncException e)
         {
-            Log.Error($"[ClientGameState] {e.Message} The networked component hashes disagree, ask for everything again.");
+            Log.Error($"{e.Message} The networked component hashes disagree, ask for everything again.");
             RequestFullState();
         }
         finally
@@ -120,7 +120,7 @@ public sealed partial class ClientGameStateSystem
         // only reachable if the state that made this entity enter was lost AND the server already counted it as acked
         if (!_currentKnown)
         {
-            Log.Error($"[ClientGameState] Got a state for the unknown {netEntity}.");
+            Log.Error($"Got a state for the unknown {netEntity}.");
             RequestFullState();
         }
     }
