@@ -1,5 +1,7 @@
 namespace Engine.Shared.Configuration.CVars;
 
+// put every "random" system more "deep" config (like transform max parenting) here.
+
 [CVarDefs]
 public sealed class EngineCvars
 {
@@ -8,6 +10,9 @@ public sealed class EngineCvars
 
     public static readonly CVarDef<int> SystemProfillerTop =
         CVarDef.Create("engine.system-profiller-top", 10);
+
+    public static readonly CVarDef<int> TransformMaxParents =
+        CVarDef.Create("engine.transform-max-parenting", 32);
 
     /// <summary>
     /// How often (in seconds) an open View Variables window re-asks the server for a snapshot. 0 means only when the

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Engine.Shared.Configuration;
+using Engine.Shared.Configuration.CVars;
 using Microsoft.Xna.Framework;
 
 namespace Engine.Shared.GameObjects;
@@ -15,17 +17,38 @@ public sealed class MoveEvent : EntityEvent
 [SystemPriority(-999)]
 public sealed class TransformSystem : EntitySystem
 {
+    [Dependency] private readonly IConfigurationManager _cfg = default!;
+
     // Last Position/Angle seen per entity, last tick
     private readonly Dictionary<EntityUid, (Vector2 Pos, float Angle)> _lastTransform = new();
 
     // Reused and re-raised every time an entity moves instead of a fresh MoveEvent per ent
     private readonly MoveEvent _moveEvent = new();
 
+    private int _maxParents = 64;
+
+
+    private readonly List<EntityUid> _childBuffer = new();
+    private readonly Stack<List<EntityUid>> _movePool = new();
+
+    // Parent > children
+    private readonly Dictionary<EntityUid, HashSet<EntityUid>> _childrenByParent = new();
+
+    private static readonly HashSet<EntityUid> NoChildren = new();
+
     public override void Init()
     {
         base.Init();
+        SubscribeEvent<TransformComponent, CompAddedEvent>(OnCompAdded);
         SubscribeEvent<TransformComponent, CompRemovedEvent>(OnCompRemoved);
+        
+        _cfg.Subs(EngineCvars.TransformMaxParents, (v) => _maxParents = v, true);
     }
+
+    // a transform deserialized from a prototype already has its Parent set, but had no Owner while it was being
+    // filled, so its setter could not index it
+    private void OnCompAdded(EntityUid uid, TransformComponent comp, CompAddedEvent args)
+        => ReparentChild(uid, null, comp.Parent);
 
     public override void Update(float dt)
     {
@@ -49,15 +72,24 @@ public sealed class TransformSystem : EntitySystem
             _moveEvent.Handled = false;
             RaiseEvent(uid, _moveEvent);
 
-            MoveChildren(uid, posDelta, angleDelta);
+            MoveChildren(uid, posDelta, angleDelta, 0);
         }
     }
 
-    private void MoveChildren(EntityUid parentUid, Vector2 posDelta, float angleDelta)
+    private void MoveChildren(EntityUid parentUid, Vector2 posDelta, float angleDelta, int depth)
     {
-        foreach (var (uid, t) in GetEntitiesWithComp<TransformComponent>())
+        if (depth >= _maxParents)
         {
-            if (t.Parent != parentUid)
+            Log.Error($"{parentUid} has more than {_maxParents} levels of parenting deep.");
+            return;
+        }
+
+        var children = _movePool.Count > 0 ? _movePool.Pop() : new List<EntityUid>();
+        children.AddRange(GetChildren(parentUid));
+
+        foreach (var uid in children)
+        {
+            if (!TryComp<TransformComponent>(uid, out var t))
                 continue;
 
             t.Position += posDelta;
@@ -67,36 +99,62 @@ public sealed class TransformSystem : EntitySystem
             _moveEvent.Handled = false;
             RaiseEvent(uid, _moveEvent);
 
-            MoveChildren(uid, posDelta, angleDelta);
+            MoveChildren(uid, posDelta, angleDelta, depth + 1);
         }
+
+        children.Clear();
+        _movePool.Push(children);
     }
 
     private void OnCompRemoved(EntityUid uid, TransformComponent comp, CompRemovedEvent args)
     {
         _lastTransform.Remove(uid);
 
-        if (GetEntity(uid)?.Deleting is false)
-            return;
-
-        var ents = GetChildren(comp);
-        foreach (var puid in ents)
-            DeleteEntity(puid);
-    }
-
-    private List<EntityUid> GetChildren(TransformComponent comp)
-    {
-        List<EntityUid> children = new();
-        var query = GetEntitiesWithComp<TransformComponent>();
-        foreach (var ent in query)
+        if (GetEntity(uid)?.Deleting is not false)
         {
-            if (ent.comp.Parent == comp.Owner)
-                children.Add(ent.uid);
+            _childBuffer.Clear();
+            _childBuffer.AddRange(GetChildren(uid));
+
+            foreach (var child in _childBuffer)
+                DeleteEntity(child);
         }
 
-        return children;
+        ReparentChild(uid, comp.Parent, null);
+
+        // whatever was hanging off it is not hanging off anything any more
+        _childrenByParent.Remove(uid);
+    }
+
+    internal void ReparentChild(EntityUid child, EntityUid? from, EntityUid? to)
+    {
+        if (EntityUid.IsInvalid(child))
+            return;
+
+        if (from is { } old && _childrenByParent.TryGetValue(old, out var set))
+        {
+            set.Remove(child);
+
+            // otherwise the dictionary grows forever with parents
+            if (set.Count == 0)
+                _childrenByParent.Remove(old);
+        }
+
+        if (to is not { } parent)
+            return;
+
+        if (!_childrenByParent.TryGetValue(parent, out var children))
+            _childrenByParent[parent] = children = new HashSet<EntityUid>();
+
+        children.Add(child);
     }
 
     #region API
+
+    /// <summary>
+    /// The entities parented to <paramref name="uid"/>.
+    /// </summary>
+    public IReadOnlyCollection<EntityUid> GetChildren(EntityUid uid)
+        => _childrenByParent.TryGetValue(uid, out var set) ? set : NoChildren;
 
     /// <summary>
     /// Returns the closest entity from position within <paramref name="hitRadius"/> units.
