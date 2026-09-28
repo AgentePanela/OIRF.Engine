@@ -343,6 +343,13 @@ public sealed class ComponentStateGenerator : IIncrementalGenerator
         var sb = new StringBuilder();
         sb.Append("public override int NetFieldCount => ").Append(members.Count).Append(";\n\n    ");
 
+        // named indices, so a hand written setter can stamp its own field without hardcoding an ordinal that
+        // shifts the moment a [NetField] is added before it in the alphabet
+        sb.Append("public static class NetFields\n    {\n");
+        for (var i = 0; i < members.Count; i++)
+            sb.Append("        public const int ").Append(NetSerializableResolver.EscapeIdentifier(members[i].Name)).Append(" = ").Append(i).Append(";\n");
+        sb.Append("    }\n\n    ");
+
         if (!members.Any(static m => m.AutoDirty))
             return sb.ToString();
 
