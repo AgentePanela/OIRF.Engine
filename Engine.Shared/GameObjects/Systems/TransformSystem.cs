@@ -157,19 +157,26 @@ public sealed class TransformSystem : EntitySystem
         => _childrenByParent.TryGetValue(uid, out var set) ? set : NoChildren;
 
     /// <summary>
-    /// Returns the closest entity from position within <paramref name="hitRadius"/> units.
+    /// Returns the closest entity from position within <paramref name="hitRadius"/> units, seen from
+    /// <paramref name="scene"/>.
     /// </summary>
     /// <returns><see cref="EntityUid.Empty"/> if none found.</returns>
-    public EntityUid GetEntityAtWorld(Vector2 worldPos, float hitRadius = 2f, bool requireVisible = true)
+    public EntityUid GetEntityAtWorld(IEntityScene? scene, Vector2 worldPos, float hitRadius = 2f, bool requireVisible = true)
     {
-        TryGetEntityAtWorld(worldPos, out var uid, hitRadius, requireVisible);
+        TryGetEntityAtWorld(scene, worldPos, out var uid, hitRadius, requireVisible);
         return uid;
     }
 
+    /// <inheritdoc cref="GetEntityAtWorld(IEntityScene?, Vector2, float, bool)"/>
+    public EntityUid GetEntityAtWorld(EntityUid from, Vector2 worldPos, float hitRadius = 2f, bool requireVisible = true)
+        => GetEntityAtWorld(GetScene(from), worldPos, hitRadius, requireVisible);
+
     /// <summary>
-    /// Tries to find the closest entity from the position within <paramref name="hitRadius"/> units.
+    /// Tries to find the closest entity from the position within <paramref name="hitRadius"/> units, seen from
+    /// <paramref name="scene"/>.
     /// </summary>
     public bool TryGetEntityAtWorld(
+        IEntityScene? scene,
         Vector2 worldPos,
         out EntityUid uid,
         float hitRadius = 2f,
@@ -183,6 +190,9 @@ public sealed class TransformSystem : EntitySystem
         foreach (var (entUid, transform) in GetEntitiesWithComp<TransformComponent>())
         {
             if (requireVisible && !transform.Visible)
+                continue;
+
+            if (!EntityManager.ScenesInteract(scene, GetScene(entUid)))
                 continue;
 
             float dx = transform.Position.X - worldPos.X;
@@ -202,16 +212,29 @@ public sealed class TransformSystem : EntitySystem
         return uid != EntityUid.Empty;
     }
 
+    /// <inheritdoc cref="TryGetEntityAtWorld(IEntityScene?, Vector2, out EntityUid, float, bool)"/>
+    public bool TryGetEntityAtWorld(
+        EntityUid from,
+        Vector2 worldPos,
+        out EntityUid uid,
+        float hitRadius = 2f,
+        bool requireVisible = true)
+            => TryGetEntityAtWorld(GetScene(from), worldPos, out uid, hitRadius, requireVisible);
+
     /// <summary>
-    /// Returns all entities whose position falls within the given world-space rectangle.
+    /// Returns all entities whose position falls within the given world-space rectangle, seen from
+    /// <paramref name="scene"/>.
     /// </summary>
-    public List<EntityUid> GetEntitiesInArea(Rectangle area, bool requireVisible = true)
+    public List<EntityUid> GetEntitiesInArea(IEntityScene? scene, Rectangle area, bool requireVisible = true)
     {
         var results = new List<EntityUid>();
 
         foreach (var (entUid, transform) in GetEntitiesWithComp<TransformComponent>())
         {
             if (requireVisible && !transform.Visible)
+                continue;
+
+            if (!EntityManager.ScenesInteract(scene, GetScene(entUid)))
                 continue;
 
             if (!area.Contains((int)transform.Position.X, (int)transform.Position.Y))
@@ -222,6 +245,10 @@ public sealed class TransformSystem : EntitySystem
 
         return results;
     }
+
+    /// <inheritdoc cref="GetEntitiesInArea(IEntityScene?, Rectangle, bool)"/>
+    public List<EntityUid> GetEntitiesInArea(EntityUid from, Rectangle area, bool requireVisible = true)
+        => GetEntitiesInArea(GetScene(from), area, requireVisible);
 
     #endregion
 }

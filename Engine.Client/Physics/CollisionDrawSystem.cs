@@ -27,7 +27,7 @@ public sealed class CollisionDrawSystem : EntityDrawSystem
         if (!showMask)
             return;
             
-        foreach (var (_, transform, col) in _colSys._entityBuffer)
+        foreach (var (_, _, transform, col) in _colSys._entityBuffer)
         {
             if (!_camera.IsOnScreen(transform.Position))
                     continue;

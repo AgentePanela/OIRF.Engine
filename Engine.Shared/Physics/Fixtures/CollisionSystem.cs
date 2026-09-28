@@ -21,11 +21,13 @@ public sealed class CollisionSystem : EntitySystem
     private readonly HashSet<(EntityUid, string, EntityUid, string)> _activePairs = new();
  
     // reused every frame to avoid per-Update gc allocations
-    internal readonly List<(EntityUid Uid, TransformComponent Transform, CollisionComponent Collision)> _entityBuffer = new();
+    internal readonly List<(EntityUid Uid, IEntityScene? Scene, TransformComponent Transform, CollisionComponent Collision)> _entityBuffer = new();
     private readonly HashSet<(EntityUid, string, EntityUid, string)> _currentPairs = new();
 
     private int CellSize = 64;
-    private readonly Dictionary<(int, int), List<int>> _spatialHash = new();
+
+    private readonly Dictionary<(IEntityScene? Scene, int X, int Y), List<int>> _spatialHash = new();
+    private readonly Stack<List<int>> _bucketPool = new();
     private readonly HashSet<long> _testedPairs = new();
 
     private readonly HashSet<EntityUid> _movedThisFrame = new();
@@ -64,14 +66,20 @@ public sealed class CollisionSystem : EntitySystem
         {
             if (!col.Active) continue;
             if (!TryComp<TransformComponent>(uid, out var transform)) continue;
-            _entityBuffer.Add((uid, transform, col));
+            _entityBuffer.Add((uid, GetScene(uid), transform, col));
         }
 
-        foreach (var list in _spatialHash.Values) list.Clear();
+        // dropped whole every frame, otherwise the keys would keep disposed rooms alive
+        foreach (var list in _spatialHash.Values)
+        {
+            list.Clear();
+            _bucketPool.Push(list);
+        }
+        _spatialHash.Clear();
 
         for (int i = 0; i < _entityBuffer.Count; i++)
         {
-            var (_, transform, col) = _entityBuffer[i];
+            var (_, scene, transform, col) = _entityBuffer[i];
 
             float eMinX =  float.MaxValue, eMinY =  float.MaxValue;
             float eMaxX = -float.MaxValue, eMaxY = -float.MaxValue;
@@ -94,45 +102,28 @@ public sealed class CollisionSystem : EntitySystem
             for (int cx = cx0; cx <= cx1; cx++)
             for (int cy = cy0; cy <= cy1; cy++)
             {
-                var cell = (cx, cy);
+                var cell = (scene, cx, cy);
                 if (!_spatialHash.TryGetValue(cell, out var bucket))
                 {
-                    bucket = new List<int>(4);
+                    bucket = _bucketPool.Count > 0 ? _bucketPool.Pop() : new List<int>(4);
                     _spatialHash[cell] = bucket;
                 }
                 bucket.Add(i);
             }
         }
 
-        foreach (var bucket in _spatialHash.Values)
+        foreach (var ((scene, cx, cy), bucket) in _spatialHash)
         {
-            if (bucket.Count < 2) continue;
-
             for (int i = 0; i < bucket.Count; i++)
             for (int j = i + 1; j < bucket.Count; j++)
-            {
-                int a = bucket[i], b = bucket[j];
-                long pairKey = a < b
-                    ? ((long)a << 32) | (uint)b
-                    : ((long)b << 32) | (uint)a;
+                TestPair(bucket[i], bucket[j]);
 
-                if (!_testedPairs.Add(pairKey))
-                    continue;
+            if (scene is null || !_spatialHash.TryGetValue((null, cx, cy), out var globals))
+                continue;
 
-                var (uidA, transformA, colA) = _entityBuffer[a];
-                var (uidB, transformB, colB) = _entityBuffer[b];
-
-                if (!_movedThisFrame.Contains(uidA) && !_movedThisFrame.Contains(uidB)
-                    && _knownEntities.Contains(uidA) && _knownEntities.Contains(uidB))
-                {
-                    CarryForwardPairs(uidA, colA, uidB, colB);
-                    continue;
-                }
-
-                CheckEntityPair(
-                    uidA, transformA.Position, colA,
-                    uidB, transformB.Position, colB);
-            }
+            foreach (var a in bucket)
+            foreach (var b in globals)
+                TestPair(a, b);
         }
 
         // fire CollisionEnd for any pairs that are no longer overlapping
@@ -153,8 +144,32 @@ public sealed class CollisionSystem : EntitySystem
         _movedThisFrame.Clear();
 
         _knownEntities.Clear();
-        foreach (var (uid, _, _) in _entityBuffer)
+        foreach (var (uid, _, _, _) in _entityBuffer)
             _knownEntities.Add(uid);
+    }
+
+    private void TestPair(int a, int b)
+    {
+        long pairKey = a < b
+            ? ((long)a << 32) | (uint)b
+            : ((long)b << 32) | (uint)a;
+
+        if (!_testedPairs.Add(pairKey))
+            return;
+
+        var (uidA, _, transformA, colA) = _entityBuffer[a];
+        var (uidB, _, transformB, colB) = _entityBuffer[b];
+
+        if (!_movedThisFrame.Contains(uidA) && !_movedThisFrame.Contains(uidB)
+            && _knownEntities.Contains(uidA) && _knownEntities.Contains(uidB))
+        {
+            CarryForwardPairs(uidA, colA, uidB, colB);
+            return;
+        }
+
+        CheckEntityPair(
+            uidA, transformA.Position, colA,
+            uidB, transformB.Position, colB);
     }
 
     private void CarryForwardPairs(EntityUid uidA, CollisionComponent colA, EntityUid uidB, CollisionComponent colB)
@@ -226,22 +241,27 @@ public sealed class CollisionSystem : EntitySystem
     #region Position getters
 
     /// <summary>
-    /// Returns the closest entity whose fixtures contain <paramref name="worldPos"/>.
+    /// Returns the closest entity whose fixtures contain <paramref name="worldPos"/>, seen from
+    /// <paramref name="scene"/> (its entities plus the globals - null sees everything).
     /// <returns><see cref="EntityUid.Empty"/> if none found.</returns>
-    public EntityUid GetEntityAtPosition(Vector2 worldPos, HashSet<string>? mask = null)
+    public EntityUid GetEntityAtPosition(IEntityScene? scene, Vector2 worldPos, HashSet<string>? mask = null)
     {
-        TryGetEntityAtPosition(worldPos, out var uid, mask);
+        TryGetEntityAtPosition(scene, worldPos, out var uid, mask);
         return uid;
     }
 
+    /// <inheritdoc cref="GetEntityAtPosition(IEntityScene?, Vector2, HashSet{string}?)"/>
+    public EntityUid GetEntityAtPosition(EntityUid from, Vector2 worldPos, HashSet<string>? mask = null)
+        => GetEntityAtPosition(GetScene(from), worldPos, mask);
+
     /// <summary>
-    /// Tries to find the closest entity at the given position.
+    /// Tries to find the closest entity at the given position, seen from <paramref name="scene"/>.
     /// </summary>
-    public bool TryGetEntityAtPosition(Vector2 worldPos, out EntityUid uid, HashSet<string>? mask = null)
+    public bool TryGetEntityAtPosition(IEntityScene? scene, Vector2 worldPos, out EntityUid uid, HashSet<string>? mask = null)
     {
         uid = EntityUid.Empty;
 
-        var entities = GetEntitiesAtPosition(worldPos, mask);
+        var entities = GetEntitiesAtPosition(scene, worldPos, mask);
 
         float bestDistSq = float.MaxValue;
 
@@ -262,17 +282,24 @@ public sealed class CollisionSystem : EntitySystem
         return uid != EntityUid.Empty;
     }
 
+    /// <inheritdoc cref="TryGetEntityAtPosition(IEntityScene?, Vector2, out EntityUid, HashSet{string}?)"/>
+    public bool TryGetEntityAtPosition(EntityUid from, Vector2 worldPos, out EntityUid uid, HashSet<string>? mask = null)
+        => TryGetEntityAtPosition(GetScene(from), worldPos, out uid, mask);
+
     /// <summary>
-    /// Returns all entities whose collision fixtures contain <paramref name="worldPos"/>.
-    /// Only entities with an active <see cref="CollisionComponent"/> are considered.
+    /// Returns all entities whose collision fixtures contain <paramref name="worldPos"/>, seen from
+    /// <paramref name="scene"/>. Only entities with an active <see cref="CollisionComponent"/> are considered.
     /// </summary>
-    public List<EntityUid> GetEntitiesAtPosition(Vector2 worldPos, HashSet<string>? mask = null)
+    public List<EntityUid> GetEntitiesAtPosition(IEntityScene? scene, Vector2 worldPos, HashSet<string>? mask = null)
     {
         var result = new List<EntityUid>();
 
         foreach (var (entUid, transform) in GetEntitiesWithComp<TransformComponent>())
         {
             if (!TryComp<CollisionComponent>(entUid, out var collision) || !collision.Active)
+                continue;
+
+            if (!EntityManager.ScenesInteract(scene, GetScene(entUid)))
                 continue;
 
             bool hit = false;
@@ -295,6 +322,10 @@ public sealed class CollisionSystem : EntitySystem
 
         return result;
     }
+
+    /// <inheritdoc cref="GetEntitiesAtPosition(IEntityScene?, Vector2, HashSet{string}?)"/>
+    public List<EntityUid> GetEntitiesAtPosition(EntityUid from, Vector2 worldPos, HashSet<string>? mask = null)
+        => GetEntitiesAtPosition(GetScene(from), worldPos, mask);
 
     /// <summary>
     /// Tests whether a world-space position is inside any fixture of a <see cref="CollisionComponent"/>.
@@ -324,6 +355,7 @@ public sealed class CollisionSystem : EntitySystem
     /// Casts a ray and returns the closest entity hit.
     /// </summary>
     public bool Raycast(
+        IEntityScene? scene,
         Vector2 origin,
         Vector2 direction,
         float maxDistance,
@@ -333,9 +365,12 @@ public sealed class CollisionSystem : EntitySystem
         hit = default;
         float closestDist = maxDistance;
         bool  found       = false;
- 
-        foreach (var (uid, transform, col) in _entityBuffer)
+
+        foreach (var (uid, entScene, transform, col) in _entityBuffer)
         {
+            if (!EntityManager.ScenesInteract(scene, entScene))
+                continue;
+
             foreach (var (id, fixture) in col.Fixtures)
             {
                 if (mask != null && !SetsOverlap(mask, fixture.Layers))
@@ -361,21 +396,35 @@ public sealed class CollisionSystem : EntitySystem
  
         return found;
     }
- 
+
+    /// <inheritdoc cref="Raycast(IEntityScene?, Vector2, Vector2, float, out RaycastHit, HashSet{string}?)"/>
+    public bool Raycast(
+        EntityUid from,
+        Vector2 origin,
+        Vector2 direction,
+        float maxDistance,
+        out RaycastHit hit,
+        HashSet<string>? mask = null)
+            => Raycast(GetScene(from), origin, direction, maxDistance, out hit, mask);
+
     /// <summary>
     /// Returns all entities hit by the ray, sorted by distance.
     /// Useful for piercing projectiles or line-of-sight checks.
     /// </summary>
     public List<RaycastHit> RaycastAll(
+        IEntityScene? scene,
         Vector2 origin,
         Vector2 direction,
         float maxDistance,
         HashSet<string>? mask = null)
     {
         var hits = new List<RaycastHit>();
- 
-        foreach (var (uid, transform, col) in _entityBuffer)
+
+        foreach (var (uid, entScene, transform, col) in _entityBuffer)
         {
+            if (!EntityManager.ScenesInteract(scene, entScene))
+                continue;
+
             foreach (var (id, fixture) in col.Fixtures)
             {
                 if (mask != null && !SetsOverlap(mask, fixture.Layers))
@@ -397,6 +446,15 @@ public sealed class CollisionSystem : EntitySystem
         hits.Sort((a, b) => a.Distance.CompareTo(b.Distance));
         return hits;
     }
+
+    /// <inheritdoc cref="RaycastAll(IEntityScene?, Vector2, Vector2, float, HashSet{string}?)"/>
+    public List<RaycastHit> RaycastAll(
+        EntityUid from,
+        Vector2 origin,
+        Vector2 direction,
+        float maxDistance,
+        HashSet<string>? mask = null)
+            => RaycastAll(GetScene(from), origin, direction, maxDistance, mask);
 
     #endregion
  
@@ -573,6 +631,9 @@ public sealed class CollisionSystem : EntitySystem
     public bool TryGetPenetration(EntityUid uidA, EntityUid uidB, out Vector2 mtv)
     {
         mtv = Vector2.Zero;
+
+        if (!SharesScene(uidA, uidB))
+            return false;
 
         if (!TryComp<TransformComponent>(uidA, out var tA) ||
             !TryComp<CollisionComponent>(uidA, out var cA) ||

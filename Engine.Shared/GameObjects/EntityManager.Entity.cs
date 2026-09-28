@@ -174,6 +174,30 @@ public sealed partial class EntityManager
     }
 
     /// <summary>
+    /// The scene/room that owns the entity. null if it is global or does not exist.
+    /// </summary>
+    public IEntityScene? GetScene(EntityUid uid)
+    {
+        return _entities.TryGetValue(uid, out var ent) ? ent.Scene : null;
+    }
+
+    /// <summary>
+    /// Whether things in scene <paramref name="a"/> and scene <paramref name="b"/> can see/touch each other.
+    /// </summary>
+    public static bool ScenesInteract(IEntityScene? a, IEntityScene? b)
+    {
+        return a is null || b is null || ReferenceEquals(a, b);
+    }
+
+    /// <summary>
+    /// <see cref="ScenesInteract"/> for the scenes of two entities.
+    /// </summary>
+    public bool SharesScene(EntityUid a, EntityUid b)
+    {
+        return ScenesInteract(GetScene(a), GetScene(b));
+    }
+
+    /// <summary>
     /// Marks the entity to be deleted in the next frame.
     /// </summary>
     public void DeleteEntity(EntityUid uid)

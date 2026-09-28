@@ -235,6 +235,14 @@ public abstract class EntitySystem
     protected IReadOnlyCollection<EntityUid> GetEntitiesInScene(IEntityScene scene)
         => _entManager.GetEntitiesInScene(scene);
 
+    /// <inheritdoc cref="EntityManager.GetScene(EntityUid)"/>
+    protected IEntityScene? GetScene(EntityUid uid)
+        => _entManager.GetScene(uid);
+
+    /// <inheritdoc cref="EntityManager.SharesScene(EntityUid, EntityUid)"/>
+    protected bool SharesScene(EntityUid a, EntityUid b)
+        => _entManager.SharesScene(a, b);
+
     /// <inheritdoc cref="EntityManager.WipeEntities(IEntityScene?)"/>
     protected void WipeEntities(IEntityScene? scene = null)
         => _entManager.WipeEntities(scene);
