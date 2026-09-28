@@ -26,9 +26,6 @@ public sealed partial class EntityManager
     private readonly Dictionary<NetEntity, List<(GameTick Tick, int NetId)>> _compRemovalHistory = new();
     private readonly List<NetEntity> _emptyRemovalEntries = new();
 
-    /// <summary>
-    /// The instance the generated dirty setters reach for, so they don't pay an IoC lookup per assignment.
-    /// </summary>
     internal static EntityManager? Instance { get; private set; }
 
     /// <summary>
