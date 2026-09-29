@@ -14,7 +14,7 @@ namespace Engine.Shared.GameObjects;
 public abstract class EntitySystem
 {
     [Dependency] protected readonly EntityManager _entManager = default!;
-    [Dependency] private readonly INetManager _internalNetMan = default!;
+    [Dependency] protected readonly INetManager _internalNetMan = default!;
 
     /// <summary>
     /// Stops the update calls in this system.
@@ -51,6 +51,18 @@ public abstract class EntitySystem
     }
 
     /// <summary>
+    /// Returns the entity name.
+    /// </summary>
+    protected string? GetName(EntityUid uid)
+    {
+        var ent = GetEntity(uid);
+        if (ent is null)
+            return null;
+
+        return ent.Name;
+    }
+
+    /// <summary>
     /// Get the transform component from an entity (if it has one).
     /// </summary>
     protected TransformComponent? Transform(EntityUid uid)
@@ -77,33 +89,44 @@ public abstract class EntitySystem
     /// ================
     
     /// <inheritdoc cref="EventBus.Subscribe{T}(GlobalEventHandler{T})"/>
-    public void SubscribeEvent<T>(GlobalEventHandler<T> handler) where T : EntityEvent
+    protected void SubscribeEvent<T>(GlobalEventHandler<T> handler) where T : EntityEvent
         => _bus.Subscribe<T>(handler);
     
     /// <inheritdoc cref="EventBus.Subscribe{CompT, EventT}(EntityEventHandler{CompT, EventT})"/>
-    public void SubscribeEvent<CompT, EventT>(EntityEventHandler<CompT, EventT> handler)
+    protected void SubscribeEvent<CompT, EventT>(EntityEventHandler<CompT, EventT> handler)
         where CompT : Component where EventT : EntityEvent
         => _bus.Subscribe<CompT, EventT>(handler);
     
     /// <inheritdoc cref="EventBus.RaiseEvent{T}(T)"/>
-    public void RaiseEvent<T>(T ev) where T : EntityEvent
+    protected void RaiseEvent<T>(T ev) where T : EntityEvent
         => _bus.RaiseEvent<T>(ev);
 
     /// <inheritdoc cref="EventBus.RaiseEvent{T}(EntityUid, T)"/>
-    public void RaiseEvent<T>(EntityUid uid, T ev) where T : EntityEvent
+    protected void RaiseEvent<T>(EntityUid uid, T ev) where T : EntityEvent
         => _bus.RaiseEvent<T>(uid, ev);
 
     /// <inheritdoc cref="INetManager.RegisterNetMessage{T}(Action{T, INetSession?}?)"/>
-    public void SubscribeNetMessage<T>(Action<T, INetSession?>? rxCallback = null) where T : NetMessage, new()
+    protected void SubscribeNetMessage<T>(Action<T, INetSession?>? rxCallback = null) where T : NetMessage, new()
         => _internalNetMan.RegisterNetMessage<T>(rxCallback);
 
     /// <inheritdoc cref="INetManager.Broadcast(NetMessage, List{INetSession}?))"/>
-    public void BroadcastNetMessage<T>(NetMessage message, List<INetSession>? specifcSessions = null)
+    protected void BroadcastNetMessage<T>(NetMessage message, List<INetSession>? specifcSessions = null)
         => _internalNetMan.Broadcast(message, specifcSessions);
 
     /// <inheritdoc cref="INetSession.SendMessage(NetMessage)"/>
-    public void SendNetMessage(NetMessage message, INetSession session)
+    protected void SendNetMessage(NetMessage message, INetSession session)
         => session.SendMessage(message);
+
+    /// <inheritdoc cref="INetSession.SendMessage(NetMessage)"/>
+    /// <summary>
+    /// Send to server using your session (CLIENT-ONLY)
+    /// </summary>
+    protected void SendNetMessage(NetMessage message)
+    {
+        if (!_internalNetMan.IsRunning || !_internalNetMan.IsClient)
+            throw new InvalidNetworkSideException("This operation is client-only! (Or you are not conected to a server.)");
+        _internalNetMan.MySession?.SendMessage(message);
+    }
 
     /// ================
     /// Entity Manager wrappers.
@@ -139,7 +162,7 @@ public abstract class EntitySystem
     protected void Dirty(Component comp, int fieldIndex) => _entManager.Dirty(comp, fieldIndex);
 
     /// <inheritdoc cref="EntityManager.GetEntityComps(EntityUid)"/>
-    public List<Component>? GetEntityComps(EntityUid uid)
+    protected List<Component>? GetEntityComps(EntityUid uid)
         => _entManager.GetEntityComps(uid);
 
     /// <inheritdoc cref="EntityManager.Query{T}()"/>
