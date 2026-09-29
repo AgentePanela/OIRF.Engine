@@ -13,7 +13,8 @@ public readonly record struct RichTextFont(string? Family, float Size, FontVaria
 
 public sealed class RichTextLayout
 {
-    internal readonly record struct Run(SpriteFontBase Font, SpriteFontBase DisplayFont, string Text, Color Color, ApiTextStyle Style, float Width);
+    internal readonly record struct Run(SpriteFontBase Font, SpriteFontBase DisplayFont, string Text, Color Color, ApiTextStyle Style, float Width,
+        Color? OutlineColor, float OutlineSize);
     internal readonly record struct Line(List<Run> Runs, float Width, float Height, float OffsetY);
     private readonly record struct Piece(string Text, FormattedStyle Style, float Width);
 
@@ -30,8 +31,9 @@ public sealed class RichTextLayout
         Size = size;
     }
 
+    /// <param name="alpha">Multiplies every color drawn, outlines included.</param>
     public void Draw(ShapeBatch sb, Vector2 origin, float width, HAlign align, float uiScale,
-        float clipTop = float.NegativeInfinity, float clipBottom = float.PositiveInfinity)
+        float clipTop = float.NegativeInfinity, float clipBottom = float.PositiveInfinity, float alpha = 1f)
     {
         var displayScale = new Vector2(1f / MathHelper.Max(uiScale, 0.05f));
 
@@ -54,7 +56,24 @@ public sealed class RichTextLayout
             foreach (var run in line.Runs)
             {
                 var y = lineTop + (line.Height - LineHeight(run.Font));
-                sb.DrawString(run.DisplayFont, run.Text, SnapToPixel(new Vector2(x, y), uiScale), run.Color, scale: displayScale, textStyle: run.Style);
+                var position = SnapToPixel(new Vector2(x, y), uiScale);
+                if (run.OutlineColor is { } outlineColor && run.OutlineSize > 0f)
+                {
+                    var step = System.MathF.Max(1f, System.MathF.Round(run.OutlineSize * uiScale)) / uiScale;
+                    for (var ox = -1; ox <= 1; ox++)
+                    {
+                        for (var oy = -1; oy <= 1; oy++)
+                        {
+                            if (ox == 0 && oy == 0)
+                                continue;
+
+                            sb.DrawString(run.DisplayFont, run.Text, position + new Vector2(ox * step, oy * step), outlineColor * alpha,
+                                scale: displayScale, textStyle: run.Style);
+                        }
+                    }
+                }
+
+                sb.DrawString(run.DisplayFont, run.Text, position, run.Color * alpha, scale: displayScale, textStyle: run.Style);
                 x += run.Width;
             }
         }
@@ -127,7 +146,8 @@ public sealed class RichTextLayout
                     width += linePieces[j].Width;
                 }
 
-                runs.Add(new Run(Font(style), DisplayFont(style), string.Concat(parts), ResolveColor(style), style.Decoration.ToTextStyle(), width));
+                runs.Add(new Run(Font(style), DisplayFont(style), string.Concat(parts), ResolveColor(style), style.Decoration.ToTextStyle(), width,
+                    style.OutlineColor, style.OutlineSize));
                 start = i;
             }
 

@@ -34,6 +34,8 @@ public sealed partial class RichLabel : Control
 
     private FormattedMessage _message = FormattedMessage.Parse("");
 
+    public float Opacity { get; set; } = 1f;
+
     /// <inheritdoc cref="Label.Color"/>
     [StyleField("color", 0xFFFFFFFFu)]
     private Color? _color;
@@ -129,6 +131,6 @@ public sealed partial class RichLabel : Control
             _ => Bounds.Y, // top, stretch
         };
 
-        layout.Draw(sb, new Vector2(Bounds.X, blockY), Bounds.Width, TextAlign, uiScale);
+        layout.Draw(sb, new Vector2(Bounds.X, blockY), Bounds.Width, TextAlign, uiScale, alpha: Opacity);
     }
 }

@@ -16,7 +16,9 @@ public readonly record struct FormattedStyle(
     TextDecoration Decoration = TextDecoration.None,
     Color? Color = null,
     string? FontFamily = null,
-    float? FontSize = null);
+    float? FontSize = null,
+    Color? OutlineColor = null,
+    float OutlineSize = 0f);
 
 /// <summary>
 /// A run of text sharing one <see cref="FormattedStyle"/>.
@@ -41,6 +43,7 @@ public sealed class FormattedMessage
         MarkupTagRegistry.Register(new ColorTag());
         MarkupTagRegistry.Register(new FontTag());
         MarkupTagRegistry.Register(new SizeTag());
+        MarkupTagRegistry.Register(new OutlineTag());
     }
 
     /// <summary>
@@ -184,6 +187,32 @@ public sealed class FormattedMessage
             => float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var size)
                 ? current with { FontSize = size }
                 : current;
+    }
+
+    /// <summary>
+    /// [outline], [outline=color] or [outline=color,thickness].
+    /// </summary>
+    private sealed class OutlineTag : IMarkupTag
+    {
+        public string Name => "outline";
+        public FormattedStyle Apply(FormattedStyle current, string? value)
+        {
+            var color = Color.Black;
+            var size = 1f;
+
+            if (value is not null)
+            {
+                var comma = value.IndexOf(',');
+                var colorPart = comma >= 0 ? value[..comma] : value;
+                if (colorPart.Length > 0)
+                    color = ParseColor(colorPart) ?? color;
+
+                if (comma >= 0 && float.TryParse(value[(comma + 1)..], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed))
+                    size = parsed;
+            }
+
+            return current with { OutlineColor = color, OutlineSize = size };
+        }
     }
 
     private static Color? ParseColor(string str)

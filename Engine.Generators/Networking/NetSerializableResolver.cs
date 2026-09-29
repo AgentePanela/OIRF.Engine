@@ -89,6 +89,12 @@ internal static class NetSerializableResolver
             }
         }
 
+        if (typeName == "NetEntity")
+        {
+            return new FieldPlan("new global::NetEntity(buffer.ReadVariableInt32())",
+                new List<string> { $"buffer.WriteVariableInt32({accessPath}.Id);" });
+        }
+
         if (entMan is not null && typeName == "EntityUid")
         {
             // a reference can arrive before the entity it points at
