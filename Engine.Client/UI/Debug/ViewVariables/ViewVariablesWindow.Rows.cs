@@ -104,7 +104,10 @@ public sealed partial class ViewVariablesWindow
             }
 
             if (group.Name.Length > 0)
-                side.Body.AddChild(new Label { Text = group.Name, Color = new Color(190, 190, 255) });
+            {
+                side.Body.AddChild(BuildGroupSeparator(group.Name));
+                memberIndex = 0;
+            }
 
             foreach (var member in group.Members)
             {
@@ -118,6 +121,30 @@ public sealed partial class ViewVariablesWindow
         }
 
         return hasComponents;
+    }
+
+    private static BoxContainer BuildGroupSeparator(string name)
+    {
+        var band = new BoxContainer
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalExpand = true,
+            MinHeight = 22,
+            Background = new Color(60, 60, 110),
+        };
+
+        band.AddChild(new Label
+        {
+            Text = name,
+            Color = new Color(190, 190, 255),
+            HorizontalExpand = true,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            TextAlign = HorizontalAlignment.Center,
+            TextVerticalAlign = VerticalAlignment.Center,
+        });
+
+        return band;
     }
 
     private BoxContainer BuildComponentRow(SideView side, string name, VVPath compPath, int index)

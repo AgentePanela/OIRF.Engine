@@ -13,7 +13,7 @@ public static class ViewVariablesConvert
 {
     private const BindingFlags MemberFlags = BindingFlags.Public | BindingFlags.Instance;
 
-    public readonly record struct VVMemberDesc(MemberInfo Member, bool CanWrite);
+    public readonly record struct VVMemberDesc(MemberInfo Member, bool CanWrite, bool IsBase = false);
 
     private static readonly ConcurrentDictionary<Type, VVMemberDesc[]> _memberCache = new();
 
@@ -22,22 +22,36 @@ public static class ViewVariablesConvert
         if (_memberCache.TryGetValue(type, out var cached))
             return cached;
 
-        var excludeDeclaringType = typeof(Component).IsAssignableFrom(type) ? typeof(Component) : typeof(object);
+        var isComp = typeof(Component).IsAssignableFrom(type);
 
         var props = type.GetProperties(MemberFlags)
-            .Where(p => p.DeclaringType != excludeDeclaringType && p.CanRead && p.GetIndexParameters().Length == 0)
+            .Where(p => p.DeclaringType != typeof(object) && p.CanRead && p.GetIndexParameters().Length == 0)
             .Where(p => p.GetCustomAttribute<ViewVariablesHiddenAttribute>() is null)
-            .Select(p => new VVMemberDesc(p,
-                p.GetSetMethod(true) is not null && p.GetCustomAttribute<ViewVariablesReadOnlyAttribute>() is null));
+            .Select(p =>
+            {
+                // an override (NetFieldCount...) still belongs to the base
+                var isBase = isComp && p.GetMethod!.GetBaseDefinition().DeclaringType == typeof(Component);
+
+                // the engine owns these - editing Owner or State by hand only breaks the entity manager
+                return new VVMemberDesc(p,
+                    !isBase && p.GetSetMethod(true) is not null && p.GetCustomAttribute<ViewVariablesReadOnlyAttribute>() is null,
+                    isBase);
+            });
 
         var fields = type.GetFields(MemberFlags)
-            .Where(f => f.DeclaringType != excludeDeclaringType && !f.IsLiteral)
+            .Where(f => f.DeclaringType != typeof(object) && !f.IsLiteral)
             .Where(f => f.GetCustomAttribute<ViewVariablesHiddenAttribute>() is null)
-            .Select(f => new VVMemberDesc(f,
-                !f.IsInitOnly && f.GetCustomAttribute<ViewVariablesReadOnlyAttribute>() is null));
+            .Select(f =>
+            {
+                var isBase = isComp && f.DeclaringType == typeof(Component);
+                return new VVMemberDesc(f,
+                    !isBase && !f.IsInitOnly && f.GetCustomAttribute<ViewVariablesReadOnlyAttribute>() is null,
+                    isBase);
+            });
 
         var result = props.Concat(fields)
-            .OrderBy(m => m.Member.Name, StringComparer.Ordinal)
+            .OrderBy(m => m.IsBase)
+            .ThenBy(m => m.Member.Name, StringComparer.Ordinal)
             .ToArray();
 
         _memberCache[type] = result;

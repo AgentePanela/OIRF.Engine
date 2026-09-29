@@ -660,7 +660,7 @@ public sealed class ViewVariablesResolver
         {
             Path = path,
             Title = DescribeTitle(path, obj),
-            Groups = [new VVGroup("", BuildMembers(path, obj))],
+            Groups = BuildObjectGroups(path, obj),
             StructureVersion = obj.GetType().GetHashCode(),
         };
     }
@@ -738,7 +738,8 @@ public sealed class ViewVariablesResolver
     }
 
     // shown before the component list, in this order, whichever of these Entity actually has
-    private static readonly string[] EntityInfoOrder = ["Uid", "Id", "Name", "Scene"];
+    private static readonly string[] EntityInfoOrder =
+        ["Uid", "NetId", "Id", "Name", "Scene", "CreationTick", "LastModifiedTick", "Deleting"];
 
     private VVSnapshot SnapshotEntity(VVPath path, Entity ent)
     {
@@ -784,11 +785,31 @@ public sealed class ViewVariablesResolver
         return true;
     }
 
+    public const string ComponentBaseGroup = "Component";
+
+    private static List<VVGroup> BuildObjectGroups(VVPath path, object obj)
+    {
+        var descs = ViewVariablesConvert.ScanMembers(obj.GetType());
+        var groups = new List<VVGroup>(2)
+        {
+            new("", BuildMembers(path, obj, descs.Where(d => !d.IsBase))),
+        };
+
+        var baseMembers = BuildMembers(path, obj, descs.Where(d => d.IsBase));
+        if (baseMembers.Count > 0)
+            groups.Add(new VVGroup(ComponentBaseGroup, baseMembers));
+
+        return groups;
+    }
+
     private static List<VVMemberInfo> BuildMembers(VVPath basePath, object obj)
+        => BuildMembers(basePath, obj, ViewVariablesConvert.ScanMembers(obj.GetType()));
+
+    private static List<VVMemberInfo> BuildMembers(VVPath basePath, object obj, IEnumerable<ViewVariablesConvert.VVMemberDesc> descs)
     {
         var members = new List<VVMemberInfo>();
 
-        foreach (var desc in ViewVariablesConvert.ScanMembers(obj.GetType()))
+        foreach (var desc in descs)
         {
             var memberPath = basePath.Member(desc.Member.Name);
             var memberType = DataFieldConverter.GetMemberType(desc.Member);
