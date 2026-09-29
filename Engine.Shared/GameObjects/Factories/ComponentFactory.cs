@@ -22,6 +22,11 @@ public sealed class ComponentFactory
     /// </summary>
     public readonly List<Type> ComponentsBlacklist = new();
 
+    /// <summary>
+    /// Components in those assemblies will be registred during loading.
+    /// </summary>
+    public readonly List<Assembly> ComponentsAssemblyBlacklist = new();
+
     private readonly List<Type> _networkedTypes = new();
     private readonly Dictionary<Type, int> _networkedIds = new();
     private readonly HashSet<Type> _manualStateTypes = new();
@@ -34,6 +39,7 @@ public sealed class ComponentFactory
     {
         Log.Debug("Registring components...");
         var types = _contentMan.GetAssemblies()
+            .Where(a => !ComponentsAssemblyBlacklist.Contains(a))
             .SelectMany(a =>
             {
                 try { return a.GetTypes(); }

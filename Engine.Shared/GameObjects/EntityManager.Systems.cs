@@ -17,6 +17,11 @@ public sealed partial class EntityManager
     /// </summary>
     public readonly List<Type> SystemBlacklist = new();
 
+    /// <summary>
+    /// No systems of these assemblies is loaded.
+    /// </summary>
+    public readonly List<Assembly> SystemAssemblyBlacklist = new();
+
     internal Dictionary<Type, EntitySystem> Systems = new();
     internal List<EntitySystem> OrderedSystems = new();
 
@@ -30,6 +35,7 @@ public sealed partial class EntityManager
     {
         Log.Debug("Registrying systems...");
         var types = _contentMan.GetAssemblies()
+            .Where(a => !SystemAssemblyBlacklist.Contains(a))
             .SelectMany(a =>
             {
                 try { return a.GetTypes(); }
@@ -72,6 +78,7 @@ public sealed partial class EntityManager
 
         foreach (var system in OrderedSystems) // resolve dependencies and init the system
         {
+            Log.Debug($"Resolving dependencies for: {system.GetType().Name}");
             IoCManager.ResolveDependencies(system);
             system.Init();
         }
