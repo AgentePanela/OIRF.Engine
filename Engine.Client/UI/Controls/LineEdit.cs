@@ -5,6 +5,7 @@ using Engine.Client.Inputs;
 using Engine.Shared.Common;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Input;
 
 namespace Engine.Client.UI;
 
@@ -17,6 +18,11 @@ public sealed partial class LineEdit : BaseTextInput
     /// Fired when Enter is pressed while focused.
     /// </summary>
     public event Action<string>? OnTextEntered;
+
+    /// <summary>
+    /// Fired for every non-character key pressed while focused, before the LineEdit handles it itself.
+    /// </summary>
+    public event Action<Keys>? OnKeyDown;
 
     public LineEdit()
     {

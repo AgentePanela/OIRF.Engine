@@ -68,6 +68,49 @@ public sealed partial class RichLabel : Control
         StyleAliasses.Add("richTextLabel");
     }
 
+    // Measure and Draw can legitimately be called with different maxWidth
+    private struct LayoutCache
+    {
+        public FormattedMessage? Message;
+        public bool Wrap;
+        public float Width;
+        public RichTextFont Font;
+        public float UIScale;
+        public RichTextLayout? Result;
+
+        public readonly bool Matches(FormattedMessage message, RichTextFont font, bool wrap, float width, float uiScale)
+            => Result is not null
+                && ReferenceEquals(Message, message)
+                && Wrap == wrap
+                && (!wrap || Width == width)
+                && Font == font
+                && UIScale == uiScale;
+    }
+
+    private LayoutCache _measureCache;
+    private LayoutCache _drawCache;
+
+    private RichTextLayout EnsureLayout(float maxWidth, bool wrap, bool forDraw)
+    {
+        var uiScale = IoCManager.Resolve<UIManager>().UIScale;
+        var font = new RichTextFont(FontFamily, FontSize, FontVariant, Color);
+        ref var cache = ref forDraw ? ref _drawCache : ref _measureCache;
+        if (cache.Matches(_message, font, wrap, maxWidth, uiScale))
+            return cache.Result!;
+
+        var result = RichTextLayout.Build(_message, font, maxWidth, wrap, uiScale);
+        cache = new LayoutCache
+        {
+            Message = _message,
+            Wrap = wrap,
+            Width = maxWidth,
+            Font = font,
+            UIScale = uiScale,
+            Result = result,
+        };
+        return result;
+    }
+
     protected override Vector2 MeasureCore(Vector2 availableSize)
     {
         var wrap = AutoWrap && !float.IsInfinity(availableSize.X);
@@ -78,7 +121,6 @@ public sealed partial class RichLabel : Control
     {
         var layout = EnsureLayout(Bounds.Width, AutoWrap, forDraw: true);
         var uiScale = IoCManager.Resolve<UIManager>().UIScale;
-        var displayScale = new Vector2(1f / MathHelper.Max(uiScale, 0.05f));
 
         var blockY = TextVerticalAlign switch
         {
@@ -87,21 +129,6 @@ public sealed partial class RichLabel : Control
             _ => Bounds.Y, // top, stretch
         };
 
-        foreach (var line in layout.Lines)
-        {
-            var x = TextAlign switch
-            {
-                HAlign.Center => Bounds.X + (Bounds.Width - line.Width) / 2f,
-                HAlign.Right => Bounds.Right - line.Width,
-                _ => Bounds.X, // left, stretch
-            };
-
-            foreach (var run in line.Runs)
-            {
-                var y = blockY + line.OffsetY + (line.Height - LineHeight(run.Font));
-                sb.DrawString(run.DisplayFont, run.Text, SnapToPixel(new Vector2(x, y), uiScale), run.Color, scale: displayScale, textStyle: run.Style);
-                x += run.Width;
-            }
-        }
+        layout.Draw(sb, new Vector2(Bounds.X, blockY), Bounds.Width, TextAlign, uiScale);
     }
 }

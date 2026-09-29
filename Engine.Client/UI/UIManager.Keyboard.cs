@@ -35,12 +35,15 @@ public sealed partial class UIManager
 
         foreach (var key in _input.KeysPressedThisFrame())
         {
-            _focusedControl.KeyDown(key);
+            if (_focusedControl is not { } focused)
+                break;
+
+            focused.KeyDown(key);
             _repeatKey = key;
             _repeatTimer = KeyRepeatDelay;
         }
 
-        if (_repeatKey is not { } repeating)
+        if (_repeatKey is not { } repeating || _focusedControl is null)
             return;
 
         if (!_input.IsKeyDownRaw(repeating))

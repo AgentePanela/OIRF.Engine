@@ -13,6 +13,10 @@ public sealed partial class LineEdit
 
     protected internal override void KeyDown(Keys key)
     {
+        OnKeyDown?.Invoke(key);
+        if (!IsFocused)
+            return;
+
         var input = IoCManager.Resolve<InputManager>();
         var shift = input.IsKeyDownRaw(Keys.LeftShift) || input.IsKeyDownRaw(Keys.RightShift);
         var ctrl = input.IsKeyDownRaw(Keys.LeftControl) || input.IsKeyDownRaw(Keys.RightControl);

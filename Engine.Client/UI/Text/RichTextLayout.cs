@@ -1,114 +1,112 @@
 using System.Collections.Generic;
+using Apos.Shapes;
 using Engine.Client.Graphics.Fonts;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
 using SpriteFontBase = FontStashSharp.SpriteFontBase;
 using ApiTextStyle = FontStashSharp.TextStyle;
+using HAlign = Engine.Client.UI.HorizontalAlignment;
 
 namespace Engine.Client.UI;
 
-public sealed partial class RichLabel
+public readonly record struct RichTextFont(string? Family, float Size, FontVariant Variant, Color Color);
+
+public sealed class RichTextLayout
 {
-    private readonly record struct Run(SpriteFontBase Font, SpriteFontBase DisplayFont, string Text, Color Color, ApiTextStyle Style, float Width);
-    private readonly record struct Line(List<Run> Runs, float Width, float Height, float OffsetY);
-    private readonly record struct LayoutResult(List<Line> Lines, Vector2 Size);
+    internal readonly record struct Run(SpriteFontBase Font, SpriteFontBase DisplayFont, string Text, Color Color, ApiTextStyle Style, float Width);
+    internal readonly record struct Line(List<Run> Runs, float Width, float Height, float OffsetY);
     private readonly record struct Piece(string Text, FormattedStyle Style, float Width);
 
-    // Measure and Draw can legitimately be called with different maxWidth - a Stretch-aligned
-    // control (the default) ignores an explicit Width during Arrange, so Bounds.Width can end up
-    // wider than what Width clamped MeasureCore's availableSize to. A single shared cache slot
-    // would thrash forever between the two, rebuilding the whole layout every single frame - two
-    // slots means each caller just keeps hitting its own.
-    private struct LayoutCache
-    {
-        public FormattedMessage? Message;
-        public bool Wrap;
-        public float Width;
-        public string? FontFamily;
-        public float FontSize;
-        public FontVariant FontVariant;
-        public float UIScale;
-        public LayoutResult Result;
-        public bool Valid;
+    internal List<Line> Lines { get; }
 
-        public readonly bool Matches(RichLabel label, bool wrap, float width, float uiScale)
-            => Valid
-                && ReferenceEquals(Message, label._message)
-                && Wrap == wrap
-                && (!wrap || Width == width)
-                && ReferenceEquals(FontFamily, label.FontFamily)
-                && FontSize == label.FontSize
-                && FontVariant == label.FontVariant
-                && UIScale == uiScale;
+    /// <summary>
+    /// Width of the widest line and the height of every line together.
+    /// </summary>
+    public Vector2 Size { get; }
+
+    private RichTextLayout(List<Line> lines, Vector2 size)
+    {
+        Lines = lines;
+        Size = size;
     }
 
-    private LayoutCache _measureCache;
-    private LayoutCache _drawCache;
-
-    private LayoutResult EnsureLayout(float maxWidth, bool wrap, bool forDraw)
+    public void Draw(ShapeBatch sb, Vector2 origin, float width, HAlign align, float uiScale,
+        float clipTop = float.NegativeInfinity, float clipBottom = float.PositiveInfinity)
     {
-        var uiScale = IoCManager.Resolve<UIManager>().UIScale;
-        ref var cache = ref forDraw ? ref _drawCache : ref _measureCache;
-        if (cache.Matches(this, wrap, maxWidth, uiScale))
-            return cache.Result;
+        var displayScale = new Vector2(1f / MathHelper.Max(uiScale, 0.05f));
 
-        var result = BuildLayout(maxWidth, wrap, uiScale);
-
-        cache = new LayoutCache
+        foreach (var line in Lines)
         {
-            Message = _message,
-            Wrap = wrap,
-            Width = maxWidth,
-            FontFamily = FontFamily,
-            FontSize = FontSize,
-            FontVariant = FontVariant,
-            UIScale = uiScale,
-            Result = result,
-            Valid = true,
-        };
-        return result;
+            var lineTop = origin.Y + line.OffsetY;
+            if (lineTop + line.Height < clipTop)
+                continue;
+
+            if (lineTop > clipBottom)
+                break;
+
+            var x = align switch
+            {
+                HAlign.Center => origin.X + (width - line.Width) / 2f,
+                HAlign.Right => origin.X + width - line.Width,
+                _ => origin.X, // left, stretch
+            };
+
+            foreach (var run in line.Runs)
+            {
+                var y = lineTop + (line.Height - LineHeight(run.Font));
+                sb.DrawString(run.DisplayFont, run.Text, SnapToPixel(new Vector2(x, y), uiScale), run.Color, scale: displayScale, textStyle: run.Style);
+                x += run.Width;
+            }
+        }
     }
 
-    private SpriteFontBase ResolveFont(IFontManager fonts, FormattedStyle style)
+    /// <inheritdoc cref="Control.SnapToPixel"/>
+    private static Vector2 SnapToPixel(Vector2 logical, float uiScale)
     {
-        var variant = FontVariant | style.Variant;
-        var family = style.FontFamily ?? FontFamily;
-        var size = style.FontSize ?? FontSize;
+        if (uiScale <= 0f)
+            return logical;
+
+        return new Vector2(System.MathF.Round(logical.X * uiScale), System.MathF.Round(logical.Y * uiScale)) / uiScale;
+    }
+
+    private static SpriteFontBase ResolveFont(IFontManager fonts, RichTextFont baseFont, FormattedStyle style, float scale)
+    {
+        var variant = baseFont.Variant | style.Variant;
+        var family = style.FontFamily ?? baseFont.Family;
+        var size = (style.FontSize ?? baseFont.Size) * scale;
         return family is null ? fonts.Get(size, variant) : fonts.Get(size, family, variant);
     }
-
-    /// <inheritdoc cref="BaseTextInput.ResolveDisplayFont(IFontManager, float)"/>
-    private SpriteFontBase ResolveDisplayFont(IFontManager fonts, FormattedStyle style, float uiScale)
-    {
-        var variant = FontVariant | style.Variant;
-        var family = style.FontFamily ?? FontFamily;
-        var size = (style.FontSize ?? FontSize) * MathHelper.Max(uiScale, 0.05f);
-        return family is null ? fonts.Get(size, variant) : fonts.Get(size, family, variant);
-    }
-
-    private Color ResolveColor(FormattedStyle style) => style.Color ?? Color;
 
     private static float LineHeight(SpriteFontBase font) => font.MeasureString("Ag").Y;
 
-    private LayoutResult BuildLayout(float maxWidth, bool wrap, float uiScale)
+    public static RichTextLayout Build(FormattedMessage message, RichTextFont baseFont, float maxWidth, bool wrap, float uiScale)
     {
         var fonts = IoCManager.Resolve<IFontManager>();
-        var fontCache = new Dictionary<FormattedStyle, SpriteFontBase>();
+        var displayScale = MathHelper.Max(uiScale, 0.05f);
+        var fontCache = new Dictionary<FormattedStyle, (SpriteFontBase Font, float LineHeight)>();
         var displayFontCache = new Dictionary<FormattedStyle, SpriteFontBase>();
 
-        SpriteFontBase Font(FormattedStyle style)
+        (SpriteFontBase Font, float LineHeight) FontInfo(FormattedStyle style)
         {
-            if (!fontCache.TryGetValue(style, out var font))
-                fontCache[style] = font = ResolveFont(fonts, style);
-            return font;
+            if (!fontCache.TryGetValue(style, out var info))
+            {
+                var font = ResolveFont(fonts, baseFont, style, 1f);
+                fontCache[style] = info = (font, LineHeight(font));
+            }
+
+            return info;
         }
+
+        SpriteFontBase Font(FormattedStyle style) => FontInfo(style).Font;
 
         SpriteFontBase DisplayFont(FormattedStyle style)
         {
             if (!displayFontCache.TryGetValue(style, out var font))
-                displayFontCache[style] = font = ResolveDisplayFont(fonts, style, uiScale);
+                displayFontCache[style] = font = ResolveFont(fonts, baseFont, style, displayScale);
             return font;
         }
+
+        Color ResolveColor(FormattedStyle style) => style.Color ?? baseFont.Color;
 
         // merges consecutive same-style pieces into one draw call before starting a new Run
         List<Run> BuildRuns(List<Piece> linePieces)
@@ -147,7 +145,7 @@ public sealed partial class RichLabel
         void EndLine()
         {
             var runs = BuildRuns(pieces);
-            var height = lineHeight > 0f ? lineHeight : LineHeight(Font(default));
+            var height = lineHeight > 0f ? lineHeight : FontInfo(default).LineHeight;
             lines.Add(new Line(runs, lineWidth, height, totalHeight));
             totalWidth = MathHelper.Max(totalWidth, lineWidth);
             totalHeight += height;
@@ -164,7 +162,7 @@ public sealed partial class RichLabel
             lineWidth += piece.Width;
         }
 
-        foreach (var token in Tokenize(_message))
+        foreach (var token in Tokenize(message))
         {
             if (token.IsNewline)
             {
@@ -175,8 +173,8 @@ public sealed partial class RichLabel
             if (token.IsWhitespace)
             {
                 var (spaceText, spaceStyle) = token.WordPieces[0];
-                var font = Font(spaceStyle);
-                lineHeight = MathHelper.Max(lineHeight, LineHeight(font));
+                var (font, height) = FontInfo(spaceStyle);
+                lineHeight = MathHelper.Max(lineHeight, height);
                 pendingSpace = new Piece(spaceText, spaceStyle, font.MeasureString(spaceText).X);
                 continue;
             }
@@ -184,8 +182,8 @@ public sealed partial class RichLabel
             var wordWidth = 0f;
             foreach (var (text, style) in token.WordPieces)
             {
-                var font = Font(style);
-                lineHeight = MathHelper.Max(lineHeight, LineHeight(font));
+                var (font, height) = FontInfo(style);
+                lineHeight = MathHelper.Max(lineHeight, height);
                 var width = font.MeasureString(text).X;
                 resolved.Add(new Piece(text, style, width));
                 wordWidth += width;
@@ -231,7 +229,7 @@ public sealed partial class RichLabel
 
         EndLine();
 
-        return new LayoutResult(lines, new Vector2(totalWidth, totalHeight));
+        return new RichTextLayout(lines, new Vector2(totalWidth, totalHeight));
     }
 
     private readonly record struct Token(bool IsNewline, bool IsWhitespace, List<(string Text, FormattedStyle Style)> WordPieces);
