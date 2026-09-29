@@ -142,8 +142,18 @@ public sealed partial class OptionButton : BaseButton
         _popup.AddChild(list);
 
         window.WindowRoot.AddChild(_popup);
-        LayoutContainer.SetPosition(_popup, new Vector2(Bounds.X, Bounds.Bottom));
-        LayoutContainer.SetSize(_popup, new Vector2(Bounds.Width, PopupMaxHeight));
+        // works to set the popup above or below the option button
+        _popup.Measure(new Vector2(Bounds.Width, float.PositiveInfinity));
+        var wanted = MathHelper.Min(PopupMaxHeight, MathF.Ceiling(_popup.DesiredSize.Y + list.ContentSize.Y));
+
+        var screen = window.WindowRoot.Bounds;
+        var below = screen.Bottom - Bounds.Bottom;
+        var above = Bounds.Top - screen.Top;
+        var openUp = wanted > below && above > below;
+        var height = MathHelper.Min(wanted, openUp ? above : below);
+
+        LayoutContainer.SetPosition(_popup, new Vector2(Bounds.X, openUp ? Bounds.Top - height : Bounds.Bottom));
+        LayoutContainer.SetSize(_popup, new Vector2(Bounds.Width, height));
     }
 
     private void ClosePopup()

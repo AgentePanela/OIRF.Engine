@@ -61,6 +61,7 @@ public partial class OutputPanel : PanelContainer
     public OutputPanel()
     {
         MouseFilter = MouseFilterMode.Pass;
+        StyleAliasses.Add("label");
         StyleAliasses.Add("outputPanel");
 
         AddChild(_scrollBar);

@@ -160,11 +160,12 @@ public sealed partial class UIManager
 
         if (_layoutDirty)
         {
+            // cleared before the pass
+            _layoutDirty = false;
             var layoutStart = Stopwatch.GetTimestamp();
             var logicalSize = screenSize / UIScale;
             Root.Measure(logicalSize);
             Root.Arrange(new Rectangle(0, 0, (int)logicalSize.X, (int)logicalSize.Y));
-            _layoutDirty = false;
             UIProfiler.RecordLayout(Stopwatch.GetTimestamp() - layoutStart);
         }
 

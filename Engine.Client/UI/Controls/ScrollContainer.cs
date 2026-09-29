@@ -32,7 +32,12 @@ public partial class ScrollContainer : PanelContainer
     /// </summary>
     public Vector2 ScrollOffset => new(_hScrollBar.Value, _vScrollBar.Value);
 
-    public Vector2 MaxScrollOffset => Vector2.Max(_viewport.DesiredSize - _viewportSize, Vector2.Zero);
+    /// <summary>
+    /// Size the content wants as of the last measure
+    /// </summary>
+    public Vector2 ContentSize => _viewport.DesiredSize;
+
+    public Vector2 MaxScrollOffset =>Vector2.Max(_viewport.DesiredSize - _viewportSize, Vector2.Zero);
 
     public ScrollContainer()
     {
@@ -87,37 +92,61 @@ public partial class ScrollContainer : PanelContainer
     {
         finalRect = PanelRect(finalRect);
 
-        var viewportWidth = finalRect.Width;
-        var viewportHeight = finalRect.Height;
+        // Which bars show is decided right here from this pass's content size. Reserving whatever the bars measured
+        // last pass lags a whole layout behind: a list that fits would still lose a bar's width the first time.
+        var available = new Vector2(finalRect.Width, finalRect.Height);
+        var content = _viewport.DesiredSize;
 
-        if (VerticalScrollEnabled)
-            viewportWidth -= (int)_vScrollBar.DesiredSize.X;
+        var showV = VerticalScrollEnabled && content.Y > available.Y;
+        var barWidth = ShowBar(_vScrollBar, showV, available).X;
 
-        if (HorizontalScrollEnabled)
-            viewportHeight -= (int)_hScrollBar.DesiredSize.Y;
+        var showH = HorizontalScrollEnabled && content.X > available.X - barWidth;
+        var barHeight = ShowBar(_hScrollBar, showH, available).Y;
 
+        // the horizontal bar eats height, which can push the content past it vertically too
+        if (!showV && VerticalScrollEnabled && content.Y > available.Y - barHeight)
+        {
+            showV = true;
+            barWidth = ShowBar(_vScrollBar, true, available).X;
+        }
+
+        var viewportWidth = finalRect.Width - (int)barWidth;
+        var viewportHeight = finalRect.Height - (int)barHeight;
         _viewportSize = new Vector2(viewportWidth, viewportHeight);
 
         if (VerticalScrollEnabled)
         {
-            _vScrollBar.MaxValue = _viewport.DesiredSize.Y;
+            _vScrollBar.MaxValue = content.Y;
             _vScrollBar.Page = viewportHeight;
-            _vScrollBar.Visible = MaxScrollOffset.Y > 0;
-            _vScrollBar.Arrange(new Rectangle(
-                finalRect.Right - (int)_vScrollBar.DesiredSize.X, finalRect.Y, (int)_vScrollBar.DesiredSize.X, viewportHeight));
+            _vScrollBar.Value = _vScrollBar.Value; // re-clamps against the new range, back to 0 once it all fits
+            if (showV)
+                _vScrollBar.Arrange(new Rectangle(finalRect.Right - (int)barWidth, finalRect.Y, (int)barWidth, viewportHeight));
         }
 
         if (HorizontalScrollEnabled)
         {
-            _hScrollBar.MaxValue = _viewport.DesiredSize.X;
+            _hScrollBar.MaxValue = content.X;
             _hScrollBar.Page = viewportWidth;
-            _hScrollBar.Visible = MaxScrollOffset.X > 0;
-            _hScrollBar.Arrange(new Rectangle(
-                finalRect.X, finalRect.Bottom - (int)_hScrollBar.DesiredSize.Y, viewportWidth, (int)_hScrollBar.DesiredSize.Y));
+            _hScrollBar.Value = _hScrollBar.Value;
+            if (showH)
+                _hScrollBar.Arrange(new Rectangle(finalRect.X, finalRect.Bottom - (int)barHeight, viewportWidth, (int)barHeight));
         }
 
         _viewport.ScrollOffset = ScrollOffset;
         _viewport.Arrange(new Rectangle(finalRect.X, finalRect.Y, viewportWidth, viewportHeight));
+    }
+
+    // a bar hidden during Measure measured as zero, so one that just turned on is measured again here
+    private static Vector2 ShowBar(ScrollBar bar, bool shown, Vector2 available)
+    {
+        bar.Visible = shown;
+        if (!shown)
+            return Vector2.Zero;
+
+        if (bar.DesiredSize == Vector2.Zero)
+            bar.Measure(available);
+
+        return bar.DesiredSize;
     }
 
     /// <summary>
