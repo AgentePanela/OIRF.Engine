@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Engine.Shared.IoC;
 using Engine.Shared.Networking;
 using Engine.Shared.Storage;
@@ -35,7 +36,18 @@ public interface IConfigurationManager
     public void Subs<T>(CVarDef<T> cvar, Action<T> callback, bool invokeImmediately = true);
 
     /// <summary>
+    /// Removes a callback added with <see cref="Subs{T}"/>. It has to be the same delegate.
+    /// </summary>
+    public void Unsubs<T>(CVarDef<T> cvar, Action<T> callback);
+
+    /// <summary>
+    /// Removes every cvar callback from the instance.
+    /// </summary>
+    public void UnsubsAll(object owner);
+
+    /// <summary>
     /// Save all cvars that have the current values different from the default ones to the dataPath/config.toml
+    /// except the <see cref="CVar.NOSAVE"/> ones.
     /// </summary>
     public void SaveConfig();
 
@@ -76,6 +88,7 @@ public sealed class ConfigurationManager : IConfigurationManager
     private readonly Dictionary<string, object> _values = new();
     private readonly Dictionary<string, CVarDef> _defs = new(); // default values
     private readonly Dictionary<string, List<Delegate>> _subscribers = new();
+    private readonly Dictionary<string, string> _unknownValues = new();
 
     /// <summary>
     /// Invoked when the config is loaded.
@@ -164,6 +177,24 @@ public sealed class ConfigurationManager : IConfigurationManager
         _defs[def.Name] = def;
         _values[def.Name] = value!;
         Log.Debug($"New cvar! {def.Name}");
+
+        if (!_unknownValues.Remove(def.Name, out var raw))
+            return;
+
+        try
+        {
+            value = ParseTomlValue(raw, def);
+        }
+        catch (Exception e)
+        {
+            Log.Warn($"Couldn't parse '{raw}' from the config file for cvar '{def.Name}', keeping the default: {e.Message}");
+            return;
+        }
+
+        _values[def.Name] = value;
+
+        if (_subscribers.TryGetValue(def.Name, out var list))
+            def.FireSubscribers(value, list);
     }
 
     public T Get<T>(CVarDef<T> cvar)
@@ -245,16 +276,79 @@ public sealed class ConfigurationManager : IConfigurationManager
 
     public void Subs<T>(CVarDef<T> cvar, Action<T> callback, bool invokeImmediately = true)
     {
-        if (!_subscribers.TryGetValue(cvar.Name, out var list))
-        {
-            list = new List<Delegate>();
-            _subscribers[cvar.Name] = list;
-        }
+        var list = _subscribers.TryGetValue(cvar.Name, out var current)
+            ? new List<Delegate>(current.Count + 1)
+            : new List<Delegate>(1);
+
+        if (current is not null)
+            list.AddRange(current);
 
         list.Add(callback);
+        _subscribers[cvar.Name] = list;
 
         if (invokeImmediately && _values.TryGetValue(cvar.Name, out var value))
             callback((T)value);
+    }
+
+    public void Unsubs<T>(CVarDef<T> cvar, Action<T> callback)
+    {
+        if (!_subscribers.TryGetValue(cvar.Name, out var current))
+            return;
+
+        var index = current.IndexOf(callback);
+        if (index < 0)
+            return;
+
+        var list = new List<Delegate>(current);
+        list.RemoveAt(index);
+        _subscribers[cvar.Name] = list;
+    }
+
+    public void UnsubsAll(object owner)
+    {
+        foreach (var name in new List<string>(_subscribers.Keys))
+        {
+            var current = _subscribers[name];
+            var list = current.FindAll(callback => !IsOwnedBy(callback, owner));
+            if (list.Count != current.Count)
+                _subscribers[name] = list;
+        }
+    }
+
+    private static bool IsOwnedBy(Delegate callback, object owner)
+    {
+        foreach (var single in callback.GetInvocationList())
+        {
+            if (TargetReaches(single.Target, owner))
+                return true;
+        }
+
+        return false;
+    }
+
+    // A lambda that captures locals doesnt point at the instance it was written in
+    private static bool TargetReaches(object? target, object owner, int depth = 0)
+    {
+        if (target is null || depth > 8)
+            return false;
+
+        if (ReferenceEquals(target, owner))
+            return true;
+
+        var type = target.GetType();
+        if (!type.IsDefined(typeof(CompilerGeneratedAttribute), inherit: false))
+            return false;
+
+        foreach (var field in type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+        {
+            if (field.Name != "<>4__this" && !field.Name.StartsWith("CS$<>8__locals", StringComparison.Ordinal))
+                continue;
+
+            if (TargetReaches(field.GetValue(target), owner, depth + 1))
+                return true;
+        }
+
+        return false;
     }
 
     public void SaveConfig()
@@ -265,6 +359,9 @@ public sealed class ConfigurationManager : IConfigurationManager
         {
             var def = _defs[name];
 
+            if (def.Flags.HasFlag(CVar.NOSAVE))
+                continue;
+
             var prop = def.GetType().GetProperty("DefaultValue");
             var defaultValue = prop?.GetValue(def);
 
@@ -274,12 +371,16 @@ public sealed class ConfigurationManager : IConfigurationManager
             lines.Add($"{name} = {FormatToml(value)}");
         }
 
+        foreach (var (name, raw) in _unknownValues)
+            lines.Add($"{name} = {raw}");
+
         _storage.WriteText("config.toml", string.Join("\n", lines));
     }
 
     public void LoadConfig()
     {
         var text = _storage.ReadText("config.toml");
+        _unknownValues.Clear();
 
         if (text == null)
             return;
@@ -297,7 +398,10 @@ public sealed class ConfigurationManager : IConfigurationManager
             var raw = parts[1].Trim();
 
             if (!_defs.TryGetValue(name, out var def))
+            {
+                _unknownValues[name] = raw;
                 continue;
+            }
 
             var value = ParseTomlValue(raw, def);
 

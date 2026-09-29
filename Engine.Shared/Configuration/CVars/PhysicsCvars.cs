@@ -5,7 +5,7 @@ namespace Engine.Shared.Configuration;
 public static class PhysicsCvars
 {
     public static CVarDef<bool> CollisionMask 
-        = CVarDef.Create("physics.collisionmask", false, CVar.CLIENTONLY);
+        = CVarDef.Create("physics.collisionmask", false, CVar.CLIENTONLY | CVar.NOSAVE);
 
     /// <summary>
     /// Change this to the game avreage collision entity size.

@@ -4,7 +4,7 @@ namespace Engine.Shared.Configuration.CVars;
 public static class GameCVars
 {
     public static CVarDef<string> GameVersion 
-        = CVarDef.Create("game.version", "");
+        = CVarDef.Create("game.version", "", CVar.NOSAVE);
 
     public static CVarDef<int> ResolutionWidth
         = CVarDef.Create("game.resolution-witdh", 0, CVar.CLIENTONLY);

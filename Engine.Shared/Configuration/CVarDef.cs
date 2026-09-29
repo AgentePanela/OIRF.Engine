@@ -29,6 +29,10 @@ public enum CVar : ushort
     /// </summary>
     SERVERONLY = 1 << 3,
 
+    /// <summary>
+    /// Never written to the config file.
+    /// </summary>
+    NOSAVE = 1 << 4,
 }
 
 public abstract class CVarDef

@@ -23,5 +23,5 @@ public static class LightingCvars
     /// label for sprite-derived occluders) over the scene. Debug only.
     /// </summary>
     public static readonly CVarDef<bool> ShowOccluderMask =
-        CVarDef.Create("lighting.show-occluder-mask", false);
+        CVarDef.Create("lighting.show-occluder-mask", false, CVar.NOSAVE);
 }

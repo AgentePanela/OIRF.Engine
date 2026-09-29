@@ -6,7 +6,7 @@ namespace Engine.Shared.Configuration.CVars;
 public sealed class EngineCvars
 {
     public static readonly CVarDef<string> EngineVersion =
-        CVarDef.Create("engine.version", "1.0.0 IN-DEV");
+        CVarDef.Create("engine.version", "1.0.0 IN-DEV", CVar.NOSAVE);
 
     public static readonly CVarDef<int> SystemProfillerTop =
         CVarDef.Create("engine.system-profiller-top", 10);

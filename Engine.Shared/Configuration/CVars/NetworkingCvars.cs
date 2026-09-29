@@ -116,23 +116,23 @@ public static class NetworkingCvars
     /// Simulated chance (0.0 to 1.0) that an outgoing packet is dropped. LOCAL - no reboot needed.
     /// </summary>
     public static readonly CVarDef<float> NetFakeLoss =
-        CVarDef.Create("net.fake-loss", 0f);
+        CVarDef.Create("net.fake-loss", 0f, CVar.NOSAVE);
 
     /// <summary>
     /// Minimum simulated one-way latency (in seconds) added to outgoing packets. Local - no restart needed.
     /// </summary>
     public static readonly CVarDef<float> NetFakeLagMin =
-        CVarDef.Create("net.fake-lag-min", 0f);
+        CVarDef.Create("net.fake-lag-min", 0f, CVar.NOSAVE);
 
     public static readonly CVarDef<float> NetFakeLagRandom =
-        CVarDef.Create("net.fake-lag-random", 0f);
+        CVarDef.Create("net.fake-lag-random", 0f, CVar.NOSAVE);
 
     /// <summary>
     /// Simulated chance (0.0 to 1.0) that an outgoing packet is duplicated. Local testing tool, not replicated.
     /// - no restart needed.
     /// </summary>
     public static readonly CVarDef<float> NetFakeDuplicates =
-        CVarDef.Create("net.fake-duplicates", 0f);
+        CVarDef.Create("net.fake-duplicates", 0f, CVar.NOSAVE);
 
     #endregion
 }
