@@ -182,6 +182,30 @@ public sealed partial class EntityManager
     }
 
     /// <summary>
+    /// Moves a living entity to <paramref name="scene"/> (global if null).
+    /// </summary>
+    public void SetEntScene(EntityUid uid, IEntityScene? scene, Vector2? position = null)
+    {
+        MainThread.AssertMainThread();
+
+        if (!HasEntity(uid, out var ent) || ent.Deleting)
+            return;
+
+        if (position is { } pos)
+            EnsureComp<TransformComponent>(uid).Position = pos;
+
+        var old = ent.Scene;
+        if (ReferenceEquals(old, scene))
+            return;
+
+        old?.OwnedEntities.Remove(uid);
+        scene?.OwnedEntities.Add(uid);
+        ent.SetScene(scene);
+
+        EventBus.RaiseEvent(uid, new EntitySceneChangedEvent { Old = old, New = scene });
+    }
+
+    /// <summary>
     /// Whether things in scene <paramref name="a"/> and scene <paramref name="b"/> can see/touch each other.
     /// </summary>
     public static bool ScenesInteract(IEntityScene? a, IEntityScene? b)

@@ -38,9 +38,13 @@ public sealed class CollisionSystem : EntitySystem
         base.Init();
         _cfg.Subs(PhysicsCvars.CellSize, v => CellSize = v);
         SubscribeEvent<CollisionComponent, MoveEvent>(OnEntityMoved);
+        SubscribeEvent<CollisionComponent, EntitySceneChangedEvent>(OnSceneChanged);
     }
 
     private void OnEntityMoved(EntityUid uid, CollisionComponent comp, MoveEvent args)
+        => _movedThisFrame.Add(uid);
+
+    private void OnSceneChanged(EntityUid uid, CollisionComponent comp, EntitySceneChangedEvent args)
         => _movedThisFrame.Add(uid);
 
     private static bool SetsOverlap(HashSet<string> a, HashSet<string> b)

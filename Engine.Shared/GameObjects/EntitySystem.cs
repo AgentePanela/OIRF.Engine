@@ -239,6 +239,10 @@ public abstract class EntitySystem
     protected IEntityScene? GetScene(EntityUid uid)
         => _entManager.GetScene(uid);
 
+    /// <inheritdoc cref="EntityManager.SetEntScene(EntityUid, IEntityScene?, Vector2?)"/>
+    protected void SetScene(EntityUid uid, IEntityScene? scene, Vector2? position = null)
+        => _entManager.SetEntScene(uid, scene, position);
+
     /// <inheritdoc cref="EntityManager.SharesScene(EntityUid, EntityUid)"/>
     protected bool SharesScene(EntityUid a, EntityUid b)
         => _entManager.SharesScene(a, b);

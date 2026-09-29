@@ -41,7 +41,8 @@ public sealed class TransformSystem : EntitySystem
         base.Init();
         SubscribeEvent<TransformComponent, CompAddedEvent>(OnCompAdded);
         SubscribeEvent<TransformComponent, CompRemovedEvent>(OnCompRemoved);
-        
+        SubscribeEvent<TransformComponent, EntitySceneChangedEvent>(OnSceneChanged);
+
         _cfg.Subs(EngineCvars.TransformMaxParents, (v) => _maxParents = v, true);
     }
 
@@ -123,6 +124,22 @@ public sealed class TransformSystem : EntitySystem
 
         // whatever was hanging off it is not hanging off anything any more
         _childrenByParent.Remove(uid);
+    }
+
+    private void OnSceneChanged(EntityUid uid, TransformComponent comp, EntitySceneChangedEvent args)
+    {
+        if (comp.Parent is { } parent && !EntityManager.ScenesInteract(GetScene(parent), args.New))
+            comp.Parent = null;
+
+        // setScene on a child comes back here
+        var children = _movePool.Count > 0 ? _movePool.Pop() : new List<EntityUid>();
+        children.AddRange(GetChildren(uid));
+
+        foreach (var child in children)
+            SetScene(child, args.New);
+
+        children.Clear();
+        _movePool.Push(children);
     }
 
     internal void ReparentChild(EntityUid child, EntityUid? from, EntityUid? to)

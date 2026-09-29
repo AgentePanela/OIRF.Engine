@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using Engine.Shared.GameObjects;
 using Engine.Shared.IoC;
 using Engine.Shared.Networking;
 using Engine.Shared.Rooms;
+using Microsoft.Xna.Framework;
 
 namespace Engine.Server.Rooms;
 
@@ -46,6 +48,12 @@ public interface IRoomManager
     public void JoinSession(INetSession session, Room room, RoomOptions options);
 
     /// <summary>
+    /// Moves a session to another room together with the selected entity.
+    /// </summary>
+    /// <returns>false if the room refused the session.</returns>
+    public bool MoveEntityWithSession(INetSession session, Room room, RoomOptions options, EntityUid uid, Vector2? position = null);
+
+    /// <summary>
     /// Verify if a session is already in a room and returns the room instance.
     /// </summary>
     public bool IsInRoom(INetSession session, [NotNullWhen(true)] out Room? room);
@@ -54,6 +62,7 @@ public interface IRoomManager
 internal sealed class RoomManager : IRoomManager
 {
     [Dependency] private readonly INetManager _netMan = default!;
+    [Dependency] private readonly EntityManager _entMan = default!;
 
     private readonly Dictionary<string, Room> _rooms = new();
     private readonly Dictionary<INetSession, Room> _sessions = new();
@@ -93,16 +102,7 @@ internal sealed class RoomManager : IRoomManager
 
     public void JoinSession(INetSession session, Room room, RoomOptions options)
     {
-        if (IsInRoom(session, out _))
-            return;
-
-        if (!room.OptionsType.IsInstanceOfType(options))
-            throw new ArgumentException($"Room {room.RoomId} expects {room.OptionsType.Name}, got {options.GetType().Name}.", nameof(options));
-
-        if (room.Locked)
-            return;
-
-        if (room.MaxSessions is not null && room.Sessions.Count >= room.MaxSessions)
+        if (IsInRoom(session, out _) || !CanJoin(room, options))
             return;
 
         _sessions.Add(session, room);
@@ -112,6 +112,31 @@ internal sealed class RoomManager : IRoomManager
             responseType = RoomResonseMessage.ResponseType.Joined,
             RoomId = room.RoomId
         });
+    }
+
+    public bool MoveEntityWithSession(INetSession session, Room room, RoomOptions options, EntityUid uid, Vector2? position = null)
+    {
+        if (!CanJoin(room, options))
+            return false;
+
+        LeaveSession(session);
+
+        // before the join, so the room's join handlers already find the entity there
+        _entMan.SetEntScene(uid, room, position);
+
+        JoinSession(session, room, options);
+        return true;
+    }
+
+    private static bool CanJoin(Room room, RoomOptions options)
+    {
+        if (!room.OptionsType.IsInstanceOfType(options))
+            throw new ArgumentException($"Room {room.RoomId} expects {room.OptionsType.Name}, got {options.GetType().Name}.", nameof(options));
+
+        if (room.Locked)
+            return false;
+
+        return room.MaxSessions is null || room.Sessions.Count < room.MaxSessions;
     }
 
     public bool IsInRoom(INetSession session, [NotNullWhen(true)] out Room? room)

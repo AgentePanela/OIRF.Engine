@@ -27,6 +27,7 @@ public sealed partial class ServerGameStateSystem
     {
         SubscribeEvent<EntityAddedEvent>(OnEntityAdded);
         SubscribeEvent<EntityRemovedEvent>(OnEntityRemoved);
+        SubscribeEvent<EntitySceneChangedEvent>(OnEntitySceneChanged);
 
         _configMan.Subs(NetworkingCvars.NetPvs, value => _pvsEnabled = value);
         _configMan.Subs(NetworkingCvars.NetPvsRange, value => _pvsRange = value);
@@ -247,6 +248,14 @@ public sealed partial class ServerGameStateSystem
     {
         if (_entManager.HasEntity(ev.Uid, out var ent) && ent.Scene is null)
             _globals.Add(ev.Uid);
+    }
+
+    private void OnEntitySceneChanged(EntitySceneChangedEvent ev)
+    {
+        if (ev.New is null)
+            _globals.Add(ev.Uid);
+        else
+            _globals.Remove(ev.Uid);
     }
 
     private void OnEntityRemoved(EntityRemovedEvent ev)

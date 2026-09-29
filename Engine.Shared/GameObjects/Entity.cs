@@ -79,7 +79,7 @@ public sealed class Entity
         Id = proto;
     }
 
-    internal void SetScene(IEntityScene scene)
+    internal void SetScene(IEntityScene? scene)
         => Scene = scene;
 
     internal void SetId(ProtoId<EntityPrototype> proto)
@@ -119,4 +119,13 @@ public sealed class EntityAddedEvent : EntityEvent
 /// </summary>
 public sealed class EntityRemovedEvent : EntityEvent
 {
+}
+
+/// <summary>
+/// Called after a entity moved to another scene/room. null means global.
+/// </summary>
+public sealed class EntitySceneChangedEvent : EntityEvent
+{
+    public IEntityScene? Old;
+    public IEntityScene? New;
 }
