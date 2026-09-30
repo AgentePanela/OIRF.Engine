@@ -15,3 +15,17 @@ public interface IMarkupTag
     /// </summary>
     FormattedStyle Apply(FormattedStyle current, string? value);
 }
+
+/// <summary>
+/// A tag with no content and no closing tag, like [icon=...]. Puts something at its place instead of styling the
+/// text after it.
+/// </summary>
+public interface IInlineMarkupTag : IMarkupTag
+{
+    FormattedStyle IMarkupTag.Apply(FormattedStyle current, string? value) => current;
+
+    /// <summary>
+    /// What goes where the tag is, or null to drop it.
+    /// </summary>
+    FormattedSegment? Insert(FormattedStyle current, string? value);
+}

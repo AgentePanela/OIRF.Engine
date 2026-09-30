@@ -42,7 +42,6 @@ public sealed partial class UIManager
 
     private ShapeBatch _shapeBatch = default!;
     private Vector2 _lastScreenSize;
-    private static readonly RasterizerState ScissorRasterizer = new() { ScissorTestEnable = true };
     private static bool _layoutDirty = true;
 
     public void Init()
@@ -198,7 +197,8 @@ public sealed partial class UIManager
     {
         //GameClient.GraphicsDevice.ScissorRectangle = GameClient.GraphicsDevice.Viewport.Bounds;
         UIProfiler.BeginFrame();
-        _shapeBatch.Begin(view: Matrix.CreateScale(UIScale), rasterizerState: ScissorRasterizer);
+        UIBatch.Reset();
+        UIBatch.Begin(_shapeBatch, UIScale);
         Root.Draw(_shapeBatch, _fontMan, dt);
         _shapeBatch.End();
         UIProfiler.EndFrame();

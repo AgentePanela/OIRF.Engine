@@ -12,8 +12,13 @@ namespace Engine.Client.UI;
 public abstract partial class Control : IDisposable
 {
     private long _lastProfileStart;
-    // ShapeBatch queues draws and only actually submits them at End() - so heres a little hack
-    private static readonly RasterizerState ScissorRasterizer = new() { ScissorTestEnable = true };
+
+    /// <summary>
+    /// How this control and everything under it samples textures.
+    /// Null for using the parent.
+    /// </summary>
+    [StyleField("sampler")]
+    private TextureSampling? _sampler;
 
     /// <summary>
     /// Whether this control clips its children to its own <see cref="Bounds"/>. 
@@ -40,19 +45,29 @@ public abstract partial class Control : IDisposable
         if (clipped.Width <= 0 || clipped.Height <= 0)
             return; // fully clipped out - this and everything under it is off-screen
 
+        // the batch already carries the parent's sampling, so leaving Sampler null inherits it for free
+        var inheritedSampling = UIBatch.Sampling;
+        UIBatch.SetSampling(sb, uiScale, Sampler ?? inheritedSampling);
+
         _lastProfileStart = Stopwatch.GetTimestamp();
         DrawSelf(sb, fontManager, dt);
         UIProfiler.Record(GetType().Name, Stopwatch.GetTimestamp() - _lastProfileStart);
 
-        if (Children.Count == 0)
-            return;
+        if (Children.Count > 0)
+            DrawChildren(sb, fontManager, dt, device, uiScale, previousScissor, clipped);
 
+        UIBatch.SetSampling(sb, uiScale, inheritedSampling);
+    }
+
+    private void DrawChildren(ShapeBatch sb, IFontManager fontManager, float dt, GraphicsDevice device, float uiScale,
+        Rectangle previousScissor, Rectangle clipped)
+    {
         var scissorChanged = ClipsContent && clipped != previousScissor;
         if (scissorChanged)
         {
             sb.End(); //todo: fork apos.shapes and add Flush as public member instead of end/begin
             device.ScissorRectangle = clipped;
-            sb.Begin(view: Matrix.CreateScale(uiScale), rasterizerState: ScissorRasterizer);
+            UIBatch.Begin(sb, uiScale);
         }
 
         var ordered = OrderedChildren;
@@ -63,7 +78,7 @@ public abstract partial class Control : IDisposable
         {
             sb.End();
             device.ScissorRectangle = previousScissor;
-            sb.Begin(view: Matrix.CreateScale(uiScale), rasterizerState: ScissorRasterizer);
+            UIBatch.Begin(sb, uiScale);
         }
     }
 

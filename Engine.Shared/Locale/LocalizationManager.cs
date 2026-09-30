@@ -214,7 +214,7 @@ internal sealed partial class LocalizationManager : ILocalizationManager
         {
             if (errors is not null)
                 foreach (var error in errors)
-                    Log.Error(error.ToString());
+                    Log.Error($"LOC {error} in {key}");
             
             return key;
         }

@@ -321,7 +321,7 @@ public sealed partial class TextEdit
 
         sb.End(); // scoped clip so overflowing/scrolled text can't bleed past our own Bounds
         device.ScissorRectangle = clipped;
-        sb.Begin(view: Matrix.CreateScale(uiScale), rasterizerState: ScissorRasterizer);
+        UIBatch.Begin(sb, uiScale);
         if (_caret != _selectionAnchor)
         {
             var selStart = Math.Min(_caret, _selectionAnchor);
@@ -396,6 +396,6 @@ public sealed partial class TextEdit
 
         sb.End();
         device.ScissorRectangle = previousScissor;
-        sb.Begin(view: Matrix.CreateScale(uiScale), rasterizerState: ScissorRasterizer);
+        UIBatch.Begin(sb, uiScale);
     }
 }

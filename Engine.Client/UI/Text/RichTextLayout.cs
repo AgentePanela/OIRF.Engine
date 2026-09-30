@@ -1,8 +1,11 @@
 using System.Collections.Generic;
 using Apos.Shapes;
+using Engine.Client.Assets;
 using Engine.Client.Graphics.Fonts;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using MonoGame.Extended;
 using SpriteFontBase = FontStashSharp.SpriteFontBase;
 using ApiTextStyle = FontStashSharp.TextStyle;
 using HAlign = Engine.Client.UI.HorizontalAlignment;
@@ -13,10 +16,11 @@ public readonly record struct RichTextFont(string? Family, float Size, FontVaria
 
 public sealed class RichTextLayout
 {
+    internal readonly record struct RunIcon(Texture2D Texture, Rectangle Source, Vector2 Size);
     internal readonly record struct Run(SpriteFontBase Font, SpriteFontBase DisplayFont, string Text, Color Color, ApiTextStyle Style, float Width,
-        Color? OutlineColor, float OutlineSize);
+        Color? OutlineColor, float OutlineSize, RunIcon? Icon = null);
     internal readonly record struct Line(List<Run> Runs, float Width, float Height, float OffsetY);
-    private readonly record struct Piece(string Text, FormattedStyle Style, float Width);
+    private readonly record struct Piece(string Text, FormattedStyle Style, float Width, RunIcon? Icon = null);
 
     internal List<Line> Lines { get; }
 
@@ -55,6 +59,15 @@ public sealed class RichTextLayout
 
             foreach (var run in line.Runs)
             {
+                if (run.Icon is { } icon)
+                {
+                    var iconPos = SnapToPixel(new Vector2(x, lineTop + (line.Height - icon.Size.Y) / 2f), uiScale);
+                    sb.Draw(icon.Texture, new RectangleF(iconPos.X, iconPos.Y, icon.Size.X, icon.Size.Y),
+                        new RectangleF(icon.Source.X, icon.Source.Y, icon.Source.Width, icon.Source.Height), Color.White * alpha);
+                    x += run.Width;
+                    continue;
+                }
+
                 var y = lineTop + (line.Height - LineHeight(run.Font));
                 var position = SnapToPixel(new Vector2(x, y), uiScale);
                 if (run.OutlineColor is { } outlineColor && run.OutlineSize > 0f)
@@ -101,6 +114,7 @@ public sealed class RichTextLayout
     public static RichTextLayout Build(FormattedMessage message, RichTextFont baseFont, float maxWidth, bool wrap, float uiScale)
     {
         var fonts = IoCManager.Resolve<IFontManager>();
+        var assets = IoCManager.Resolve<IAssetManager>();
         var displayScale = MathHelper.Max(uiScale, 0.05f);
         var fontCache = new Dictionary<FormattedStyle, (SpriteFontBase Font, float LineHeight)>();
         var displayFontCache = new Dictionary<FormattedStyle, SpriteFontBase>();
@@ -134,10 +148,19 @@ public sealed class RichTextLayout
             var start = 0;
             for (var i = 1; i <= linePieces.Count; i++)
             {
-                if (i < linePieces.Count && linePieces[i].Style.Equals(linePieces[start].Style))
+                if (i < linePieces.Count && linePieces[i].Icon is null && linePieces[start].Icon is null
+                    && linePieces[i].Style.Equals(linePieces[start].Style))
                     continue;
 
                 var style = linePieces[start].Style;
+                if (linePieces[start].Icon is { } icon)
+                {
+                    runs.Add(new Run(Font(style), DisplayFont(style), "", Color.White, ApiTextStyle.None, linePieces[start].Width,
+                        null, 0f, icon));
+                    start = i;
+                    continue;
+                }
+
                 var width = 0f;
                 var parts = new string[i - start];
                 for (var j = start; j < i; j++)
@@ -192,7 +215,7 @@ public sealed class RichTextLayout
 
             if (token.IsWhitespace)
             {
-                var (spaceText, spaceStyle) = token.WordPieces[0];
+                var (spaceText, spaceStyle, _) = token.WordPieces[0];
                 var (font, height) = FontInfo(spaceStyle);
                 lineHeight = MathHelper.Max(lineHeight, height);
                 pendingSpace = new Piece(spaceText, spaceStyle, font.MeasureString(spaceText).X);
@@ -200,9 +223,26 @@ public sealed class RichTextLayout
             }
             var resolved = new List<Piece>(token.WordPieces.Count);
             var wordWidth = 0f;
-            foreach (var (text, style) in token.WordPieces)
+            foreach (var (text, style, inlineIcon) in token.WordPieces)
             {
                 var (font, height) = FontInfo(style);
+
+                if (inlineIcon is { } wanted)
+                {
+                    if (!assets.GetTexture(wanted.Key, out var sprite, out var page) || sprite.Region.Height <= 0)
+                    {
+                        Log.Warn($"Rich text icon '{wanted.Key}' is unknown.");
+                        continue;
+                    }
+
+                    var iconHeight = wanted.Height ?? height;
+                    var iconSize = new Vector2(iconHeight * sprite.Region.Width / sprite.Region.Height, iconHeight);
+                    lineHeight = MathHelper.Max(lineHeight, iconHeight);
+                    resolved.Add(new Piece("", style, iconSize.X, new RunIcon(page.Texture, sprite.Region, iconSize)));
+                    wordWidth += iconSize.X;
+                    continue;
+                }
+
                 lineHeight = MathHelper.Max(lineHeight, height);
                 var width = font.MeasureString(text).X;
                 resolved.Add(new Piece(text, style, width));
@@ -228,6 +268,15 @@ public sealed class RichTextLayout
             {
                 foreach (var piece in resolved)
                 {
+                    if (piece.Icon is not null)
+                    {
+                        if (lineWidth + piece.Width > maxWidth && pieces.Count > 0)
+                            EndLine();
+
+                        AddPiece(piece);
+                        continue;
+                    }
+
                     var font = Font(piece.Style);
                     foreach (var ch in piece.Text)
                     {
@@ -252,16 +301,28 @@ public sealed class RichTextLayout
         return new RichTextLayout(lines, new Vector2(totalWidth, totalHeight));
     }
 
-    private readonly record struct Token(bool IsNewline, bool IsWhitespace, List<(string Text, FormattedStyle Style)> WordPieces);
+    private readonly record struct Token(bool IsNewline, bool IsWhitespace, List<(string Text, FormattedStyle Style, InlineIcon? Icon)> WordPieces);
 
     private static IEnumerable<Token> Tokenize(FormattedMessage message)
     {
-        var wordPieces = new List<(string Text, FormattedStyle Style)>();
+        var wordPieces = new List<(string Text, FormattedStyle Style, InlineIcon? Icon)>();
         foreach (var segment in message.Segments)
         {
             var text = segment.Text;
             var style = segment.Style;
             var i = 0;
+
+            if (segment.Icon is { } icon)
+            {
+                if (wordPieces.Count > 0)
+                {
+                    yield return new Token(false, false, wordPieces);
+                    wordPieces = new List<(string, FormattedStyle, InlineIcon?)>();
+                }
+
+                yield return new Token(false, false, new List<(string, FormattedStyle, InlineIcon?)> { ("", style, icon) });
+                continue;
+            }
 
             while (i < text.Length)
             {
@@ -272,10 +333,10 @@ public sealed class RichTextLayout
                     if (wordPieces.Count > 0)
                     {
                         yield return new Token(false, false, wordPieces);
-                        wordPieces = new List<(string, FormattedStyle)>();
+                        wordPieces = new List<(string, FormattedStyle, InlineIcon?)>();
                     }
 
-                    yield return new Token(true, false, new List<(string, FormattedStyle)>());
+                    yield return new Token(true, false, new List<(string, FormattedStyle, InlineIcon?)>());
                     i++;
                     continue;
                 }
@@ -285,14 +346,14 @@ public sealed class RichTextLayout
                     if (wordPieces.Count > 0)
                     {
                         yield return new Token(false, false, wordPieces);
-                        wordPieces = new List<(string, FormattedStyle)>();
+                        wordPieces = new List<(string, FormattedStyle, InlineIcon?)>();
                     }
 
                     var start = i;
                     while (i < text.Length && text[i] != '\n' && char.IsWhiteSpace(text[i]))
                         i++;
 
-                    yield return new Token(false, true, new List<(string, FormattedStyle)> { (text[start..i], style) });
+                    yield return new Token(false, true, new List<(string, FormattedStyle, InlineIcon?)> { (text[start..i], style, null) });
                     continue;
                 }
 
@@ -300,7 +361,7 @@ public sealed class RichTextLayout
                 while (i < text.Length && !char.IsWhiteSpace(text[i]))
                     i++;
 
-                wordPieces.Add((text[wordStart..i], style));
+                wordPieces.Add((text[wordStart..i], style, null));
             }
         }
 

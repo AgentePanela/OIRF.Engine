@@ -21,9 +21,14 @@ public readonly record struct FormattedStyle(
     float OutlineSize = 0f);
 
 /// <summary>
+/// An sprite2D placed in the middle of the text, like a word.
+/// </summary>
+public readonly record struct InlineIcon(string Key, float? Height = null);
+
+/// <summary>
 /// A run of text sharing one <see cref="FormattedStyle"/>.
 /// </summary>
-public readonly record struct FormattedSegment(string Text, FormattedStyle Style);
+public readonly record struct FormattedSegment(string Text, FormattedStyle Style, InlineIcon? Icon = null);
 
 /// <summary>
 /// A rich text string parsed into styled segments
@@ -44,6 +49,7 @@ public sealed class FormattedMessage
         MarkupTagRegistry.Register(new FontTag());
         MarkupTagRegistry.Register(new SizeTag());
         MarkupTagRegistry.Register(new OutlineTag());
+        MarkupTagRegistry.Register(new IconTag());
     }
 
     /// <summary>
@@ -108,6 +114,18 @@ public sealed class FormattedMessage
             if (!MarkupTagRegistry.TryGet(tagName, out var handler))
             {
                 text.Append(source, i, close - i + 1);
+                i = close + 1;
+                continue;
+            }
+
+            if (handler is IInlineMarkupTag inline)
+            {
+                if (!isClosing && inline.Insert(currentStyle, tagValue) is { } inserted)
+                {
+                    Flush();
+                    segments.Add(inserted);
+                }
+
                 i = close + 1;
                 continue;
             }
@@ -212,6 +230,27 @@ public sealed class FormattedMessage
             }
 
             return current with { OutlineColor = color, OutlineSize = size };
+        }
+    }
+
+    /// <summary>
+    /// [icon=key] or [icon=key,height] - An sprite2d in text.
+    /// </summary>
+    private sealed class IconTag : IInlineMarkupTag
+    {
+        public string Name => "icon";
+        public FormattedSegment? Insert(FormattedStyle current, string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            var comma = value.IndexOf(',');
+            var key = (comma >= 0 ? value[..comma] : value).Trim();
+            float? height = comma >= 0 && float.TryParse(value[(comma + 1)..], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : null;
+
+            return new FormattedSegment("", current, new InlineIcon(key, height));
         }
     }
 

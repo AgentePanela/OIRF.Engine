@@ -190,7 +190,6 @@ public partial class OutputPanel : PanelContainer
         return found;
     }
 
-    private static readonly RasterizerState ScissorRasterizer = new() { ScissorTestEnable = true };
 
     protected override void DrawSelf(ShapeBatch sb, IFontManager fontManager, float dt)
     {
@@ -215,7 +214,7 @@ public partial class OutputPanel : PanelContainer
 
         sb.End();
         device.ScissorRectangle = clipped;
-        sb.Begin(view: Matrix.CreateScale(uiScale), rasterizerState: ScissorRasterizer);
+        UIBatch.Begin(sb, uiScale);
 
         var scroll = _scrollBar.Visible ? _scrollBar.Value : 0f;
         var originY = _contentRect.Y - scroll;
@@ -233,6 +232,6 @@ public partial class OutputPanel : PanelContainer
 
         sb.End();
         device.ScissorRectangle = previousScissor;
-        sb.Begin(view: Matrix.CreateScale(uiScale), rasterizerState: ScissorRasterizer);
+        UIBatch.Begin(sb, uiScale);
     }
 }

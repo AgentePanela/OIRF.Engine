@@ -11,7 +11,6 @@ public abstract partial class BaseTextInput : PanelContainer
 {
     protected const float CaretBlinkInterval = 0.5f;
 
-    protected static readonly RasterizerState ScissorRasterizer = new() { ScissorTestEnable = true };
 
     private string _text = "";
 
