@@ -35,7 +35,7 @@ public sealed class ConsoleOverlay : Overlay
     [Dependency] private readonly IConfigurationManager _cfg = default!;
 
     private const string HistoryFile = "consoleHistory.txt";
-    private const int MaxHistoryEntries = 200;
+    private const int MaxHistoryEntries = 150;
 
     private readonly BoxContainer _lines;
     private readonly ScrollContainer _scroll;
@@ -44,6 +44,7 @@ public sealed class ConsoleOverlay : Overlay
     private static readonly List<string> _history = new(); // must be static to keep per instances
     private static bool _historyLoaded;
     private int _historyIndex;
+    private string? _historyTemp;
 
     private readonly List<CompletionOption> _allMatches = new();
     private readonly List<SuggestionRow> _suggestionRows = new();
@@ -178,8 +179,10 @@ public sealed class ConsoleOverlay : Overlay
         if (line.Length == 0)
             return;
 
-        _history.Add(line);
+        if (_history.Count == 0 || _history[^1] != line)
+            _history.Add(line);
         ResetHistoryCursor();
+        _historyTemp = null;
 
         Log.Blank($"> {line}\n", ConsoleColor.Cyan);
         _consoleHost.LocalShell.ExecuteCommand(line);
@@ -187,11 +190,20 @@ public sealed class ConsoleOverlay : Overlay
 
     private void NavigateHistory(int direction)
     {
-        if (_history.Count == 0)
+        var newIndex = _historyIndex + direction;
+        if (newIndex < 0 || newIndex > _history.Count)
             return;
 
-        _historyIndex = Math.Clamp(_historyIndex + direction, 0, _history.Count);
-        _inputLine.Text = _historyIndex < _history.Count ? _history[_historyIndex] : "";
+        // Keep what was being typed so scrolling back down past the newest entry restores it
+        if (_historyIndex == _history.Count)
+            _historyTemp = _inputLine.Text;
+
+        _historyIndex = newIndex;
+        var text = _historyIndex < _history.Count ? _history[_historyIndex] : _historyTemp ?? "";
+
+        HideSuggestions();
+        _inputLine.SetText(text, invokeEvent: false);
+        _inputLine.MoveCaretToEnd();
     }
 
     private void ResetHistoryCursor() => _historyIndex = _history.Count;

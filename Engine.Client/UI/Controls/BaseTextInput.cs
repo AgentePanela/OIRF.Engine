@@ -20,18 +20,21 @@ public abstract partial class BaseTextInput : PanelContainer
     public string Text
     {
         get => _text;
-        set
-        {
-            value ??= "";
-            if (_text == value)
-                return;
+        set => SetText(value);
+    }
 
-            _text = value;
-            _caret = Math.Clamp(_caret, 0, _text.Length);
-            _selectionAnchor = Math.Clamp(_selectionAnchor, 0, _text.Length);
-            InvalidateLayout(); // TextEdit's ArrangeCore re-measures scrollbar range off the new text
+    public void SetText(string? value, bool invokeEvent = true)
+    {
+        value ??= "";
+        if (_text == value)
+            return;
+
+        _text = value;
+        _caret = Math.Clamp(_caret, 0, _text.Length);
+        _selectionAnchor = Math.Clamp(_selectionAnchor, 0, _text.Length);
+        InvalidateLayout(); // TextEdit's ArrangeCore re-measures scrollbar range off the new text
+        if (invokeEvent)
             OnTextChanged?.Invoke(_text);
-        }
     }
 
     /// <summary>
