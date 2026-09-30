@@ -34,6 +34,9 @@ public sealed partial class RichLabel : Control
 
     private FormattedMessage _message = FormattedMessage.Parse("");
 
+    /// <summary>
+    /// 0.1-1f geral opacity
+    /// </summary>
     public float Opacity { get; set; } = 1f;
 
     /// <inheritdoc cref="Label.Color"/>
