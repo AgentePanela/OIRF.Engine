@@ -128,6 +128,10 @@ public static partial class DataFieldConverter
             };
         }
 
+        // ── SoundSpecifier ────────────────────────────────────────────────
+        if (targetType == typeof(Audio.SoundSpecifier))
+            return Audio.SoundSpecifier.FromYaml(rawValue);
+
         // ── ProtoId<T> ────────────────────────────────────────────────────
         if (targetType.IsGenericType && targetType.GetGenericTypeDefinition() == typeof(ProtoId<>))
             return Activator.CreateInstance(targetType, str);

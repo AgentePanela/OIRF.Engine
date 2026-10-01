@@ -66,11 +66,37 @@ public abstract class SharedAudioSystem : EntitySystem
     }
 
     /// <summary>
-    /// Spawns a throwaway entity that plays the audio once and deletes itself when done
+    /// Plays a sound once, the same for everyone that gets it wherever they are;
     /// </summary>
-    public EntityUid PlaySound(string key, Vector2? position = null, float volume = 1f, float pitch = 0f,
-        bool spatial = false, float maxDistance = 1000f, IEnumerable<ProtoId<AudioTagPrototype>>? tags = null,
-        IEntityScene? scene = null)
+    public EntityUid PlaySound(string key, float volume = 1f, float pitch = 0f,
+        IEnumerable<ProtoId<AudioTagPrototype>>? tags = null, IEntityScene? scene = null)
+        => SpawnSound(key, null, volume, pitch, spatial: false, maxDistance: 0f, tags, scene);
+
+    /// <inheritdoc cref="PlaySound(string, float, float, IEnumerable{ProtoId{AudioTagPrototype}}?, IEntityScene?)"/>
+    /// <returns>Null when <paramref name="sound"/> resolves to nothing.</returns>
+    public EntityUid? PlaySound(SoundSpecifier? sound, float volume = 1f, float pitch = 0f,
+        IEnumerable<ProtoId<AudioTagPrototype>>? tags = null, IEntityScene? scene = null)
+        => sound is not null && ResolveSound(sound) is { } key
+            ? PlaySound(key, volume * sound.Volume, pitch + sound.Pitch, tags, scene)
+            : null;
+
+    /// <summary>
+    /// Plays a sound once at <paramref name="position"/.
+    /// </summary>
+    public EntityUid PlayAtPosition(string key, Vector2 position, float volume = 1f, float pitch = 0f,
+        float maxDistance = 1000f, IEnumerable<ProtoId<AudioTagPrototype>>? tags = null, IEntityScene? scene = null)
+        => SpawnSound(key, position, volume, pitch, spatial: true, maxDistance, tags, scene);
+
+    /// <inheritdoc cref="PlayAtPosition(string, Vector2, float, float, float, IEnumerable{ProtoId{AudioTagPrototype}}?, IEntityScene?)"/>
+    /// <returns>Null when <paramref name="sound"/> resolves to nothing.</returns>
+    public EntityUid? PlayAtPosition(SoundSpecifier? sound, Vector2 position, float volume = 1f, float pitch = 0f,
+        float maxDistance = 1000f, IEnumerable<ProtoId<AudioTagPrototype>>? tags = null, IEntityScene? scene = null)
+        => sound is not null && ResolveSound(sound) is { } key
+            ? PlayAtPosition(key, position, volume * sound.Volume, pitch + sound.Pitch, maxDistance, tags, scene)
+            : null;
+
+    private EntityUid SpawnSound(string key, Vector2? position, float volume, float pitch, bool spatial,
+        float maxDistance, IEnumerable<ProtoId<AudioTagPrototype>>? tags, IEntityScene? scene)
     {
         var uid = CreateEmptyEntity("Sound", scene);
 
@@ -90,7 +116,33 @@ public abstract class SharedAudioSystem : EntitySystem
             audio.Tags = new(tags);
 
         _transientSounds.Add(uid);
+
+        OnSoundSpawned(uid, spatial, maxDistance, scene);
+
         return uid;
+    }
+
+    protected virtual void OnSoundSpawned(EntityUid uid, bool spatial, float maxDistance, IEntityScene? scene) { }
+
+    public string? ResolveSound(SoundSpecifier sound)
+    {
+        switch (sound)
+        {
+            case SoundPathSpecifier path:
+                return path.Path.Length == 0 ? null : path.Path;
+
+            case SoundCollectionSpecifier collection:
+                if (!_proto.TryIndex(collection.Collection, out var proto) || proto.Files.Count == 0)
+                {
+                    Log.Warn($"Sound collection '{collection.Collection}' doesn't exist or has no files.");
+                    return null;
+                }
+
+                return proto.Files[Random.Shared.Next(proto.Files.Count)];
+
+            default:
+                return null;
+        }
     }
 
     private void OnAudioAdded(EntityUid uid, AudioComponent comp, CompAddedEvent ev)
