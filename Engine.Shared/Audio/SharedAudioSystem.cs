@@ -69,9 +69,10 @@ public abstract class SharedAudioSystem : EntitySystem
     /// Spawns a throwaway entity that plays the audio once and deletes itself when done
     /// </summary>
     public EntityUid PlaySound(string key, Vector2? position = null, float volume = 1f, float pitch = 0f,
-        bool spatial = false, float maxDistance = 1000f, IEnumerable<ProtoId<AudioTagPrototype>>? tags = null)
+        bool spatial = false, float maxDistance = 1000f, IEnumerable<ProtoId<AudioTagPrototype>>? tags = null,
+        IEntityScene? scene = null)
     {
-        var uid = CreateEmptyEntity("Sound");
+        var uid = CreateEmptyEntity("Sound", scene);
 
         var transform = AddComp<TransformComponent>(uid);
         if (position is not null)
@@ -139,12 +140,6 @@ public abstract class SharedAudioSystem : EntitySystem
         DeleteTransient(uid);
     }
 
-    /// <summary>
-    /// Call from a subclass when it independently detects a clip has genuinely finished (e.g.
-    /// the real playback backend reports done) before the shared elapsed-time estimate catches
-    /// up - raises AudioFinishedEvent and cleans up a transient PlaySound entity, same as a
-    /// natural finish detected by Update() itself.
-    /// </summary>
     protected void NotifyFinished(EntityUid uid)
     {
         StopInternal(uid, raise: true);

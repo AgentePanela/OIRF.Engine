@@ -136,7 +136,7 @@ internal sealed partial class AudioManager : IAudioManager
         if (audio is null)
             return false;
 
-        audio.PlayingSound.Volume = volume * GetBusMultiplier(tagList);
+        audio.PlayingSound.Volume = ClampVolume(volume * GetBusMultiplier(tagList));
         audio.PlayingSound.Pitch = pitch;
         audio.IsLooping = loop;
         audio.Play();
@@ -149,8 +149,6 @@ internal sealed partial class AudioManager : IAudioManager
     /// </summary>
     public void Stop(StreamPackage package)
     {
-        package.Stop();
-
         for (int i = RunningStreams.Count - 1; i >= 0; i--)
         {
             if (!ReferenceEquals(RunningStreams[i].package, package))
@@ -158,9 +156,10 @@ internal sealed partial class AudioManager : IAudioManager
 
             var entry = RunningStreams[i];
             RunningStreams.RemoveAt(i);
+
             entry.package.Dispose();
             entry.stream.Dispose();
-            break;
+            return;
         }
     }
 
@@ -179,7 +178,7 @@ internal sealed partial class AudioManager : IAudioManager
             break;
         }
 
-        package.PlayingSound.Volume = volume * multiplier;
+        package.PlayingSound.Volume = ClampVolume(volume * multiplier);
     }
 
     public void SetPan(StreamPackage package, float pan)
@@ -267,6 +266,9 @@ internal sealed partial class AudioManager : IAudioManager
         }
     }
 
+    private static float ClampVolume(float volume) 
+        => Math.Clamp(volume, 0f, 1f);
+
     private float GetBusMultiplier(List<ProtoId<AudioTagPrototype>> tags)
     {
         var multiplier = _cfg.Get(AudioCvars.MasterVolume);
@@ -280,7 +282,7 @@ internal sealed partial class AudioManager : IAudioManager
     private void RecomputeVolumes()
     {
         foreach (var entry in RunningStreams)
-            entry.package.PlayingSound.Volume = entry.baseVolume * GetBusMultiplier(entry.tags);
+            entry.package.PlayingSound.Volume = ClampVolume(entry.baseVolume * GetBusMultiplier(entry.tags));
     }
 
     private StreamPackage? GetPackage(string relative, List<ProtoId<AudioTagPrototype>> tags, float baseVolume)

@@ -164,7 +164,7 @@ public sealed class AudioSystem : SharedAudioSystem
 
         _audio.SetVolume(package, comp.Volume * attenuation);
         var direction = distance > 0.0001f ? toListener / distance : Vector2.Zero;
-        _emitter.Position = new Vector3(direction.X, listenerPos.Z, direction.Y);
+        _emitter.Position = new Vector3(direction.X, 0f, direction.Y);
         
         _audio.Apply3D(package, _listener, _emitter);
     }
