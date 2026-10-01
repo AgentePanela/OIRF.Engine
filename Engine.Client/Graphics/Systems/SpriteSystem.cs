@@ -32,6 +32,7 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         public readonly Dictionary<string, SpriteTarget> Layers = new();
 
         public bool HideBaseSprite;
+        public float DrawRotation;
     }
 
     /// <summary>
@@ -82,6 +83,7 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
                 continue;
 
             UpdateSpriteFields(comp, transform, ref spr);
+            spr.Rotation += data.DrawRotation;
             SubmitWithLayers(comp, data, transform, spr);
         }
     }
@@ -143,10 +145,11 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 
         var spr = sprite.Value;
         UpdateLayerFields(layer, trans, comp, ref spr);
+        spr.Rotation += data.DrawRotation;
 
         var pos = trans.Position;
         if (layer.Offset != Vector2.Zero)
-            pos += Vector2.Transform(layer.Offset, Matrix.CreateRotationZ(trans.Angle));
+            pos += Vector2.Transform(layer.Offset, Matrix.CreateRotationZ(trans.Angle + data.DrawRotation));
 
         _renderMan.Submit(spr, pos, ResolveShader(target, layer.Shader).Effect);
     }
@@ -313,6 +316,12 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     /// </summary>
     public void SetBaseHidden(EntityUid uid, bool hidden)
         => GetData(uid).HideBaseSprite = hidden;
+
+    /// <summary>
+    /// Rotates the sprite and its layers by <paramref name="radians"/> - nothing replicates and the transform is left alone. Set it back to 0 to stop.
+    /// </summary>
+    public void SetDrawRotation(EntityUid uid, float radians)
+        => GetData(uid).DrawRotation = radians;
 
     private SpriteRenderData GetData(EntityUid uid)
     {
