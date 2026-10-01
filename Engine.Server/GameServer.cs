@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Engine.Server.CVars;
 using Engine.Server.Rooms;
@@ -74,6 +75,16 @@ public class GameServer : IDisposable
     public IRoomManager RoomManager { get; private set; } = default!;
 
     private readonly Stopwatch _tickWatch = new();
+
+    // how far behind its schedule the loop may get before it gives up on catching up (e.g breakpoint)
+    private const double MaxCatchUpSeconds = 0.25;
+
+    // Thread.Sleep on Windows rounds up to the system timer, ~15.6 ms
+    [DllImport("winmm.dll")]
+    private static extern uint timeBeginPeriod(uint milliseconds);
+
+    [DllImport("winmm.dll")]
+    private static extern uint timeEndPeriod(uint milliseconds);
     private bool _running;
     private CancellationTokenSource? _cts;
 
@@ -173,8 +184,8 @@ public class GameServer : IDisposable
             _cts.Cancel();
         };
 
-        var tickInterval = TimeSpan.FromSeconds(1.0 / Timing.TickRate);
-        long lastTickMs = 0;
+        double lastTick = 0;
+        double nextTick = 0;
 
         var endpoint = Networking.Server?.Socket?.RemoteEndPoint ?? Networking.Server?.Socket?.LocalEndPoint;
 
@@ -183,25 +194,34 @@ public class GameServer : IDisposable
 
         _tickWatch.Start();
 
+        if (OperatingSystem.IsWindows())
+            timeBeginPeriod(1);
+
         try
         {
             while (_running && !_cts.IsCancellationRequested)
             {
-                var now = _tickWatch.ElapsedMilliseconds;
-                var deltaTime = (now - lastTickMs) / 1000f;
-                lastTickMs = now;
+                var now = _tickWatch.Elapsed.TotalSeconds;
+                var deltaTime = (float)(now - lastTick);
+                lastTick = now;
 
                 Update(deltaTime);
+                nextTick += 1.0 / Timing.TickRate;
 
-                // Sleep to maintain tick rate
-                var elapsed = _tickWatch.ElapsedMilliseconds - now;
-                var sleepMs = (int)(tickInterval.TotalMilliseconds - elapsed);
+                now = _tickWatch.Elapsed.TotalSeconds;
+                if (now - nextTick > MaxCatchUpSeconds)
+                    nextTick = now;
+
+                var sleepMs = (int)((nextTick - now) * 1000.0);
                 if (sleepMs > 0)
                     Thread.Sleep(sleepMs);
             }
         }
         finally
         {
+            if (OperatingSystem.IsWindows())
+                timeEndPeriod(1); // windows slop
+
             OnShutdown();
         }
     }

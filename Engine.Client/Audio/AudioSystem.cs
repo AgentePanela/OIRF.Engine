@@ -169,9 +169,9 @@ public sealed class AudioSystem : SharedAudioSystem
         _audio.Apply3D(package, _listener, _emitter);
     }
 
-    protected override bool OnPlay(EntityUid uid, AudioComponent comp)
+    protected override bool OnPlay(EntityUid uid, AudioComponent comp, float offset)
     {
-        if (!_audio.TryPlay(comp.Key, out var package, comp.Volume, comp.Loop, comp.Pitch, comp.Tags))
+        if (!_audio.TryPlay(comp.Key, out var package, comp.Volume, comp.Loop, comp.Pitch, comp.Tags, offset))
             return false;
 
         _playing[uid] = package;

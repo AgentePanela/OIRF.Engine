@@ -24,7 +24,7 @@ public interface IAudioManager
 
     public StreamPackage? Play(string file, float volume = 1f, bool loop = false, float pitch = 0f, IEnumerable<ProtoId<AudioTagPrototype>>? tags = null);
 
-    public bool TryPlay(string file, [NotNullWhen(true)] out StreamPackage? audio, float volume = 1f, bool loop = false, float pitch = 0f, IEnumerable<ProtoId<AudioTagPrototype>>? tags = null);
+    public bool TryPlay(string file, [NotNullWhen(true)] out StreamPackage? audio, float volume = 1f, bool loop = false, float pitch = 0f, IEnumerable<ProtoId<AudioTagPrototype>>? tags = null, float startAt = 0f);
 
     public bool HasAudio(string audio);
 
@@ -124,7 +124,7 @@ internal sealed partial class AudioManager : IAudioManager
         return audio;
     }
 
-    public bool TryPlay(string file, [NotNullWhen(true)] out StreamPackage? audio, float volume = 1f, bool loop = false, float pitch = 0f, IEnumerable<ProtoId<AudioTagPrototype>>? tags = null)
+    public bool TryPlay(string file, [NotNullWhen(true)] out StreamPackage? audio, float volume = 1f, bool loop = false, float pitch = 0f, IEnumerable<ProtoId<AudioTagPrototype>>? tags = null, float startAt = 0f)
     {
         audio = default;
         if (!HasAudio(file))
@@ -139,6 +139,10 @@ internal sealed partial class AudioManager : IAudioManager
         audio.PlayingSound.Volume = ClampVolume(volume * GetBusMultiplier(tagList));
         audio.PlayingSound.Pitch = pitch;
         audio.IsLooping = loop;
+
+        if (startAt > 0f && startAt < audio.MaxDuration.TotalSeconds)
+            audio.SetStreamPosition(startAt);
+
         audio.Play();
         return true;
     }

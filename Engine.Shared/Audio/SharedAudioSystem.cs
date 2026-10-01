@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Engine.Shared.GameObjects;
 using Engine.Shared.Prototypes;
+using Engine.Shared.Timing;
 using Microsoft.Xna.Framework;
 
 namespace Engine.Shared.Audio;
@@ -13,6 +14,9 @@ public abstract class SharedAudioSystem : EntitySystem
 {
     [Dependency] protected readonly IPrototypeManager _proto = default!;
     [Dependency] protected readonly SharedAudioManifest _registry = default!;
+    [Dependency] protected readonly IGameTiming Timing = default!;
+
+    private const float MinStartOffset = 0.25f;
 
     private readonly List<EntityUid> _scratchFinished = new();
 
@@ -155,7 +159,10 @@ public abstract class SharedAudioSystem : EntitySystem
         if (!comp.AutoPlay)
             return;
 
-        if (!Play(uid, comp))
+        // already stamped means it came in a state, and the sound has been going for a while on the server
+        var startTick = comp.StartTick != 0 ? comp.StartTick : Timing.CurTick.Value;
+
+        if (!Start(uid, comp, startTick))
             DeleteTransient(uid); // never started - nothing will raise AudioFinishedEvent to clean this up later
     }
 
@@ -175,14 +182,58 @@ public abstract class SharedAudioSystem : EntitySystem
 
     /// <summary>Starts (or restarts) playback for this entity's AudioComponent.</summary>
     public bool Play(EntityUid uid, AudioComponent comp)
+        => Start(uid, comp, Timing.CurTick.Value);
+
+    private bool Start(EntityUid uid, AudioComponent comp, uint startTick)
     {
         StopInternal(uid, raise: false); // reset if already playing (restart) - doesn't touch transient bookkeeping
 
-        if (!OnPlay(uid, comp))
+        var ticks = Timing.CurTick.Value > startTick ? Timing.CurTick.Value - startTick : 0;
+        var offset = ticks * Timing.TickPeriod;
+
+        if (offset < MinStartOffset)
+        {
+            offset = 0f;
+        }
+        else if (_registry.TryGetMetadata(comp.Key, out var metadata) && metadata.Duration > TimeSpan.Zero)
+        {
+            var duration = (float)metadata.Duration.TotalSeconds;
+            if (comp.Loop)
+                offset %= duration;
+            else if (offset >= duration)
+                return false; // it already ended for everyone else
+        }
+
+        if (comp.StartTick != startTick)
+            comp.StartTick = startTick;
+
+        if (!OnPlay(uid, comp, offset))
             return false;
 
-        comp.Elapsed = 0f;
+        comp.Elapsed = offset;
         return true;
+    }
+
+    /// <summary>
+    /// Moves every playing sound's StartTick to where it would be if the whole sound had run at
+    /// <paramref name="tickRate"/>.
+    /// </summary>
+    protected void RestampStartTicks(float tickRate)
+    {
+        if (tickRate <= 0f)
+            return;
+
+        foreach (var (_, comp) in GetEntitiesWithComp<AudioComponent>())
+        {
+            if (comp.Elapsed is not { } elapsed)
+                continue;
+
+            var ticks = (uint)MathF.Round(elapsed * tickRate);
+            var startTick = Timing.CurTick.Value > ticks ? Timing.CurTick.Value - ticks : 0;
+
+            if (comp.StartTick != startTick)
+                comp.StartTick = startTick;
+        }
     }
 
     /// <summary>Stops playback for this entity, if any is currently tracked. Does not raise AudioFinishedEvent.</summary>
@@ -241,7 +292,7 @@ public abstract class SharedAudioSystem : EntitySystem
     }
 
     /// <summary>Override to layer real playback on top. Return false to abort - the entity won't be considered playing.</summary>
-    protected virtual bool OnPlay(EntityUid uid, AudioComponent comp) => true;
+    protected virtual bool OnPlay(EntityUid uid, AudioComponent comp, float offset) => true;
 
     /// <summary>Override to release any resource acquired in OnPlay.</summary>
     protected virtual void OnStop(EntityUid uid) { }

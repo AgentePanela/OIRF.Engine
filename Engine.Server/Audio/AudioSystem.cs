@@ -18,6 +18,7 @@ public sealed class AudioSystem : SharedAudioSystem
     {
         base.Init();
         _cfg.Subs(NetworkingCvars.NetPvsRange, value => _pvsRange = value);
+        _cfg.Subs(NetworkingCvars.Tickrate, value => RestampStartTicks(value), false);
     }
 
     protected override void OnSoundSpawned(EntityUid uid, bool spatial, float maxDistance, IEntityScene? scene)

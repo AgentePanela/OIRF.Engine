@@ -46,6 +46,8 @@ public sealed partial class AudioComponent : Component
     /// </summary>
     [NetField] public partial HashSet<ProtoId<AudioTagPrototype>> Tags { get; set; } = new();
 
+    [NetField] public partial uint StartTick { get; set; } = 0;
+
     /// <summary>
     /// Do not set or get this manually.
     /// </summary>
