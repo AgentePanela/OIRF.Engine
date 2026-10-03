@@ -419,7 +419,9 @@ public sealed class ViewVariablesResolver
                         return false;
                     }
 
-                    DataFieldConverter.SetMemberValue(desc.Member, parent, value);
+                    if (!TransformSystem.TryWriteParent(parent, desc.Member, value))
+                        DataFieldConverter.SetMemberValue(desc.Member, parent, value);
+
                     return true;
                 }
                 case IndexStep index:

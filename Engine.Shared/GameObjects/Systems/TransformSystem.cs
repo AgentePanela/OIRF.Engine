@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Engine.Shared.Configuration;
 using Engine.Shared.Configuration.CVars;
 using Engine.Shared.Containers;
@@ -201,6 +202,24 @@ public sealed class TransformSystem : EntitySystem
     /// </summary>
     public void Detach(EntityUid uid, TransformComponent? comp = null)
         => SetParent(uid, null, keepWorld: true, comp);
+
+    /// <summary>
+    /// For tools that write members by reflection (ViewVariables): if <paramref name="member"/> is
+    /// <see cref="TransformComponent.Parent"/>, sets it through <see cref="SetParent"/> so the entity stays where it is.
+    /// </summary>
+    /// <returns>False if it is some other member and the caller should write it itself.</returns>
+    public static bool TryWriteParent(object target, MemberInfo member, object? value)
+    {
+        if (target is not TransformComponent xform || member.Name != nameof(TransformComponent.Parent))
+            return false;
+
+        if (EntityManager.Instance?.GetSystem<TransformSystem>() is not { } system)
+            return false;
+
+        EntityUid? parent = value is EntityUid uid && !EntityUid.IsInvalid(uid) ? uid : null;
+        system.SetParent(xform.Owner, parent, keepWorld: true, xform);
+        return true;
+    }
 
     /// <summary>
     /// The entities parented to <paramref name="uid"/>.

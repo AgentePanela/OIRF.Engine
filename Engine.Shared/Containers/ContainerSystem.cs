@@ -301,5 +301,32 @@ public sealed partial class ContainerSystem : EntitySystem
             DeleteEntity(item);
     }
 
+    /// <summary>
+    /// Puts back an entity that was loaded with its <see cref="ContainedComponent"/> already on it (like a map), into the
+    /// container the component names.
+    /// </summary>
+    public bool RelinkLoaded(EntityUid item)
+    {
+        if (!TryComp<ContainedComponent>(item, out var contained) || _containedIn.ContainsKey(item))
+            return false;
+
+        if (TryGetContainer(contained.ContainerOwner, contained.ContainerId, out var container)
+            && container.HasRoom
+            && TryTransform(item, out var xform)
+            && xform.Parent == container.Owner)
+        {
+            xform.LocalPosition = Vector2.Zero;
+            xform.LocalAngle = 0f;
+            container.NextOrder = Math.Max(container.NextOrder, contained.Order + 1);
+            Link(item, container.Owner, container.Id);
+            return true;
+        }
+
+        Log.Warn($"{item} was loaded inside '{contained.ContainerId}' of {contained.ContainerOwner}, which cannot take it; it is back in the world.");
+        RemComp<ContainedComponent>(item);
+        _transform.Detach(item);
+        return false;
+    }
+
     #endregion
 }
