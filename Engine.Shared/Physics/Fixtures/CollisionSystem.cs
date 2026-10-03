@@ -1,6 +1,7 @@
 using Engine.Shared.Configuration;
 using System;
 using System.Collections.Generic;
+using Engine.Shared.Containers;
 using Engine.Shared.GameObjects;
 using Engine.Shared.Physics;
 using Microsoft.Xna.Framework;
@@ -68,7 +69,7 @@ public sealed class CollisionSystem : EntitySystem
 
         foreach (var (uid, col) in GetEntitiesWithComp<CollisionComponent>())
         {
-            if (!col.Active) continue;
+            if (!col.Active || HasComp<ContainedComponent>(uid)) continue;
             if (!TryComp<TransformComponent>(uid, out var transform)) continue;
             _entityBuffer.Add((uid, GetScene(uid), transform, col));
         }
@@ -300,7 +301,8 @@ public sealed class CollisionSystem : EntitySystem
 
         foreach (var (entUid, transform) in GetEntitiesWithComp<TransformComponent>())
         {
-            if (!TryComp<CollisionComponent>(entUid, out var collision) || !collision.Active)
+            if (!TryComp<CollisionComponent>(entUid, out var collision) || !collision.Active
+                || HasComp<ContainedComponent>(entUid))
                 continue;
 
             if (!EntityManager.ScenesInteract(scene, GetScene(entUid)))
@@ -637,6 +639,9 @@ public sealed class CollisionSystem : EntitySystem
         mtv = Vector2.Zero;
 
         if (!SharesScene(uidA, uidB))
+            return false;
+
+        if (HasComp<ContainedComponent>(uidA) || HasComp<ContainedComponent>(uidB))
             return false;
 
         if (!TryComp<TransformComponent>(uidA, out var tA) ||

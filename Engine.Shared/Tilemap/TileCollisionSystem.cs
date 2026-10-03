@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Engine.Shared.Containers;
 using Engine.Shared.GameObjects;
 using Engine.Shared.Physics;
 using Engine.Shared.Physics.Fixtures;
@@ -26,7 +27,7 @@ public sealed class TileCollisionSystem : EntitySystem
         var entities = GetEntitiesWithComp<TransformComponent, PhysicsComponent, CollisionComponent>();
         foreach ((var uid, var transform, var physics, var collision) in entities)
         {
-            if (physics.Static || !collision.Active)
+            if (physics.Static || !collision.Active || HasComp<ContainedComponent>(uid))
                 continue;
 
             foreach ((_, var tileComp, var tileTrans) in tilemaps)

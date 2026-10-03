@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Engine.Client.Assets;
 using Engine.Client.Graphics.Shaders;
+using Engine.Shared.Containers;
 using Engine.Shared.GameObjects;
 using Engine.Shared.Graphics;
 using Microsoft.Xna.Framework;
@@ -70,7 +71,7 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         var query = GetEntitiesWithComp<SpriteComponent, TransformComponent>();
         foreach ((var uid, var comp, var transform) in query)
         {
-            if (!transform.Visible)
+            if (!transform.Visible || HasComp<ContainedComponent>(uid))
                 continue;
 
             var data = GetData(uid);

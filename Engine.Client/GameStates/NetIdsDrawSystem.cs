@@ -1,6 +1,7 @@
 using Engine.Client.Graphics;
 using Engine.Client.Graphics.Fonts;
 using Engine.Client.Graphics.Shaders;
+using Engine.Shared.Containers;
 using Engine.Shared.GameObjects;
 using Engine.Shared.GameStates;
 using Engine.Shared.IoC;
@@ -49,7 +50,7 @@ public sealed class NetIdsDrawSystem : EntityDrawSystem
 
         foreach (var (uid, transform) in GetEntitiesWithComp<TransformComponent>())
         {
-            if (_entManager.GetEntity(uid) is not { } ent || !ent.NetId.IsValid)
+            if (_entManager.GetEntity(uid) is not { } ent || !ent.NetId.IsValid || HasComp<ContainedComponent>(uid))
                 continue;
 
             if (!_camera.IsOnScreen(transform.Position))

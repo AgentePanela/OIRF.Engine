@@ -31,6 +31,7 @@ Everything you need to build a game on top of ORIF.
 | [Resources](Content/Resources.md) | Asset loading and the texture atlas |
 | [Localization](Content/Localization.md) | Multi-language support with Fluent |
 | [Tags](Content/Tags.md) | Entity tagging system |
+| [Containers](Content/Containers.md) | Entities holding other entities (hands, bags, slots) |
 | [Storage](Content/Storage.md) | Persistent user data (saves, config) |
 | [UI](Content/UI.md) | Control tree, layout, styling, windows |
 | [UI Controls](Content/UIControls.md) | Reference for every built-in UI control |

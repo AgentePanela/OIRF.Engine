@@ -150,6 +150,27 @@ public sealed partial class EntityManager
     }
 
     /// <summary>
+    /// Takes back a <see cref="RemComp{T}"/> that has not been removed yet (end of the frame), so the same instance stays.
+    /// </summary>
+    /// <returns>False if the component was not waiting to be removed.</returns>
+    internal bool CancelRemoval(Component comp)
+    {
+        if (!comp.Deleted || !CompsPendingRemove.Remove(comp))
+            return false;
+
+        // a deleting entity MUST remove it
+        if (GetEntity(comp.Owner)?.Deleting is not false)
+        {
+            CompsPendingRemove.Add(comp);
+            return false;
+        }
+
+        comp.Deleted = false;
+        comp.State = Component.CompState.Running;
+        return true;
+    }
+
+    /// <summary>
     /// Get all components that the selected entity has.
     /// </summary>
     public List<Component>? GetEntityComps(EntityUid uid)

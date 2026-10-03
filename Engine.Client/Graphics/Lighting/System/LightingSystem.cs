@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Engine.Client.Assets;
 using Engine.Client.Graphics.Shaders;
 using Engine.Shared.Configuration;
+using Engine.Shared.Containers;
 using Engine.Shared.GameObjects;
 using Engine.Shared.Lighting;
 using Engine.Shared.IoC;
@@ -61,6 +62,8 @@ public sealed partial class LightingSystem : EntityDrawSystem
         SubscribeEvent<OccluderComponent, CompAddedEvent>(OnOccluderAdded);
         SubscribeEvent<OccluderComponent, CompRemovedEvent>(OnOccluderRemoved);
         SubscribeEvent<OccluderComponent, MoveEvent>(OnOccluderMoved);
+        SubscribeEvent<OccluderComponent, EntGotInsertedIntoContainerEvent>(OnOccluderContainerChanged);
+        SubscribeEvent<OccluderComponent, EntGotRemovedFromContainerEvent>(OnOccluderContainerChanged);
 
         // a removed light's ShadowLightCache entry would otherwise linger
         // forever - harmless but wasteful for scenes with lots of short-lived

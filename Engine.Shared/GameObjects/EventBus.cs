@@ -12,6 +12,29 @@ public abstract class EntityEvent
 }
 
 /// <summary>
+/// An event a handler can veto. The raiser checks <see cref="Cancelled"/> after raising it.
+/// </summary>
+public abstract class CancellableEntityEvent : EntityEvent
+{
+    public bool Cancelled { get; private set; }
+
+    /// <param name="stopPropagation">Also keep the event from the next handlers. False lets them see the veto (to show
+    /// why, log it...).</param>
+    public void Cancel(bool stopPropagation)
+    {
+        Cancelled = true;
+
+        if (stopPropagation)
+            Handled = true;
+    }
+
+    /// <summary>
+    /// Takes back a veto made earlier with Cancel(false) (with propagation).
+    /// </summary>
+    public void Uncancel() => Cancelled = false;
+}
+
+/// <summary>
 /// Implements custom validation in a event.
 /// </summary>
 public interface IEntEventCustomValidation

@@ -382,6 +382,44 @@ RaiseEvent(uid, new PlayerDiedEvent { Score = 500 });
 void OnPlayerDied(EntityUid uid, HealthComponent hp, PlayerDiedEvent ev) { ... }
 ```
 
+### Cancellable Events
+
+For "may this happen?" checks, derive from `CancellableEntityEvent`. Any handler can veto with
+`Cancel(stopPropagation)`; the raiser reads `Cancelled` afterwards. `stopPropagation` is required and says whether the
+next handlers still get the event:
+
+- `Cancel(false)` - they do, and can see `Cancelled` (to show a popup with the reason, log it, ...). Like Robust's
+  `CancellableEntityEventArgs.Cancel()`.
+- `Cancel(true)` - they don't; the first veto ends it.
+
+A later handler can take back a `Cancel(false)` with `Uncancel()` (e.g. "it does not fit, but this item is compact").
+A `Cancel(true)` cannot be undone, since no later handler runs.
+
+```csharp
+public sealed class DoorOpenAttemptEvent : CancellableEntityEvent { }
+
+var ev = new DoorOpenAttemptEvent();
+RaiseEvent(door, ev);
+if (ev.Cancelled)
+    return;
+
+// a handler somewhere else
+void OnOpenAttempt(EntityUid uid, LockComponent lck, DoorOpenAttemptEvent ev)
+{
+    if (lck.Locked)
+        ev.Cancel(stopPropagation: false);
+}
+
+// and another one, after it, that reacts to the veto
+void OnOpenAttemptFeedback(EntityUid uid, DoorComponent door, DoorOpenAttemptEvent ev)
+{
+    if (ev.Cancelled)
+        ShowPopup(uid, "It's locked.");
+}
+```
+
+The container events ([Containers](Containers.md)) follow this pattern.
+
 ### Built-in Lifecycle Events
 
 | Event | When it fires |
@@ -416,4 +454,58 @@ transform.Position = new Vector2(100, 200);
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `Position` | `Vector2` | World-space position of the entity |
+| `Position` | `Vector2` | World-space position of the entity, parented or not |
+| `Angle` | `float` | World-space rotation, in radians |
+| `LocalPosition` | `Vector2` | Position relative to `Parent` (the world position when there is no parent) |
+| `LocalAngle` | `float` | Rotation added to the parent's world angle |
+| `Scale` | `Vector2?` | Scale, **not** inherited from the parent |
+| `Visible` | `bool` | Hides the sprite and the entity from visible-only queries |
+| `Parent` | `EntityUid?` | The entity this one is attached to |
+
+### Parenting
+
+An entity can be attached to another one. It then follows its parent: moving the parent moves it, and rotating the
+parent swings it around the parent (orbit) and rotates it too.
+
+Only `LocalPosition`/`LocalAngle` are stored and replicated; `Position`/`Angle` are computed from the parent chain.
+That keeps every existing `transform.Position` read and write meaning "where it is in the world":
+
+```csharp
+// put a child 10 units to the right of the parent, wherever the parent is
+_transform.SetParent(child, parent, keepWorld: false);
+Transform(child)!.LocalPosition = new Vector2(10, 0);
+
+// or keep it where it is and just attach it
+_transform.SetParent(child, parent);          // keepWorld defaults to true
+
+// writing the world position works on a child too - it is converted to local
+Transform(child)!.Position = new Vector2(500, 300);
+
+// detach, staying where it is
+_transform.Detach(child);
+```
+
+Notes:
+
+- Setting `transform.Parent` directly is **raw**: the local values stay, so the entity jumps to be relative to its new
+  parent. Use `TransformSystem.SetParent`/`Detach` to keep it in place.
+- A parent that would make a cycle (an entity under itself) is refused with an error.
+- Deleting a parent deletes its children. Removing a parent's `TransformComponent` detaches them in place.
+- Moving a parent to a scene its child cannot interact with detaches the child; otherwise children change scene with
+  the parent.
+- `MoveEvent` fires for a child in the same tick its parent moves.
+- In YAML both `position:` (world, which is the same as local for an entity spawned from a prototype, since it has no
+  parent) and `localPosition:` are accepted.
+
+### `[Ignore]` - members writers skip
+
+`Position`/`Angle` are computed from the local values, so writing them out would duplicate data. `[Ignore]` keeps a
+member out of the writers that copy components by reflection; reading YAML still accepts it:
+
+```csharp
+[Ignore]                    // skipped by map saving and by cloning
+[Ignore(IgnoreIn.Save)]     // only map saving (MapManager.SaveMap)
+[Ignore(IgnoreIn.Clone)]    // only cloning (EntityManager.CloneEntity, editor snapshots)
+```
+
+`TransformComponent` saves `Position` (world) and clones `LocalPosition`, so maps keep their `position:` keys.

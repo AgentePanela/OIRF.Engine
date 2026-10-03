@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using Engine.Shared.Containers;
 using Engine.Shared.GameObjects;
 using Engine.Shared.Lighting;
 using Microsoft.Xna.Framework;
@@ -145,6 +146,8 @@ public sealed partial class LightingSystem
 
         foreach (var (uid, occluder, transform) in GetEntitiesWithComp<OccluderComponent, TransformComponent>())
         {
+            if (HasComp<ContainedComponent>(uid)) continue;
+
             // this walks every occluder in the scene, so reject the far ones
             // off the component alone - resolving a sprite occluder's bounds
             // costs a component lookup and sometimes an atlas hit
@@ -179,6 +182,9 @@ public sealed partial class LightingSystem
         => _occludersDirty = true;
 
     private void OnOccluderMoved(EntityUid uid, OccluderComponent comp, MoveEvent args)
+        => _occludersDirty = true;
+
+    private void OnOccluderContainerChanged(EntityUid uid, OccluderComponent comp, ContainerChangedEvent args)
         => _occludersDirty = true;
 
     private void OnPointLightRemoved(EntityUid uid, PointLightComponent comp, CompRemovedEvent args)

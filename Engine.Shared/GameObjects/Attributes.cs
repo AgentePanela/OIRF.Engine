@@ -33,6 +33,34 @@ public sealed class AutoDirtyAttribute : Attribute
 }
 
 /// <summary>
+/// Which writers <see cref="IgnoreAttribute"/> applies to.
+/// </summary>
+[Flags]
+public enum IgnoreIn
+{
+    /// <summary>
+    /// e.g: content map saving.
+    /// </summary>
+    Serialization = 1 << 0,
+
+    /// <summary>
+    /// Entity cloning (<see cref="EntityManager.CloneEntity"/>).
+    /// </summary>
+    Clone = 1 << 1,
+
+    All = Serialization | Clone,
+}
+
+/// <summary>
+/// Keeps a component member out of the writers in <see cref="IgnoreIn"/>.
+/// </summary>
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Field, Inherited = true)]
+public sealed class IgnoreAttribute(IgnoreIn @in = IgnoreIn.All) : Attribute
+{
+    public IgnoreIn In => @in;
+}
+
+/// <summary>
 /// Makes EntityManager.Systems ignore this system registry during loading.<para/>
 /// This also makes the system do not registry a IoC container or parent registry. Even if it is abstracted.
 /// </summary>

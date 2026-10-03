@@ -1,5 +1,6 @@
 using Engine.Client.Graphics.Fonts;
 using Engine.Shared.Configuration;
+using Engine.Shared.Containers;
 using Engine.Shared.GameObjects;
 using Engine.Shared.Lighting;
 using Microsoft.Xna.Framework;
@@ -36,7 +37,7 @@ public sealed class OccluderDebugDrawSystem : EntityDrawSystem
 
         foreach (var (uid, occluder, transform) in GetEntitiesWithComp<OccluderComponent, TransformComponent>())
         {
-            if (!_camera.IsOnScreen(transform.Position))
+            if (HasComp<ContainedComponent>(uid) || !_camera.IsOnScreen(transform.Position))
                 continue;
 
             switch (occluder.Shape)

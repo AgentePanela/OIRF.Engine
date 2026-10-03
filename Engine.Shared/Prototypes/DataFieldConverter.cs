@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
+using Engine.Shared.GameObjects;
 
 namespace Engine.Shared.Prototypes;
 
@@ -105,6 +106,9 @@ public static partial class DataFieldConverter
             if (ClonedMemberSkipNames.Contains(prop.Name) || prop.GetIndexParameters().Length > 0)
                 continue;
 
+            if (IsIgnored(prop, IgnoreIn.Clone))
+                continue;
+
             if (prop.GetGetMethod(true) is null || prop.GetSetMethod(true) is null)
                 continue;
 
@@ -116,9 +120,18 @@ public static partial class DataFieldConverter
             if (ClonedMemberSkipNames.Contains(field.Name) || field.IsInitOnly || field.Name.Contains('<'))
                 continue;
 
+            if (IsIgnored(field, IgnoreIn.Clone))
+                continue;
+
             field.SetValue(target, field.GetValue(source));
         }
     }
+
+    /// <summary>
+    /// Whether <paramref name="member"/> is kept out of <paramref name="writer"/> by <see cref="IgnoreAttribute"/>.
+    /// </summary>
+    public static bool IsIgnored(MemberInfo member, IgnoreIn writer)
+        => member.GetCustomAttribute<IgnoreAttribute>() is { } attr && (attr.In & writer) != 0;
 
     public static Type GetMemberType(MemberInfo member) => member switch
     {

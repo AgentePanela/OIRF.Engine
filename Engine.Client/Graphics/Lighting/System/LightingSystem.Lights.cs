@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Engine.Shared.Containers;
 using Engine.Shared.GameObjects;
 using Engine.Shared.Lighting;
 using Microsoft.Xna.Framework;
@@ -68,6 +69,9 @@ public sealed partial class LightingSystem
 
         foreach (var (uid, point, transform) in GetEntitiesWithComp<PointLightComponent, TransformComponent>())
         {
+            if (HasComp<ContainedComponent>(uid))
+                continue;
+
             var worldPos = transform.Position + point.Offset;
             // IsOnScreen takes a top-left corner, so the disk box has to be
             // offset back by the radius - passing the center culls lights that
@@ -88,6 +92,9 @@ public sealed partial class LightingSystem
 
         foreach (var (uid, spot, transform) in GetEntitiesWithComp<SpotLightComponent, TransformComponent>())
         {
+            if (HasComp<ContainedComponent>(uid))
+                continue;
+
             var worldPos = transform.Position + spot.Offset;
             if (!_camera.IsOnScreen(worldPos - new Vector2(spot.Radius), new Vector2(spot.Radius * 2f)))
                 continue;
@@ -208,8 +215,9 @@ public sealed partial class LightingSystem
         // empty Begin/End still churns device state every frame
         bool batchOpen = false;
 
-        foreach (var (_, tex, transform) in GetEntitiesWithComp<TextureLightComponent, TransformComponent>())
+        foreach (var (uid, tex, transform) in GetEntitiesWithComp<TextureLightComponent, TransformComponent>())
         {
+            if (HasComp<ContainedComponent>(uid)) continue;
             if (string.IsNullOrEmpty(tex.Texture)) continue;
             if (!_assets.GetTexture(tex.Texture, out var spr, out var page)) continue;
 

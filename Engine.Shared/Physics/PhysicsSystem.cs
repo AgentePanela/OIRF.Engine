@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Engine.Shared.Containers;
 using Engine.Shared.GameObjects;
 using Engine.Shared.Physics.Fixtures;
 using Microsoft.Xna.Framework;
@@ -37,7 +38,7 @@ public sealed class PhysicsSystem : EntitySystem
         var query = GetEntitiesWithComp<TransformComponent, PhysicsComponent>();
         foreach (var (uid, transform, physics) in query)
         {
-            if (physics.Static) 
+            if (physics.Static || HasComp<ContainedComponent>(uid))
                 continue;
 
             if (_activeCollisions.TryGetValue(uid, out var collisions))

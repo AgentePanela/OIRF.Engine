@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Engine.Shared.Configuration;
 using Engine.Shared.Configuration.CVars;
+using Engine.Shared.Containers;
 using Microsoft.Xna.Framework;
 
 namespace Engine.Shared.GameObjects;
@@ -19,7 +20,7 @@ public sealed class TransformSystem : EntitySystem
 {
     [Dependency] private readonly IConfigurationManager _cfg = default!;
 
-    // Last Position/Angle seen per entity, last tick
+    // Last world Position/Angle seen per entity, last tick
     private readonly Dictionary<EntityUid, (Vector2 Pos, float Angle)> _lastTransform = new();
 
     // Reused and re-raised every time an entity moves instead of a fresh MoveEvent per ent
@@ -29,7 +30,7 @@ public sealed class TransformSystem : EntitySystem
 
 
     private readonly List<EntityUid> _childBuffer = new();
-    private readonly Stack<List<EntityUid>> _movePool = new();
+    private readonly Stack<List<EntityUid>> _childPool = new();
 
     // Parent > children
     private readonly Dictionary<EntityUid, HashSet<EntityUid>> _childrenByParent = new();
@@ -57,67 +58,45 @@ public sealed class TransformSystem : EntitySystem
 
         foreach (var (uid, t) in GetEntitiesWithComp<TransformComponent>())
         {
+            if (HasComp<ContainedComponent>(uid))
+                continue;
+
+            var pos = t.Position;
+            var angle = t.Angle;
+
             if (!_lastTransform.TryGetValue(uid, out var last))
             {
-                _lastTransform[uid] = (t.Position, t.Angle);
+                _lastTransform[uid] = (pos, angle);
                 continue;
             }
 
-            var posDelta = t.Position - last.Pos;
-            var angleDelta = t.Angle - last.Angle;
-            _lastTransform[uid] = (t.Position, t.Angle);
-
-            if (posDelta == Vector2.Zero && angleDelta == 0f)
+            if (pos == last.Pos && angle == last.Angle)
                 continue;
+
+            _lastTransform[uid] = (pos, angle);
 
             _moveEvent.Handled = false;
             RaiseEvent(uid, _moveEvent);
-
-            MoveChildren(uid, posDelta, angleDelta, 0);
         }
-    }
-
-    private void MoveChildren(EntityUid parentUid, Vector2 posDelta, float angleDelta, int depth)
-    {
-        if (depth >= _maxParents)
-        {
-            Log.Error($"{parentUid} has more than {_maxParents} levels of parenting deep.");
-            return;
-        }
-
-        var children = _movePool.Count > 0 ? _movePool.Pop() : new List<EntityUid>();
-        children.AddRange(GetChildren(parentUid));
-
-        foreach (var uid in children)
-        {
-            if (!TryComp<TransformComponent>(uid, out var t))
-                continue;
-
-            t.Position += posDelta;
-            t.Angle += angleDelta;
-            _lastTransform[uid] = (t.Position, t.Angle);
-
-            _moveEvent.Handled = false;
-            RaiseEvent(uid, _moveEvent);
-
-            MoveChildren(uid, posDelta, angleDelta, depth + 1);
-        }
-
-        children.Clear();
-        _movePool.Push(children);
     }
 
     private void OnCompRemoved(EntityUid uid, TransformComponent comp, CompRemovedEvent args)
     {
         _lastTransform.Remove(uid);
 
+        _childBuffer.Clear();
+        _childBuffer.AddRange(GetChildren(uid));
+
         if (GetEntity(uid)?.Deleting is not false)
         {
-            _childBuffer.Clear();
-            _childBuffer.AddRange(GetChildren(uid));
-
             foreach (var child in _childBuffer)
                 DeleteEntity(child);
+        }
+        else
+        {
+            // the transform is still readable here, so the children can keep their world position
+            foreach (var child in _childBuffer)
+                Detach(child);
         }
 
         ReparentChild(uid, comp.Parent, null);
@@ -129,17 +108,39 @@ public sealed class TransformSystem : EntitySystem
     private void OnSceneChanged(EntityUid uid, TransformComponent comp, EntitySceneChangedEvent args)
     {
         if (comp.Parent is { } parent && !EntityManager.ScenesInteract(GetScene(parent), args.New))
-            comp.Parent = null;
+            Detach(uid, comp);
 
         // setScene on a child comes back here
-        var children = _movePool.Count > 0 ? _movePool.Pop() : new List<EntityUid>();
+        var children = _childPool.Count > 0 ? _childPool.Pop() : new List<EntityUid>();
         children.AddRange(GetChildren(uid));
 
         foreach (var child in children)
             SetScene(child, args.New);
 
         children.Clear();
-        _movePool.Push(children);
+        _childPool.Push(children);
+    }
+
+    /// <summary>
+    /// Whether parenting <paramref name="child"/> to <paramref name="parent"/> would make it its own ancestor.
+    /// </summary>
+    internal bool WouldCycle(EntityUid child, EntityUid parent)
+    {
+        var current = parent;
+
+        for (var depth = 0; depth < _maxParents; depth++)
+        {
+            if (current == child)
+                return true;
+
+            if (!TryComp<TransformComponent>(current, out var t) || t.Parent is not { } next)
+                return false;
+
+            current = next;
+        }
+
+        Log.Error($"{parent} has more than {_maxParents} levels of parenting deep.");
+        return true;
     }
 
     internal void ReparentChild(EntityUid child, EntityUid? from, EntityUid? to)
@@ -166,6 +167,40 @@ public sealed class TransformSystem : EntitySystem
     }
 
     #region API
+
+    /// <summary>
+    /// Parents <paramref name="uid"/> to <paramref name="parent"/> (null unparents it).
+    /// </summary>
+    /// <param name="keepWorld">Keep the entity where it is in the world. False keeps its local values instead.</param>
+    /// <returns>False if the entity has no transform or the parent would make a cycle.</returns>
+    public bool SetParent(EntityUid uid, EntityUid? parent, bool keepWorld = true, TransformComponent? comp = null)
+    {
+        if (comp is null && !TryComp(uid, out comp))
+            return false;
+
+        var worldPos = comp.Position;
+        var worldAngle = comp.Angle;
+
+        comp.Parent = parent;
+
+        // the setter refuses a cycle without throwing
+        if (comp.Parent != parent)
+            return false;
+
+        if (keepWorld)
+        {
+            comp.Position = worldPos;
+            comp.Angle = worldAngle;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Unparents <paramref name="uid"/>, keeping it where it is in the world.
+    /// </summary>
+    public void Detach(EntityUid uid, TransformComponent? comp = null)
+        => SetParent(uid, null, keepWorld: true, comp);
 
     /// <summary>
     /// The entities parented to <paramref name="uid"/>.
@@ -209,7 +244,7 @@ public sealed class TransformSystem : EntitySystem
             if (requireVisible && !transform.Visible)
                 continue;
 
-            if (!EntityManager.ScenesInteract(scene, GetScene(entUid)))
+            if (HasComp<ContainedComponent>(entUid) || !EntityManager.ScenesInteract(scene, GetScene(entUid)))
                 continue;
 
             float dx = transform.Position.X - worldPos.X;
@@ -251,7 +286,7 @@ public sealed class TransformSystem : EntitySystem
             if (requireVisible && !transform.Visible)
                 continue;
 
-            if (!EntityManager.ScenesInteract(scene, GetScene(entUid)))
+            if (HasComp<ContainedComponent>(entUid) || !EntityManager.ScenesInteract(scene, GetScene(entUid)))
                 continue;
 
             if (!area.Contains((int)transform.Position.X, (int)transform.Position.Y))
