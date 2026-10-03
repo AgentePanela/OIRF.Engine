@@ -199,7 +199,9 @@ public sealed partial class ClientGameStateSystem
 
         if (_currentKnown)
         {
-            if (_isFullState)
+            // an entering entity is sent whole too, and it was just built from the prototype, which can have components
+            // the server copy does not
+            if (_isFullState || _currentEntering)
                 RemoveStaleComponents();
 
             RaiseEvent(_currentUid, new EntityStateAppliedEvent { Entering = _currentEntering });
