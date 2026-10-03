@@ -313,6 +313,20 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     }
 
     /// <summary>
+    /// The key set through <see cref="SetDrawKey"/> for the sprite (or a layer), null when its own key is the one drawn.
+    /// </summary>
+    public string? GetDrawKey(EntityUid uid, string? layerId = null)
+    {
+        if (!_render.TryGetValue(uid, out var data))
+            return null;
+
+        if (layerId is null)
+            return data.Base.DrawKey;
+
+        return data.Layers.TryGetValue(layerId, out var target) ? target.DrawKey : null;
+    }
+
+    /// <summary>
     /// Stops drawing the base sprite, leaving only the layers.
     /// </summary>
     public void SetBaseHidden(EntityUid uid, bool hidden)

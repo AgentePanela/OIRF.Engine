@@ -6,6 +6,7 @@ using Engine.Shared.GameObjects;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using System;
 using System.Collections.Generic;
 using Engine.Shared.Graphics;
 
@@ -32,6 +33,18 @@ public partial class EntityView : Control
     /// </summary>
     [StyleField("stretch", false)]
     private bool? _stretch;
+
+    /// <summary>
+    /// With stretch, scales both axes by the same amount.
+    /// </summary>
+    [StyleField("keepAspect", false)]
+    private bool? _keepAspect;
+
+    /// <summary>
+    /// With stretch, rounds the scale down to a whole number so pixel art keeps even pixels.
+    /// </summary>
+    [StyleField("integerScale", false)]
+    private bool? _integerScale;
 
     /// <summary>
     /// Multiplies on every layers own color.
@@ -85,12 +98,17 @@ public partial class EntityView : Control
             return false;
         }
 
-        if (!IoCManager.Resolve<IAssetManager>().GetTexture(sprite.Key, out var atlasSprite, out _))
+        if (!IoCManager.Resolve<IAssetManager>().GetTexture(DrawKey(null, sprite.Key), out var atlasSprite, out _))
             return false;
 
         region = atlasSprite.Region;
         return true;
     }
+
+    private static float WholeScale(float scale) => scale >= 1f ? MathF.Floor(scale) : scale;
+
+    private string DrawKey(string? layerId, string key)
+        => IoCManager.Resolve<SpriteSystem>().GetDrawKey(EntityUid, layerId) ?? key;
 
     protected override void DrawSelf(ShapeBatch sb, IFontManager fontManager, float dt)
     {
@@ -106,17 +124,25 @@ public partial class EntityView : Control
             if (FollowEntityAngle && entMan.TryComp<TransformComponent>(EntityUid, out var transform))
                 rotation = transform.Angle;
 
+            var baseKey = DrawKey(null, sprite.Key);
+
             var scale = Vector2.One;
             if (Stretch
-                && IoCManager.Resolve<IAssetManager>().GetTexture(sprite.Key, out var baseAtlas, out _)
+                && IoCManager.Resolve<IAssetManager>().GetTexture(baseKey, out var baseAtlas, out _)
                 && baseAtlas.Region is { Width: > 0, Height: > 0 } baseRegion)
             {
                 scale = new Vector2(Bounds.Width / (float)baseRegion.Width, Bounds.Height / (float)baseRegion.Height);
+
+                if (KeepAspect)
+                    scale = new Vector2(MathHelper.Min(scale.X, scale.Y));
+
+                if (IntegerScale)
+                    scale = new Vector2(WholeScale(scale.X), WholeScale(scale.Y));
             }
 
             var anchor = new Vector2(Bounds.X + Bounds.Width / 2f, Bounds.Y + Bounds.Height / 2f);
 
-            used += ArrangeIcon(used, sprite.Key, sprite.Color, sprite.Origin, Vector2.Zero,
+            used += ArrangeIcon(used, baseKey, sprite.Color, sprite.Origin, Vector2.Zero,
                 anchor, scale, rotation, sprite.Effects);
 
             if (sprite.LayersDirty)
@@ -130,7 +156,7 @@ public partial class EntityView : Control
                 if (!layer.Visible || string.IsNullOrEmpty(layer.Key))
                     continue;
 
-                used += ArrangeIcon(used, layer.Key, layer.Color, layer.Origin, layer.Offset,
+                used += ArrangeIcon(used, DrawKey(layer.Id, layer.Key), layer.Color, layer.Origin, layer.Offset,
                     anchor, scale, rotation, sprite.Effects);
             }
         }
