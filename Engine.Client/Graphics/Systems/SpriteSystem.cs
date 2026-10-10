@@ -34,6 +34,9 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 
         public bool HideBaseSprite;
         public float DrawRotation;
+        public Color? DrawShaderColor;
+
+        public string? DrawShader;
     }
 
     /// <summary>
@@ -95,7 +98,8 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     /// </summary>
     private void SubmitWithLayers(SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Sprite2D spr)
     {
-        var shader = ResolveShader(data.Base, comp.Shader).Effect;
+        var shader = ResolveShader(data.Base, data.DrawShader ?? comp.Shader).Effect;
+        ApplyDrawColor(shader, data);
 
         if (comp.Layers is null || comp.Layers.Count == 0)
         {
@@ -152,7 +156,18 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         if (layer.Offset != Vector2.Zero)
             pos += Vector2.Transform(layer.Offset, Matrix.CreateRotationZ(trans.Angle + data.DrawRotation));
 
-        _renderMan.Submit(spr, pos, ResolveShader(target, layer.Shader).Effect);
+        var shader = ResolveShader(target, data.DrawShader ?? layer.Shader).Effect;
+        ApplyDrawColor(shader, data);
+        _renderMan.Submit(spr, pos, shader);
+    }
+
+    // only the shader set through SetDrawShader gets it, a shader that has no such parameter just ignores it
+    private static void ApplyDrawColor(Effect? shader, SpriteRenderData data)
+    {
+        if (shader is null || data.DrawShader is null || data.DrawShaderColor is not { } color)
+            return;
+
+        shader.Parameters["DrawColor"]?.SetValue(color.ToVector4());
     }
 
     /// <summary>
@@ -337,6 +352,27 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     /// </summary>
     public void SetDrawRotation(EntityUid uid, float radians)
         => GetData(uid).DrawRotation = radians;
+
+    /// <summary>
+    /// Draws the sprite and its layers with <paramref name="shader"/> instead of their own until it is set back to
+    /// null. (local)
+    /// </summary>
+    public void SetDrawShader(EntityUid uid, string? shader, Color? color = null)
+    {
+        // nothing to undo for a sprite that was never drawn with an override
+        if (shader is null && !_render.ContainsKey(uid))
+            return;
+
+        var data = GetData(uid);
+        data.DrawShader = shader;
+        data.DrawShaderColor = color;
+    }
+
+    /// <summary>
+    /// The shader set through <see cref="SetDrawShader"/>, null when the sprite uses its own.
+    /// </summary>
+    public string? GetDrawShader(EntityUid uid)
+        => _render.TryGetValue(uid, out var data) ? data.DrawShader : null;
 
     private SpriteRenderData GetData(EntityUid uid)
     {

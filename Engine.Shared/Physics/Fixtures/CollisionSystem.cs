@@ -531,7 +531,12 @@ public sealed class CollisionSystem : EntitySystem
     {
         dist = 0;
         var b = box.GetBounds(pos);
- 
+
+        if (dir.X == 0f && (origin.X < b.Left || origin.X > b.Right))
+            return false;
+        if (dir.Y == 0f && (origin.Y < b.Top || origin.Y > b.Bottom))
+            return false;
+
         // Guard against division by zero for axis-aligned rays
         float tMinX = dir.X != 0f ? (b.Left   - origin.X) / dir.X : float.NegativeInfinity;
         float tMaxX = dir.X != 0f ? (b.Right  - origin.X) / dir.X : float.PositiveInfinity;
