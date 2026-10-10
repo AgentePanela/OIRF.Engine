@@ -16,6 +16,15 @@ public enum MouseButton
     Right,
 }
 
+[Flags]
+public enum KeyModifiers : byte
+{
+    None = 0,
+    Control = 1 << 0,
+    Shift = 1 << 1,
+    Alt = 1 << 2,
+}
+
 public enum InputCallbackSupport
 {
     /// <summary>
@@ -57,6 +66,9 @@ public sealed class InputManager()
 
     private TouchCollection _touchState;
     private Dictionary<string, ResolvedAction>? _actions = new();
+
+    // every modifier set some action asks for together with a key, to know when a plainer binding must stay quiet
+    private readonly Dictionary<Keys, List<KeyModifiers>> _keyModifiers = new();
 
     /// <summary>
     /// If true (default), an active touch is also reported as <see cref="MouseButton.Left"/> being
@@ -316,9 +328,9 @@ public sealed class InputManager()
             return false;
 
         foreach (var key in resolved.Keys)
-            if (KeyPressed(key)) return true;
+            if (KeyPressed(key) && ModifiersAllow(resolved, key)) return true;
         foreach (var mb in resolved.MouseButtons)
-            if (MouseClicked(mb)) return true;
+            if (MouseClicked(mb) && ModifiersHeld(resolved.Modifiers)) return true;
         foreach (var btn in resolved.GamepadButtons)
             if (ButtonPressed(btn)) return true;
         if (resolved.Touch && AnyTouchTapped())
@@ -336,9 +348,9 @@ public sealed class InputManager()
             return false;
 
         foreach (var key in resolved.Keys)
-            if (KeyDown(key)) return true;
+            if (KeyDown(key) && ModifiersAllow(resolved, key)) return true;
         foreach (var mb in resolved.MouseButtons)
-            if (MouseDown(mb)) return true;
+            if (MouseDown(mb) && ModifiersHeld(resolved.Modifiers)) return true;
         foreach (var btn in resolved.GamepadButtons)
             if (ButtonDown(btn)) return true;
         if (resolved.Touch && AnyTouchDown())
@@ -356,9 +368,9 @@ public sealed class InputManager()
             return false;
 
         foreach (var key in resolved.Keys)
-            if (KeyReleased(key)) return true;
+            if (KeyReleased(key) && ModifiersAllow(resolved, key)) return true;
         foreach (var mb in resolved.MouseButtons)
-            if (MouseReleased(mb)) return true;
+            if (MouseReleased(mb) && ModifiersHeld(resolved.Modifiers)) return true;
         foreach (var btn in resolved.GamepadButtons)
             if (ButtonReleased(btn)) return true;
         if (resolved.Touch && AnyTouchReleased())
@@ -370,9 +382,48 @@ public sealed class InputManager()
     private bool TryGetAction(string action, out ResolvedAction resolved)
         => _actions!.TryGetValue(action, out resolved);
 
+    /// <summary>
+    /// The modifiers held right now, either side of the keyboard.
+    /// </summary>
+    public KeyModifiers HeldModifiers()
+    {
+        var held = KeyModifiers.None;
+        if (_keyboardState.IsKeyDown(Keys.LeftControl) || _keyboardState.IsKeyDown(Keys.RightControl))
+            held |= KeyModifiers.Control;
+        if (_keyboardState.IsKeyDown(Keys.LeftShift) || _keyboardState.IsKeyDown(Keys.RightShift))
+            held |= KeyModifiers.Shift;
+        if (_keyboardState.IsKeyDown(Keys.LeftAlt) || _keyboardState.IsKeyDown(Keys.RightAlt))
+            held |= KeyModifiers.Alt;
+
+        return held;
+    }
+
+    private bool ModifiersHeld(KeyModifiers wanted)
+        => wanted == KeyModifiers.None || (HeldModifiers() & wanted) == wanted;
+
+    // a binding counts when its modifiers are held and no other binding of the same key asks for more of the held ones
+    private bool ModifiersAllow(in ResolvedAction action, Keys key)
+    {
+        if (!_keyModifiers.TryGetValue(key, out var others))
+            return ModifiersHeld(action.Modifiers);
+
+        var held = HeldModifiers();
+        if ((held & action.Modifiers) != action.Modifiers)
+            return false;
+
+        foreach (var other in others)
+        {
+            if (other != action.Modifiers && (other & action.Modifiers) == action.Modifiers && (held & other) == other)
+                return false;
+        }
+
+        return true;
+    }
+
     private void EnsureActionsBuilt()
     {
         _actions = new Dictionary<string, ResolvedAction>(StringComparer.OrdinalIgnoreCase);
+        _keyModifiers.Clear();
 
         foreach (var proto in _proto.EnumerateAll<InputMapPrototype>())
         {
@@ -404,6 +455,26 @@ public sealed class InputManager()
                         Log.Warn($"InputMap '{proto.ID}': unknown gamepad button '{btnName}' in action '{name}'.");
                 }
 
+                foreach (var modName in action.Modifiers)
+                {
+                    if (Enum.TryParse<KeyModifiers>(modName, ignoreCase: true, out var mod))
+                        resolved.Modifiers |= mod;
+                    else
+                        Log.Warn($"InputMap '{proto.ID}': unknown modifier '{modName}' in action '{name}'.");
+                }
+
+                if (resolved.Modifiers != KeyModifiers.None)
+                {
+                    foreach (var key in resolved.Keys)
+                    {
+                        if (!_keyModifiers.TryGetValue(key, out var sets))
+                            _keyModifiers[key] = sets = new List<KeyModifiers>();
+
+                        if (!sets.Contains(resolved.Modifiers))
+                            sets.Add(resolved.Modifiers);
+                    }
+                }
+
                 resolved.Touch = action.Touch;
 
                 _actions[name] = resolved;
@@ -426,6 +497,7 @@ public sealed class InputManager()
         public List<Keys> Keys;
         public List<MouseButton> MouseButtons;
         public List<Buttons> GamepadButtons;
+        public KeyModifiers Modifiers;
         public bool Touch;
 
         public ResolvedAction()
@@ -433,6 +505,7 @@ public sealed class InputManager()
             Keys = new List<Keys>();
             MouseButtons = new List<MouseButton>();
             GamepadButtons = new List<Buttons>();
+            Modifiers = KeyModifiers.None;
             Touch = false;
         }
     }

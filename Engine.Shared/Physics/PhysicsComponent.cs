@@ -15,6 +15,11 @@ public sealed partial class PhysicsComponent : Component
     [NetField] public partial Vector2 Velocity { get; set; } = Vector2.Zero;
 
     /// <summary>
+    /// Current spin in radians per second, positive is clockwise on screen.
+    /// </summary>
+    [NetField] public partial float AngularVelocity { get; set; } = 0f;
+
+    /// <summary>
     /// If true, this entity is never moved by collision resolution.
     /// The full push is transferred to the other body.
     /// </summary>
@@ -33,8 +38,8 @@ public sealed partial class PhysicsComponent : Component
     [NetField] public partial float Friction { get; set; } = 0.3f;
 
     /// <summary>
-    /// Bounciness (0 = no bounce, 1 = perfect bounce). 
-    /// todo: Reserved for future use.
+    /// Bounciness (0 = no bounce, 1 = perfect bounce): how much of the speed going into a hard collision comes
+    /// back out of it.
     /// </summary>
     [NetField] public partial float Restitution { get; set; } = 0f;
 }

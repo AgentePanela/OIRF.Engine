@@ -62,10 +62,19 @@ public sealed class PhysicsSystem : EntitySystem
                     var normal = Vector2.Normalize(mtv);
                     float dot  = Vector2.Dot(physics.Velocity, normal);
                     if (dot < 0f)
-                        physics.Velocity -= normal * dot;
+                        physics.Velocity -= normal * dot * (1f + Math.Clamp(physics.Restitution, 0f, 1f));
                 }
             }
-            if (physics.Velocity == Vector2.Zero) 
+            if (physics.AngularVelocity != 0f)
+            {
+                transform.Angle += physics.AngularVelocity * dt;
+                physics.AngularVelocity *= 1f - Math.Clamp(physics.Friction * dt, 0f, 1f);
+
+                if (MathF.Abs(physics.AngularVelocity) < 0.01f)
+                    physics.AngularVelocity = 0f;
+            }
+
+            if (physics.Velocity == Vector2.Zero)
                 continue;
 
             transform.Position += physics.Velocity * dt;

@@ -151,6 +151,18 @@ Create an `InputMapPrototype` in your prototypes folder:
 
 The engine loads all `inputMap` prototypes and merges them into a single action table.
 
+### Modifiers
+
+An action can ask for modifier keys with `modifiers` (`Control`, `Shift`, `Alt`, either side of the keyboard). All of them must be held for the action's keys and mouse buttons to count; gamepad and touch bindings ignore them.
+
+```yaml
+    drop:
+      keys: [ Q ]
+    throw:
+      keys: [ Q ]
+      modifiers: [ Control ]
+```
+
 ### Using Actions in Code
 
 ```csharp

@@ -37,6 +37,12 @@ public sealed class InputAction
     public List<string> Keys { get; set; } = new();
 
     /// <summary>
+    /// Modifiers that must all be held for the keys and mouse buttons to count.
+    /// </summary>
+    [DataField("modifiers")]
+    public List<string> Modifiers { get; set; } = new();
+
+    /// <summary>
     /// Mouse button names (e.g. "Left", "Right", "Middle"). Parsed as <see cref="Engine.Inputs.MouseButton"/>.
     /// </summary>
     [DataField("mouse")]
