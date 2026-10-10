@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Engine.Client.Graphics;
 using Engine.Shared.Audio;
 using Engine.Shared.Common;
+using Engine.Shared.Configuration;
 using Engine.Shared.GameObjects;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
@@ -16,6 +17,7 @@ public sealed class AudioSystem : SharedAudioSystem
 {
     [Dependency] private readonly IAudioManager _audio = default!;
     [Dependency] private readonly Camera2D _camera = default!;
+    [Dependency] private readonly IConfigurationManager _cfg = default!;
 
     // AudioComponent cant hold the live StreamPackage itself since it is shared
     // track here instead
@@ -171,6 +173,9 @@ public sealed class AudioSystem : SharedAudioSystem
 
     protected override bool OnPlay(EntityUid uid, AudioComponent comp, float offset)
     {
+        if (!_cfg.Get(AudioCvars.SystemPaused))
+            return false;
+
         if (!_audio.TryPlay(comp.Key, out var package, comp.Volume, comp.Loop, comp.Pitch, comp.Tags, offset))
             return false;
 
