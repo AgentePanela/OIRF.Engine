@@ -325,8 +325,15 @@ public sealed partial class RenderManager
                         shaderToUse.Parameters["PixelatedLighting"]?.SetValue(_lighting.PixelatedLighting);
                         shaderToUse.Parameters["Time"]?.SetValue((float)GameClient.Timing.TotalTime);
 
-                        if (r.Target is Boxed<Sprite2D> { Value.CachedTexture: { } texture }) // The size of one texel of the texture the sprite samples (its atlas page)
+                        if (r.Target is Boxed<Sprite2D> { Value.CachedTexture: { } texture } boxed) // The size of one texel of the texture the sprite samples (its atlas page)
+                        {
                             shaderToUse.Parameters["TexelSize"]?.SetValue(new Vector2(1f / texture.Width, 1f / texture.Height));
+
+                            var region = boxed.Value.CachedRegion;
+                            shaderToUse.Parameters["SpriteRegion"]?.SetValue(new Vector4(
+                                (float)region.X / texture.Width, (float)region.Y / texture.Height,
+                                (float)region.Width / texture.Width, (float)region.Height / texture.Height));
+                        }
                     }
 
                     // Sprites always self-light or self-bypass now, so the

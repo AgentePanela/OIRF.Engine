@@ -437,6 +437,24 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     public string? GetDrawShader(EntityUid uid)
         => _render.TryGetValue(uid, out var data) ? data.DrawShader : null;
 
+    /// <summary>
+    /// Get the shader instance of a layer or base sprite.
+    /// </summary>
+    public Effect? GetDrawShaderEffect(EntityUid uid, string? layerId = null)
+    {
+        if (!TryComp<SpriteComponent>(uid, out var comp))
+            return null;
+
+        var data = GetData(uid);
+        if (layerId is null)
+            return ResolveShader(data.Base, data.DrawShader ?? comp.Shader).Effect;
+
+        if (GetLayer(comp, layerId) is not { } layer)
+            return null;
+
+        return ResolveShader(GetLayerTarget(data, layerId), data.DrawShader ?? layer.Shader).Effect;
+    }
+
     private SpriteRenderData GetData(EntityUid uid)
     {
         if (!_render.TryGetValue(uid, out var data))
