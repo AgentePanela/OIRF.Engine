@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
+using Engine.Shared.Graphics;
 
 namespace Engine.Shared.Prototypes;
 
@@ -71,6 +72,10 @@ public static partial class DataFieldConverter
             var list = new List<object>();
             foreach (var item in seq)
             {
+                // made at runtime by a client system, which makes it again wherever the entity is loaded
+                if (item is SpriteLayer { Local: true })
+                    continue;
+
                 var rawItem = ToRawValue(item);
                 if (rawItem is not null)
                     list.Add(rawItem);

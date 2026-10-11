@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using Engine.Shared.GameObjects;
+using Engine.Shared.Graphics;
 
 namespace Engine.Shared.Prototypes;
 
@@ -112,7 +113,13 @@ public static partial class DataFieldConverter
             if (prop.GetGetMethod(true) is null || prop.GetSetMethod(true) is null)
                 continue;
 
-            prop.SetValue(target, prop.GetValue(source));
+            var value = prop.GetValue(source);
+
+            // the copy gets layers of its own, sharing them would have both sprites change together
+            if (value is List<SpriteLayer> layers)
+                value = SpriteLayer.CopyAll(layers);
+
+            prop.SetValue(target, value);
         }
 
         foreach (var field in type.GetFields(flags))

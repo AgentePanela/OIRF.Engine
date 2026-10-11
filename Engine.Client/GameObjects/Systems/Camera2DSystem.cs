@@ -41,7 +41,7 @@ public sealed class Camera2DSystem : EntitySystem
 
             _cam.MaximumZoom = comp.MaximumZoom;
             _cam.MinimumZoom = comp.MinimumZoom;
-            if (comp.UsePosition) _cam.LookAt(trans.Position);
+            if (comp.UsePosition) _cam.LookAt(trans.Position + comp.Offset);
             if (comp.UseAngle) _cam.Rotation = trans.Angle;
             return; // only the first entity with the camera active will set the camera attributes.
         }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Engine.Client.Assets;
 using Engine.Client.Graphics.Shaders;
@@ -34,6 +35,7 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 
         public bool HideBaseSprite;
         public float DrawRotation;
+        public float? DrawDepth;
         public Color? DrawShaderColor;
 
         public string? DrawShader;
@@ -83,27 +85,62 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
                 continue;
 
             var spr = sprite.Value;
-            if (!_camera.IsOnScreen(spr, transform.Position))
+            var pos = transform.Position + comp.Offset;
+            if (!_camera.IsOnScreen(spr, pos) && !LayersOnScreen(comp, data, transform, pos))
                 continue;
 
             UpdateSpriteFields(comp, transform, ref spr);
             spr.Rotation += data.DrawRotation;
-            SubmitWithLayers(comp, data, transform, spr);
+            spr.Depth = data.DrawDepth ?? spr.Depth;
+            SubmitWithLayers(comp, data, transform, spr, pos);
         }
+    }
+
+    /// <summary>
+    /// Layers can draw away from the base sprite (an offset, or a bigger texture), so one of them may be on screen
+    /// while the base is not.
+    /// </summary>
+    private bool LayersOnScreen(SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Vector2 pos)
+    {
+        if (comp.Layers is null || comp.Layers.Count == 0)
+            return false;
+
+        if (comp.LayerReachDirty)
+            MeasureLayerReach(comp, data);
+
+        var scale = transform.Scale ?? Vector2.One;
+        var reach = new Vector2(comp.LayerReach * MathF.Max(MathF.Abs(scale.X), MathF.Abs(scale.Y)));
+        return _camera.IsOnScreen(pos - reach, reach * 2f);
+    }
+
+    // the furthest a layer could get in any direction: its offset plus its whole size, wherever its origin is
+    private void MeasureLayerReach(SpriteComponent comp, SpriteRenderData data)
+    {
+        var reach = 0f;
+        foreach (var layer in comp.Layers)
+        {
+            if (!layer.Visible || GetLayerSprite(layer, comp, GetLayerTarget(data, layer.Id)) is not { } spr)
+                continue;
+
+            reach = MathF.Max(reach, layer.Offset.Length() + MathF.Max(spr.Width, spr.Height));
+        }
+
+        comp.LayerReach = reach;
+        comp.LayerReachDirty = false;
     }
 
     /// <summary>
     /// Submits the base sprite and its layers. Base sits at Order 0: layers with
     /// a negative Order draw under it, the rest over.
     /// </summary>
-    private void SubmitWithLayers(SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Sprite2D spr)
+    private void SubmitWithLayers(SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Sprite2D spr, Vector2 pos)
     {
         var shader = ResolveShader(data.Base, data.DrawShader ?? comp.Shader).Effect;
         ApplyDrawColor(shader, data);
 
         if (comp.Layers is null || comp.Layers.Count == 0)
         {
-            SubmitBase(data, spr, transform, shader);
+            SubmitBase(data, spr, pos, shader);
             return;
         }
 
@@ -115,20 +152,20 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         {
             if (!baseSubmitted && layer.Order >= 0)
             {
-                SubmitBase(data, spr, transform, shader);
+                SubmitBase(data, spr, pos, shader);
                 baseSubmitted = true;
             }
-            DrawLayer(comp, data, transform, layer);
+            DrawLayer(comp, data, transform, layer, pos);
         }
 
         if (!baseSubmitted)
-            SubmitBase(data, spr, transform, shader);
+            SubmitBase(data, spr, pos, shader);
     }
 
-    private void SubmitBase(SpriteRenderData data, Sprite2D spr, TransformComponent transform, Effect? shader)
+    private void SubmitBase(SpriteRenderData data, Sprite2D spr, Vector2 pos, Effect? shader)
     {
         if (!data.HideBaseSprite)
-            _renderMan.Submit(spr, transform.Position, shader);
+            _renderMan.Submit(spr, pos, shader);
     }
 
     private static void SortLayers(SpriteComponent comp)
@@ -139,7 +176,7 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         comp.LayersDirty = false;
     }
 
-    private void DrawLayer(SpriteComponent comp, SpriteRenderData data, TransformComponent trans, SpriteLayer layer)
+    private void DrawLayer(SpriteComponent comp, SpriteRenderData data, TransformComponent trans, SpriteLayer layer, Vector2 pos)
     {
         if (!layer.Visible) return;
 
@@ -151,8 +188,8 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         var spr = sprite.Value;
         UpdateLayerFields(layer, trans, comp, ref spr);
         spr.Rotation += data.DrawRotation;
+        spr.Depth = data.DrawDepth ?? spr.Depth;
 
-        var pos = trans.Position;
         if (layer.Offset != Vector2.Zero)
             pos += Vector2.Transform(layer.Offset, Matrix.CreateRotationZ(trans.Angle + data.DrawRotation));
 
@@ -324,7 +361,14 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     {
         var data = GetData(uid);
         var target = layerId is null ? data.Base : GetLayerTarget(data, layerId);
+        if (target.DrawKey == key)
+            return;
+
         target.DrawKey = key;
+
+        // another key can be another size
+        if (layerId is not null && TryComp<SpriteComponent>(uid, out var comp))
+            comp.LayerReachDirty = true;
     }
 
     /// <summary>
@@ -352,6 +396,25 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     /// </summary>
     public void SetDrawRotation(EntityUid uid, float radians)
         => GetData(uid).DrawRotation = radians;
+
+    /// <summary>
+    /// Draws the sprite and its layers at <paramref name="depth"/> instead of the component own until it is set
+    /// back to null.
+    /// </summary>
+    public void SetDrawDepth(EntityUid uid, float? depth)
+    {
+        // nothing to undo for a sprite that was never drawn with an override
+        if (depth is null && !_render.ContainsKey(uid))
+            return;
+
+        GetData(uid).DrawDepth = depth;
+    }
+
+    /// <summary>
+    /// The depth the sprite is drawn at: the one set through <see cref="SetDrawDepth"/>, or the component's own.
+    /// </summary>
+    public float GetDrawDepth(SpriteComponent comp)
+        => _render.TryGetValue(comp.Owner, out var data) && data.DrawDepth is { } depth ? depth : comp.Depth;
 
     /// <summary>
     /// Draws the sprite and its layers with <paramref name="shader"/> instead of their own until it is set back to

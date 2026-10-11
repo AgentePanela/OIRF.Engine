@@ -1,3 +1,5 @@
+using Microsoft.Xna.Framework;
+
 namespace Engine.Shared.GameObjects;
 
 /// <summary>
@@ -16,6 +18,7 @@ public sealed class Camera2DComponent : Component
     /// If true it will set the camera position to the entity transform comp position.
     /// </summary>
     public bool UsePosition { get; set; } = true;
+    public Vector2 Offset { get; set; } = Vector2.Zero;
 
     /// <summary>
     /// If true, the cam rotation will turn to the entity transform comp angle.

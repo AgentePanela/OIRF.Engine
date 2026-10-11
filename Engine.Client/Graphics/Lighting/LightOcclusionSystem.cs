@@ -112,14 +112,17 @@ public sealed class LightOcclusionSystem : EntitySystem
 
         if (entMan.TryComp<SpriteComponent>(uid, out var spriteComp))
         {
+            center += spriteComp.Offset;
+            float away = spriteComp.Offset.Length();
+
             _sprites ??= IoCManager.Resolve<SpriteSystem>();
             if (_sprites.GetSprite(spriteComp) is { CachedRegion: var region } && region.Width > 0 && region.Height > 0)
-                return CacheExtent(occluder, center, region.Width, region.Height);
+                return CacheExtent(occluder, center, region.Width, region.Height, away);
 
             if (!string.IsNullOrEmpty(spriteComp.Key) &&
                 _assetMan.GetTexture(spriteComp.Key, out var atlasSpr, out _))
             {
-                return CacheExtent(occluder, center, atlasSpr.Region.Width, atlasSpr.Region.Height);
+                return CacheExtent(occluder, center, atlasSpr.Region.Width, atlasSpr.Region.Height, away);
             }
         }
 
@@ -131,9 +134,9 @@ public sealed class LightOcclusionSystem : EntitySystem
 
     // grow-only, so a sprite that shrinks leaves an over-estimate behind
     // rather than a broad-phase reject it shouldn't have made
-    private static Rectangle CacheExtent(OccluderComponent occluder, Vector2 center, int w, int h)
+    private static Rectangle CacheExtent(OccluderComponent occluder, Vector2 center, int w, int h, float away)
     {
-        float half = MathF.Max(w, h) * 0.5f;
+        float half = MathF.Max(w, h) * 0.5f + away;
         if (half > occluder.CachedSpriteHalfExtent)
             occluder.CachedSpriteHalfExtent = half;
 

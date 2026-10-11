@@ -135,6 +135,17 @@ components:
     layer: 5
 ```
 
+`offset` draws the sprite and its layers away from the transform position without moving the entity. Use it to keep a
+tall entity's position on the ground (its feet) while the sprite stands above it. It does not turn with the transform
+angle.
+
+```yaml
+components:
+  - type: Sprite
+    key: player/idle   # 32x64
+    offset: [0, -32]   # the bottom of the sprite sits on the transform position
+```
+
 ---
 
 ## Shapes

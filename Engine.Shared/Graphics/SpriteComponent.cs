@@ -28,6 +28,11 @@ public class SpriteComponent : Component
     public Color Color { get; set { field = value; DirtyBase(); } } = Color.White;
     public Vector2? Origin { get; set { field = value; DirtyBase(); } }
 
+    /// <summary>
+    /// Where the sprite and its layers are drawn, away from the transform position. ONLY VISUAL
+    /// </summary>
+    public Vector2 Offset { get; set { field = value; DirtyBase(); } } = Vector2.Zero;
+
     public SamplerState? SamplerState { get; set { field = value; DirtyBase(); } }
     public SpriteEffects Effects { get; set { field = value; DirtyBase(); } } = SpriteEffects.None;
 
@@ -61,6 +66,7 @@ public class SpriteComponent : Component
         if (reordered)
             LayersDirty = true;
 
+        LayerReachDirty = true;
         Dirty();
     }
 
@@ -68,6 +74,7 @@ public class SpriteComponent : Component
     {
         LayerSetTick = EntityManager.Instance?.CurTick ?? GameTick.Zero;
         LayersDirty = true;
+        LayerReachDirty = true;
         Dirty();
     }
 
@@ -75,6 +82,16 @@ public class SpriteComponent : Component
     /// set when a layer Order changes so SpriteSystem re-sorts before the next draw.
     /// </summary>
     internal bool LayersDirty = true;
+
+    /// <summary>
+    /// set when a layer changes so SpriteSystem measures <see cref="LayerReach"/> again before culling with it.
+    /// </summary>
+    internal bool LayerReachDirty = true;
+
+    /// <summary>
+    /// How far from the sprite position its layers can draw, unscaled.
+    /// </summary>
+    internal float LayerReach;
 
     internal GameTick BaseTick;
     internal GameTick LayerSetTick;
@@ -128,6 +145,7 @@ public class SpriteComponent : Component
         Color = Color,
         HasOrigin = Origin is not null,
         Origin = Origin ?? Vector2.Zero,
+        Offset = Offset,
         Sampler = SamplerPresets.IndexOf(SamplerState),
         Effects = (byte)Effects,
         Shader = Shader,
@@ -144,6 +162,7 @@ public class SpriteComponent : Component
         Depth = s.Depth;
         Color = s.Color;
         Origin = s.HasOrigin ? s.Origin : null;
+        Offset = s.Offset;
         SamplerState = SamplerPresets.Get(s.Sampler);
         Effects = (SpriteEffects)s.Effects;
         Shader = s.Shader;
@@ -243,6 +262,35 @@ public sealed class SpriteLayer
         LastModifiedTick = EntityManager.Instance?.CurTick ?? GameTick.Zero;
         Owner?.OnLayerChanged(reordered);
     }
+
+    /// <summary>
+    /// The layers a copy of the sprite starts with. <see cref="Local"/> ones stay behind: the system that made them
+    /// makes them again for the copy.
+    /// </summary>
+    internal static List<SpriteLayer> CopyAll(List<SpriteLayer> layers)
+    {
+        var copies = new List<SpriteLayer>(layers.Count);
+        foreach (var layer in layers)
+        {
+            if (layer.Local)
+                continue;
+
+            copies.Add(new SpriteLayer
+            {
+                Id = layer.Id,
+                Order = layer.Order,
+                Visible = layer.Visible,
+                Key = layer.Key,
+                Color = layer.Color,
+                Origin = layer.Origin,
+                SamplerState = layer.SamplerState,
+                Offset = layer.Offset,
+                Shader = layer.Shader,
+            });
+        }
+
+        return copies;
+    }
 }
 
 [Serializable]
@@ -254,6 +302,7 @@ public sealed class SpriteComponentState : IComponentState
     public Color Color;
     public bool HasOrigin;
     public Vector2 Origin;
+    public Vector2 Offset;
     public byte Sampler;
     public byte Effects;
     public string? Shader;
@@ -267,6 +316,7 @@ public sealed class SpriteComponentState : IComponentState
         Color = Color,
         HasOrigin = HasOrigin,
         Origin = Origin,
+        Offset = Offset,
         Sampler = Sampler,
         Effects = Effects,
         Shader = Shader,
