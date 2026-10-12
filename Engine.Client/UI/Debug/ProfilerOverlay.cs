@@ -17,13 +17,13 @@ using MonoGame.Framework.Utilities;
 namespace Engine.Client.UI.Debug;
 
 /// <summary>
-/// F3-style overlay: general/camera/render/memory stats on the left, a per-system
+/// general/camera/render/memory stats on the left, a per-system
 /// update/draw bar chart on the right.
 /// </summary>
 public sealed class ProfilerOverlay : Overlay
 {
     [Dependency] private readonly Camera2D _camera = default!;
-    [Dependency] private readonly RenderManager _renderMan = default!;
+    [Dependency] private readonly IRenderManager _renderMan = default!;
     [Dependency] private readonly IConfigurationManager _cfg = default!;
     [Dependency] private readonly SystemsProfiler _profiler = default!;
     [Dependency] private readonly INetManager _net = default!;
@@ -47,6 +47,8 @@ public sealed class ProfilerOverlay : Overlay
     private readonly Label _renderLabel;
     private readonly Label _memoryLabel;
     private readonly Label _stateLabel;
+
+    private readonly Label _renderStatsLabel;
 
     private readonly BoxContainer _netPanel;
     private readonly Label _netLabel;
@@ -106,6 +108,20 @@ public sealed class ProfilerOverlay : Overlay
         left.AddChild(new Separator());
         left.AddChild(_stateLabel);
 
+        var renderPanel = new BoxContainer
+        {
+            Orientation = Orientation.Vertical,
+            Separation = 4,
+            Background = PanelBg,
+            Padding = new(8, 6),
+            MinWidth = 260,
+        };
+        leftColumn.AddChild(renderPanel);
+
+        renderPanel.AddChild(new Label { Text = "RENDERING", FontSize = 28f, Color = Color.White });
+        _renderStatsLabel = CreateLabel();
+        renderPanel.AddChild(_renderStatsLabel);
+
         _netPanel = new BoxContainer
         {
             Orientation = Orientation.Vertical,
@@ -144,6 +160,7 @@ public sealed class ProfilerOverlay : Overlay
         _drawRows = BuildRows(right, RowsPerSection, DrawBarColor);
 
         RefreshStats();
+        RefreshRendering();
         RefreshSystems();
         RefreshNetworking();
     }
@@ -157,6 +174,7 @@ public sealed class ProfilerOverlay : Overlay
 
         _refreshTimer = 0f;
         RefreshStats();
+        RefreshRendering();
         RefreshSystems();
         RefreshNetworking();
     }
@@ -176,11 +194,28 @@ public sealed class ProfilerOverlay : Overlay
         var entityCount = GameClient.EntityManager.GetEntityCount();
         _resourcesLabel.Text = $"Resolution: {gfx.PreferredBackBufferWidth}x{gfx.PreferredBackBufferHeight} | Entities: {entityCount}";
 
-        _renderLabel.Text = $"Render draw: {FormatMs(_renderMan.DrawStopwatch.Elapsed.TotalMilliseconds)}\n" +
-                             UIProfiler.LogSnapshot(true).TrimEnd();
+        _renderLabel.Text = UIProfiler.LogSnapshot(true).TrimEnd();
 
         _memoryLabel.Text = MemoryMeter.GetInfo();
         _stateLabel.Text = $"State: {GameClient.GameState} | Elapsed: {FormatTime(time.TotalTime)}";
+    }
+
+    private void RefreshRendering()
+    {
+        var stats = _renderMan.Stats;
+        var text =
+            $"World: {FormatMs(stats.TotalMs)} (submit {FormatMs(stats.SubmitMs)} | sort {FormatMs(stats.SortMs)} | " +
+            $"flush {FormatMs(stats.FlushMs)} | present {FormatMs(stats.PresentMs)})\n" +
+            $"Draw calls: {stats.DrawCalls} | Triangles: {stats.Primitives} | Texture swaps: {stats.TextureSwaps}\n" +
+            $"Batches: {stats.Batches} ({stats.SpriteBatches} sprite, {stats.ShapeBatches} shape)\n" +
+            $"Breaks: {stats.BreaksByShader} shader | {stats.BreaksBySampler} sampler | {stats.BreaksByUnshaded} unshaded | " +
+            $"{stats.BreaksByKind} sprite/shape\n" +
+            $"Submitted: {stats.Submitted} | Culled: {stats.Culled} | Target switches: {stats.TargetSwitches}";
+
+        foreach (var viewport in stats.Viewports)
+            text += $"\n{viewport.Name}: {viewport.Width}x{viewport.Height} | {viewport.Items} items | {FormatMs(viewport.Ms)}";
+
+        _renderStatsLabel.Text = text;
     }
 
     private void RefreshSystems()

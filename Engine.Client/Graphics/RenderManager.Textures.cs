@@ -27,7 +27,7 @@ public sealed partial class RenderManager
     /// <summary>
     /// Draw a standalone Texture2D directly (not from atlas).
     /// </summary>
-    public void DrawRawTexture(Texture2D texture, Vector2 position,
+    public void DrawRawTexture2D(Texture2D texture, Vector2 position,
         Color color = default, float rotation = 0f, Vector2 origin = default, Vector2 scale = default, SpriteEffects effects = SpriteEffects.None,
         float layerDepth = 0f)
     {

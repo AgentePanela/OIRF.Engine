@@ -1,3 +1,4 @@
+using Engine.Client.Graphics;
 using Engine.Shared.GameObjects;
 
 /// <summary>
@@ -11,10 +12,10 @@ public interface IEntityDrawSystem
     bool FreezeDraw { get; set; }
 
     /// <summary>
-    /// Called every frame to render the system.
+    /// Called every frame, once for each viewport being drawn, to render the system.
     /// Should contain rendering logic only.
     /// </summary>
-    void Draw(float dt);
+    void Draw(in DrawContext ctx);
 }
 
 /// <inheritdoc cref="IEntityDrawSystem"/>
@@ -23,7 +24,7 @@ public abstract class EntityDrawSystem : EntitySystem, IEntityDrawSystem
 {
     public bool FreezeDraw { get; set; } = false;
 
-    public virtual void Draw(float dt)
+    public virtual void Draw(in DrawContext ctx)
     {
     }
 }

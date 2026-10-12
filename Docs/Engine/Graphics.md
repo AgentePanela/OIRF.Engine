@@ -6,56 +6,64 @@ This document explains OIRF Engine's client-side rendering pipeline, covering qu
 
 ## 1. The Rendering Lifecycle
 
-OIRF Engine groups draw calls to minimize GPU state changes. In the game draw tick:
+The world is drawn into render targets, one per `RenderViewport`, and only then put on the window. In the game draw tick (`GameClient.Draw`):
 
 ```
-EntityManager.Draw() ──────────────► Submit draw entries (Sprites, text, chunks)
+SceneManager.Draw() ───────────────► the current scene submits (goes to the main viewport)
                                             │
                                             ▼
-RenderManager.Submit() ────────────► Add to SortedDictionary<int, List<RenderQueue>>
+RenderManager.RenderFrame() ───────► SyncMainViewport(): fit the main viewport to the window
                                             │
                                             ▼
-RenderManager.DrawQueue() ─────────► Begin SpriteBatch with camera matrix
+  for each enabled viewport, main last:
+    SetRenderTarget + Clear
+    Camera.CacheFrame()
+    EntityManager.DrawSystems(ctx) ──► systems Submit() what that viewport sees
+    DrawQueue() ─────────────────────► sort, then batch by shader and sampler
                                             │
                                             ▼
-[Render Loop] ─────────────────────► Batch draw calls by Shader and SamplerState
+  SetRenderTarget(null) + Clear ─────► main viewport target drawn onto the window
                                             │
                                             ▼
-RenderManager.End() ───────────────► Flush vertices to GPU
+InterfaceManager.Draw() ───────────► UI over it
 ```
+
+Secondary viewports are drawn before the main one so the main one can use their targets. Whatever is in the queue when `RenderFrame` starts was submitted outside of a viewport draw; it is set aside while the secondary viewports draw and handed to the main one.
+
+The backbuffer is no longer created with `RenderTargetUsage.PreserveContents`: every target switch happens before the window is drawn to, so nothing has to survive one.
 
 ---
 
 ## 2. Render Queue & Batching (`DrawQueue()`)
 
-The rendering engine works by delaying draws rather than rendering immediately. When systems draw, they submit an `IRenderable` instance (like a `SpriteComponent` or `TilemapChunk` renderable).
+The rendering engine works by delaying draws rather than rendering immediately. When systems draw, they submit an `IRenderable` instance (like a `Sprite2D` or a tilemap chunk renderable).
 
 ### 1. Zero-Allocation Struct Submission
-Boxing structures inside reference objects causes heavy garbage collector (GC) load. To prevent this, `Submit<T>` rents wrapper class instances from a pool (`RenderPool<T>.Rent()`). After drawing, these wrappers are returned (`ReturnToPool()`).
+Boxing structures inside reference objects causes heavy garbage collector (GC) load. To prevent this, `Submit<T>` rents wrapper class instances from a pool (`RenderPool<T>.Rent()`). After drawing, these wrappers are returned (`ReturnToPool()`). The rented boxes are kept together with the queue they were submitted to (`QueueBuffer`), so setting a queue aside never returns boxes that are still waiting to be drawn.
 
 ### 2. State Batch Sorting
-Draw submissions are placed inside `_renderQueue`, sorted by layer ID (`int`). When rendering the queue:
-* The system opens the batch with the camera translation view matrix (`_camera.GetViewMatrix()`).
-* It loops through the items. If an item requests a different shader (`Effect`) or `SamplerState` (texture filter mode) than the current one, the system ends the current batch, starts a new batch with the new states, and continues.
-* This automatically clusters drawing passes by layer, shader, and sampler, keeping GPU draw call totals low.
+Entries are sorted by layer, then depth, then submit order. When rendering the queue:
+* Every batch starts with the view matrix of the viewport being drawn (`RenderViewport.GetViewMatrix()`).
+* It loops through the items. If an item requests a different shader (`Effect`) or `SamplerState` (texture filter mode) than the current one, or switches between sprites and shapes, the system ends the current batch and starts a new one.
+
+### 3. Stats
+`RenderManager` counts what it does into `RenderStats` while the frame is drawn and publishes the finished frame in `IRenderManager.Stats`: draw calls, triangles, texture swaps and target switches (from `GraphicsDevice.Metrics`, world only), batches and why each one broke, items submitted and culled, and the time spent submitting, sorting, flushing and presenting, plus a line per viewport. The profiler overlay shows them in its RENDERING panel.
 
 ---
 
-## 3. Viewport Scaling & Adapters (`ViewportAdapter`)
+## 3. Viewports, Scaling & Cameras
 
-To support resizing while keeping aspect ratios constant, the engine translates graphics:
+### 1. `RenderViewport`
+A viewport is a logical `Size` (what its camera centers on), a `RenderScale` (target pixels per world unit) and a `TargetSize` in pixels. Its view matrix is the camera matrix, times the scale, plus a whole-pixel translation that keeps the view centered when the target is not exactly `Size * RenderScale`.
 
-### 1. Aspect Ratio Letterbox
-* `ViewportAdapter` maintains virtual dimensions (e.g. `VirtualWidth` / `VirtualHeight`).
-* When the window client size changes, the adapter recalculates scaling matrices:
-  ```csharp
-  int viewportX = (pp.BackBufferWidth - _viewport.VirtualWidth) / 2;
-  int viewportY = (pp.BackBufferHeight - _viewport.VirtualHeight) / 2;
-  ```
-  This positions the game viewport centered on screen, displaying black bars (letterboxing) on the borders if aspect ratios do not align.
+### 2. The main viewport and the window
+`ViewportAdapter` still computes the scale that fits the game resolution to the window (`FitScaleOuter` / `FitScaleInteger`). `SyncMainViewport()` turns that into the main viewport:
+* `Size` is the game resolution and `RenderScale` the adapter's scale.
+* `TargetSize` is the scaled size clamped to the window, so when the scale crops (outer fit) only the visible part is drawn.
+* `ScreenOffset` is where the target sits on the window: centered, which is what leaves the letterbox bars when the scaled game is smaller than the window.
 
-### 2. Coordinate Translation
-The camera handles translating virtual coordinates to screen space. Developers can call `RenderManager.ScreenToWorld(Vector2 screenPos)` to convert screen clicks back into world coordinates.
+### 3. Coordinate Translation
+`Camera2D.ScreenToWorld` / `WorldToScreen` go through the viewport: subtract `ScreenOffset`, then the inverse view matrix. `Camera2D.CacheFrame()` stores the visible world box (taking rotation into account) for the `IsOnScreen` checks, and runs for each viewport before its draw systems.
 
 ---
 

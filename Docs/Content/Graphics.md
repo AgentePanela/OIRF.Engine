@@ -1,12 +1,57 @@
 # Graphics
 
-The ORIF Engine renders all 2D content through `RenderManager`. It wraps MonoGame's `SpriteBatch` with a layered render queue, camera transforms, and viewport management.
+The ORIF Engine renders all 2D content through `IRenderManager`. It wraps MonoGame's `SpriteBatch` with a layered render queue, camera transforms, and viewports.
 
 ---
 
 ## RenderManager
 
-`RenderManager` (accessible via `GameClient.Renderer`) is the central rendering API.
+`IRenderManager` (injected with `[Dependency]`, or `GameClient.Renderer`) is the central rendering API.
+
+## Viewports
+
+The world is never drawn straight onto the window. Each `RenderViewport` has its own camera and its own render target; the engine draws every enabled viewport into its target and then puts the main one on the window.
+
+```csharp
+RenderViewport main = _renderer.MainViewport;   // what the player sees, its camera is the Camera2D from IoC
+
+// another view of the world, drawn every frame before the main one
+RenderViewport cctv = _renderer.CreateViewport("Cctv", new Vector2(320, 180), renderScale: 1f);
+cctv.Camera.LookAt(somewhere);
+Texture2D frame = cctv.ColorTarget;              // last frame drawn, null until the first one
+
+_renderer.RemoveViewport(cctv);
+```
+
+| Member | Description |
+|---|---|
+| `Size` | The size the camera centers on, in world units at zoom 1 |
+| `RenderScale` | Target pixels per world unit at zoom 1 |
+| `TargetSize` | Target size in pixels. Defaults to `Size * RenderScale`; a different one keeps the view centered and crops or shows more |
+| `ClearColor` | What the target is cleared to (the scene background when null) |
+| `Enabled` | A disabled viewport is not drawn |
+| `Resize(size, renderScale, targetSize)` | Changes the three above; the target is recreated on the next draw |
+
+`IRenderManager.MainViewportScaling` says how the main viewport follows the window: `Scaled` (the game resolution fit to the window, the default), `Native` (one world unit per window pixel) or `Manual` (the engine leaves it alone). With `PresentMainViewport = false` the main viewport is still drawn into its target but not put on the window, and the engine UI is skipped - that is how the editor shows the world inside one of its own panels.
+
+### Draw systems run once per viewport
+
+`IEntityDrawSystem.Draw(in DrawContext ctx)` is called for each viewport being drawn. Anything that depends on the view has to come from the context, not from the main camera:
+
+```csharp
+public override void Draw(in DrawContext ctx)
+{
+    foreach (var (uid, xform) in GetEntitiesWithComp<TransformComponent>())
+    {
+        if (!ctx.Camera.IsOnScreen(xform.Position))   // the camera of the viewport being drawn
+            continue;
+
+        _renderer.DrawCircle(xform.Position, 2f, Color.Red);
+    }
+}
+```
+
+`DrawContext` carries `DeltaTime`, `Viewport`, `Camera` and `WorldBounds`. What a scene submits from its own `Draw(float dt)` goes to the main viewport.
 
 ### Render Queue
 
@@ -209,7 +254,7 @@ Matrix view = GameClient.Camera.GetViewMatrix();
 Vector2 world = GameClient.Camera.ScreenToWorld(screenPos);
 ```
 
-The camera transform is applied automatically when `RenderManager.DrawQueue()` runs.
+The camera transform of the viewport being drawn is applied automatically to everything in the queue. `Camera2D` from IoC and `GameClient.Camera` are the main viewport's camera; every other viewport has its own in `RenderViewport.Camera`.
 
 ---
 

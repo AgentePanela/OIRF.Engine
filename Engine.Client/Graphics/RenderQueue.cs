@@ -17,7 +17,7 @@ public interface IRenderable
     public float Depth { get; set; }
     public SamplerState? SamplerState { get; }
 
-    void Draw(RenderManager renderer, Vector2 pos);
+    void Draw(IRenderManager renderer, Vector2 pos);
 }
 
 /// <summary>

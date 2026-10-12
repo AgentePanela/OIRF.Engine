@@ -37,5 +37,5 @@ public struct NineSlice2D : IRenderable
         Size = size;
     }
 
-    public void Draw(RenderManager renderer, Vector2 pos) => renderer.DrawNineSlice(this, pos);
+    public void Draw(IRenderManager renderer, Vector2 pos) => renderer.DrawNineSlice(this, pos);
 }

@@ -17,14 +17,11 @@ namespace Engine.Client.Tilemap;
 /// <inheritdoc cref="SharedTilemapSystem"/>
 public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
 {
-    [Dependency] private readonly RenderManager _renderMan = default!;
+    [Dependency] private readonly IRenderManager _renderMan = default!;
     [Dependency] private readonly IAssetManager _assetMan = default!;
-    [Dependency] private readonly Camera2D _cam = default!;
     [Dependency] private readonly TerrainBlendingSystem _blending = default!;
 
     public bool FreezeDraw { get; set; } = false;
-
-    private float _totalTime;
 
     // cache textures
     private Dictionary<ProtoId<TilePrototype>, (AtlasPage page, AtlasSprite spr)> _textures = new();
@@ -47,7 +44,7 @@ public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
         public float Depth { get; set; }
         public SamplerState? SamplerState { get; set; }
 
-        public void Draw(RenderManager renderer, Vector2 pos)
+        public void Draw(IRenderManager renderer, Vector2 pos)
         {
             for (int x = 0; x < Tiles.GetLength(0); x++)
             for (int y = 0; y < Tiles.GetLength(1); y++)
@@ -63,7 +60,7 @@ public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
                 // draw blend overlay on top ih have one
                 var overlay = BlendOverlays[x, y];
                 if (overlay is not null)
-                    renderer.DrawRawTexture(overlay, tpos.Value, Color.White, scale: Vector2.One);
+                    renderer.DrawRawTexture2D(overlay, tpos.Value, Color.White, scale: Vector2.One);
             }
         }
     }
@@ -89,23 +86,14 @@ public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
         }
     }
 
-    public override void Update(float dt)
+    public void Draw(in DrawContext ctx)
     {
-        base.Update(dt);
-        _totalTime += dt;
-    }
-
-    public void Draw(float dt)
-    {
-        var vp = GameClient.GraphicsDevice.Viewport;
         var query = GetEntitiesWithComp<TilemapComponent, TransformComponent>();
-        var bounds = _cam.ViewportBounds;
         foreach ((var uid, var comp, var trans) in query)
         {
             var shader = ResolveShader(uid, comp.Shader);
-            UpdateShaderParams(shader, vp);
             foreach (var chunk in comp.Chunks.Values)
-                DrawChunk(uid, comp, shader, trans, chunk, bounds);
+                DrawChunk(ctx.Camera, uid, comp, shader, trans, chunk);
         }
     }
 
@@ -119,27 +107,18 @@ public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
         return path;
     }
 
-    private void UpdateShaderParams(ShaderPath shader, Viewport vp)
-    {
-        var effect = shader.Effect;
-        if (effect is null)
-            return;
-
-        effect.Parameters["Time"]?.SetValue(_totalTime);
-        effect.Parameters["ViewportSize"]?.SetValue(new Vector2(vp.Width, vp.Height));
-        effect.Parameters["ViewportOffset"]?.SetValue(new Vector2(vp.X, vp.Y));
-    }
-
-    private void DrawChunk(EntityUid uid, TilemapComponent comp, ShaderPath shader, TransformComponent trans,
-        TilemapChunk chunk, Rectangle bounds)
+    private void DrawChunk(Camera2D camera, EntityUid uid, TilemapComponent comp, ShaderPath shader, TransformComponent trans,
+        TilemapChunk chunk)
     {
         int worldChunkSize = comp.ChunkSize * comp.TileSize;
         float chunkWorldX = trans.Position.X + chunk.ChunkX * worldChunkSize;
         float chunkWorldY = trans.Position.Y + chunk.ChunkY * worldChunkSize;
 
-        var chunkRect = new Rectangle((int)chunkWorldX, (int)chunkWorldY, worldChunkSize, worldChunkSize);
-        if (!bounds.Intersects(chunkRect))
+        if (!camera.IsOnScreen(new Vector2(chunkWorldX, chunkWorldY), new Vector2(worldChunkSize)))
+        {
+            _renderMan.ReportCulled();
             return;
+        }
 
         var key = (uid, chunk.ChunkX, chunk.ChunkY);
         if (chunk.Dirty || !_renderCache.TryGetValue(key, out var renderable))

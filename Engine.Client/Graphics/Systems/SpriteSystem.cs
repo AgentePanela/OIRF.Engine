@@ -16,9 +16,8 @@ namespace Engine.Client.Graphics;
 /// </summary>
 public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 {
-    [Dependency] private readonly RenderManager _renderMan = default!;
+    [Dependency] private readonly IRenderManager _renderMan = default!;
     [Dependency] private readonly IAssetManager _assetMan = default!;
-    [Dependency] private readonly Camera2D _camera = default!;
 
     private const string PlaceholderKey = "EngineInternal/Placeholders/Null";
 
@@ -71,8 +70,9 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     private void OnSpriteRemoved(EntityUid uid, SpriteComponent comp, CompRemovedEvent args)
         => _render.Remove(uid);
 
-    public void Draw(float dt)
+    public void Draw(in DrawContext ctx)
     {
+        var camera = ctx.Camera;
         var query = GetEntitiesWithComp<SpriteComponent, TransformComponent>();
         foreach ((var uid, var comp, var transform) in query)
         {
@@ -86,8 +86,11 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 
             var spr = sprite.Value;
             var pos = transform.Position + comp.Offset;
-            if (!_camera.IsOnScreen(spr, pos) && !LayersOnScreen(comp, data, transform, pos))
+            if (!camera.IsOnScreen(spr, pos) && !LayersOnScreen(camera, comp, data, transform, pos))
+            {
+                _renderMan.ReportCulled();
                 continue;
+            }
 
             UpdateSpriteFields(comp, transform, ref spr);
             spr.Rotation += data.DrawRotation;
@@ -100,7 +103,7 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     /// Layers can draw away from the base sprite (an offset, or a bigger texture), so one of them may be on screen
     /// while the base is not.
     /// </summary>
-    private bool LayersOnScreen(SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Vector2 pos)
+    private bool LayersOnScreen(Camera2D camera, SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Vector2 pos)
     {
         if (comp.Layers is null || comp.Layers.Count == 0)
             return false;
@@ -110,7 +113,7 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 
         var scale = transform.Scale ?? Vector2.One;
         var reach = new Vector2(comp.LayerReach * MathF.Max(MathF.Abs(scale.X), MathF.Abs(scale.Y)));
-        return _camera.IsOnScreen(pos - reach, reach * 2f);
+        return camera.IsOnScreen(pos - reach, reach * 2f);
     }
 
     // the furthest a layer could get in any direction: its offset plus its whole size, wherever its origin is

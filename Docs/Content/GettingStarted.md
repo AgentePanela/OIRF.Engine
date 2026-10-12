@@ -82,7 +82,7 @@ Once the game is running you can access engine subsystems from anywhere via `Gam
 ```csharp
 GameClient.EntityManager   // EntityManager
 GameClient.Scenes          // SceneManager
-GameClient.Renderer        // RenderManager
+GameClient.Renderer        // IRenderManager
 GameClient.ShapeBatch      // ShapeBatch, backs shape drawing (see Graphics.md)
 GameClient.InputManager    // InputManager
 GameClient.Assets          // IAssetManager

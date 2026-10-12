@@ -68,7 +68,7 @@ tilemap.TileBlending = true; // enable terrain blending
 | `Shader` | `string?` | `null` | Name of a shader to apply to this tilemap, resolved via `ShaderManager` (see [Shaders](Shaders.md)) |
 | `Effect` | `Effect?` | `null` | Resolved automatically from `Shader`; do not set manually |
 
-Set `tilemap.Shader = "MetallicFloor";` and `TilemapSystem` takes care of resolving, caching, and updating the effect's `Time`/`ViewportSize` parameters every frame.
+Set `tilemap.Shader = "MetallicFloor";` and `TilemapSystem` takes care of resolving and caching the effect. `Time` and `ViewportSize` are set by the renderer, as for any other shader.
 
 ---
 

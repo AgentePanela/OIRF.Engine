@@ -97,7 +97,7 @@ public class GameClient : Game
     public static IAssetManager Assets { get; private set; }
     public static IAudioManager Audio { get; private set; }
     public static IPrototypeManager Prototypes { get; private set; }
-    public static RenderManager Renderer { get; private set; }
+    public static IRenderManager Renderer { get; private set; }
     public static IFontManager FontManager { get; private set; }
     public static SceneManager Scenes { get; private set; }
     public static EntityManager EntityManager { get; private set; }
@@ -118,6 +118,7 @@ public class GameClient : Game
     public GCMeter GCMeter = new();
 
     private bool _paused = false;
+    private static RenderManager _renderManager;
 
     /// <summary>
     /// Creates a new GameClient instance.
@@ -131,9 +132,6 @@ public class GameClient : Game
         s_instance = this;
 
         Graphics = new GraphicsDeviceManager(this);
-
-        Graphics.PreparingDeviceSettings += (_, e) => // stop cleaning the backbuffer everytime we change the rendertarget
-            e.GraphicsDeviceInformation.PresentationParameters.RenderTargetUsage = RenderTargetUsage.PreserveContents;
 
         Window.Title = options.Title;
         Window.AllowUserResizing = options.WindowResizing;
@@ -167,7 +165,7 @@ public class GameClient : Game
         IoCManager.Register<ViewportAdapter>();
         IoCManager.Register<Camera2D>();
         IoCManager.Register<LightingManager>();
-        IoCManager.Register<RenderManager>();
+        IoCManager.Register<IRenderManager, RenderManager>();
         IoCManager.Register<InputManager>();
         IoCManager.Register<IVirtualKeyboard, NullVirtualKeyboard>(); // platform-specific mobile backends override this
         IoCManager.Register<UIManager>();
@@ -180,7 +178,8 @@ public class GameClient : Game
         Audio = IoCManager.Resolve<IAudioManager>();
         Prototypes = IoCManager.Resolve<IPrototypeManager>();
         FontManager = IoCManager.Resolve<IFontManager>();
-        Renderer = IoCManager.Resolve<RenderManager>();
+        Renderer = IoCManager.Resolve<IRenderManager>();
+        _renderManager = (RenderManager)Renderer;
         Scenes = IoCManager.Resolve<SceneManager>();
         EntityManager = IoCManager.Resolve<EntityManager>();
         InputManager = IoCManager.Resolve<InputManager>();
@@ -284,6 +283,8 @@ public class GameClient : Game
         if (Viewport != null)
             Viewport.UpdateScaleMatrix();
 
+        _renderManager?.SyncMainViewport();
+
         WindowManager?.EnsureBounds(new Vector2(width, height));
 
         SuppressDraw();
@@ -308,7 +309,7 @@ public class GameClient : Game
         // Create the sprite batch instance.
         SpriteBatch = new SpriteBatch(GraphicsDevice);
         ShapeBatch = new ShapeBatch(GraphicsDevice);
-        Renderer.Init(SpriteBatch, ShapeBatch);
+        _renderManager.Init(SpriteBatch, ShapeBatch);
         InterfaceManager.Init();
         Components.Add(Scenes);
 
@@ -373,52 +374,17 @@ public class GameClient : Game
         if (_paused)
             return;
 
-        GraphicsDevice.Clear(Scenes.CurrentScene?.BackgroundColor ?? Options.BackgroundColor);
         Timing.UpdateFPS((float)gameTime.ElapsedGameTime.TotalSeconds);
 
-        /// estou passando isso pra cá, nao sei se é correto e está muito
-        /// de tarde no momento q to escrevendo pra procurar,
-        /// mas parecisava que o SceneManager recebesse a chamada de draw antes do renderer começar a
-        /// realmente desenhar algo, e como o scene manager é um draw game component, ele so 
-        /// recebe essa chamada quando ocoore o base.Draw();
+        // The scene manager is a drawable game component, so this is where the current scene gets its Draw and
+        // submits what it has: it has to come before the renderer draws the frame.
         base.Draw(gameTime);
 
-        // Lock the backbuffer viewport to the letterboxed rect before any
-        // world draw.
-        if (Renderer.Resizing)
-        {
-            if (Renderer.FinalTarget is not null)
-                Renderer.SetFullViewport(Renderer.FinalTarget.Width, Renderer.FinalTarget.Height);
-            else
-                Renderer.SetLetterboxedBackbufferViewport();
-        }
+        // every viewport into its target, then the main one onto the window
+        _renderManager.RenderFrame(Timing.DeltaTime, Scenes.CurrentScene?.BackgroundColor ?? Options.BackgroundColor);
 
-        if (GameState == GameState.Running)
-        {
-            Camera.CacheFrame();
-            EntityManager.Draw(Timing.DeltaTime);
-        }
-
-        Renderer.DrawQueue();
-
-        //Renderer.End();
-
-        // restore the viewport before drawing the UI
-        GraphicsDevice.Viewport = Renderer.FinalTarget is not null
-            ? new Viewport(0, 0, Renderer.FinalTarget.Width, Renderer.FinalTarget.Height)
-            : new Viewport(
-                0,
-                0,
-                GraphicsDevice.PresentationParameters.BackBufferWidth,
-                GraphicsDevice.PresentationParameters.BackBufferHeight
-            );
-
-        // A captured frame (Renderer.FinalTarget set) shouldn't bake in Myra UI.
-        if (Renderer.FinalTarget is null)
-        {
+        // whoever shows the main viewport on its own does not want the engine UI over it
+        if (Renderer.PresentMainViewport)
             InterfaceManager.Draw(Timing.DeltaTime);
-        }
-
-        //base.Draw(gameTime);
     }
 }

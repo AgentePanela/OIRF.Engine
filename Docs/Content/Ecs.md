@@ -268,14 +268,14 @@ public sealed class HealthSystem : EntitySystem
 
 ### EntityDrawSystem
 EntityDrawSystem is a client-side exclusive base class for systems that need to do draw calls (e.g SpriteSystem, TilemapSystem...).
-It inherites EntitySystem and all it methods. EntityDrawSystem only adds `Draw(float dt)` new method.
+It inherites EntitySystem and all it methods. EntityDrawSystem only adds the `Draw(in DrawContext ctx)` method, called once for each viewport being drawn (see [Graphics](Graphics.md)).
 ```cs
 public sealed class MySpriteSystem : EntityDrawSystem
 {
 
-    public override void Draw(float dt)
+    public override void Draw(in DrawContext ctx)
     {
-        // Only rendering logic here.
+        // Only rendering logic here. Cull with ctx.Camera, not the main camera.
     }
 
     /// All others EntitySystem methods still here...

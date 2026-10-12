@@ -55,7 +55,7 @@ public struct RawTexture : IRenderable
         Visible = visible;
     }
 
-    public void Draw(RenderManager renderer, Vector2 pos)
+    public void Draw(IRenderManager renderer, Vector2 pos)
     {
         renderer.DrawTexture(this, pos);
     }

@@ -70,18 +70,14 @@ public class ViewportAdapter
         VirtualWidth = (int)Math.Round(ops.Width * scale);
         VirtualHeight = (int)Math.Round(ops.Height * scale);
 
+        Scale = scale;
         _scaleMatrix = Matrix.CreateScale(scale, scale, 1f);
-
-        int viewportX = (screenWidth - VirtualWidth) / 2;
-        int viewportY = (screenHeight - VirtualHeight) / 2;
-
-        GameClient.GraphicsDevice.Viewport = new Viewport(
-            viewportX,
-            viewportY,
-            VirtualWidth,
-            VirtualHeight
-        );
     }
+
+    /// <summary>
+    /// How many window pixels one pixel of the game resolution takes.
+    /// </summary>
+    public float Scale { get; private set; } = 1f;
 
     public Matrix GetScaleMatrix() => _scaleMatrix;
 

@@ -7,141 +7,80 @@ using Engine.Shared.IoC;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 
 namespace Engine.Client.Graphics;
 
-/// <summary>
-/// Manage all 2D rendering features in the engine/game.
-/// </summary>
-public sealed partial class RenderManager
+/// <inheritdoc cref="IRenderManager"/>
+public sealed partial class RenderManager : IRenderManager
 {
     [Dependency] private readonly IAssetManager _asset = default!;
     [Dependency] private readonly ViewportAdapter _viewport = default!;
     [Dependency] private readonly Camera2D _camera = default!;
 
-    public bool Resizing = true;
-    public BlendState BlendState = BlendState.AlphaBlend;
+    public BlendState BlendState { get; set; } = BlendState.AlphaBlend;
     public SamplerState DefaultSampler => GameClient.Options.Samplimg;
 
-    /// <summary>
-    /// When set, redirects the frame's final composited output to this target instead of
-    /// the backbuffer.
-    /// </summary>
-    public RenderTarget2D? FinalTarget { get; set; }
+    public RenderViewport MainViewport { get; }
+    public IReadOnlyList<RenderViewport> Viewports => _viewports;
+    public MainViewportScaling MainViewportScaling { get; set; } = MainViewportScaling.Scaled;
+    public bool PresentMainViewport { get; set; } = true;
+    public RenderStats Stats { get; } = new();
 
-    private readonly List<RenderQueue> _renderQueue = new();
-    private readonly List<IPooledRenderable> _pooledEntries = new();
+    /// <summary>
+    /// every viewport but the main one
+    /// </summary>
+    private readonly List<RenderViewport> _viewports = new();
+
+    // The viewport being drawn right now, null outside of a frame.
+    private RenderViewport? _current;
+
+    /// <summary>
+    /// What is waiting to be drawn.
+    /// </summary>
+    private sealed class QueueBuffer
+    {
+        public readonly List<RenderQueue> Entries = new();
+        public readonly List<IPooledRenderable> Pooled = new();
+    }
+
+    private QueueBuffer _queue = new();
+
+    /// <summary>
+    /// holds what was submitted outside of a viewport draw while the other viewports are drawn
+    /// </summary>
+    private QueueBuffer _mainQueue = new();
 
     // Stamped on every RenderQueue entry as it's enqueued, so same-Depth entries
     // in a layer keep their submit order instead of jumping around.
     private int _submitCounter;
 
+    // counts for the frame being drawn, copied to Stats once it is done
+    private readonly RenderStats _frameStats = new();
+
     // Screen
     private SpriteBatch _spriteBatch;
     private ShapeBatch _shapeBatch;
 
-    /// <summary>
-    /// Controls the time that is loose trying to draw each frame.
-    /// </summary>
-    internal Stopwatch DrawStopwatch = new();
-
     public RenderManager()
     {
         IoCManager.ResolveDependencies(this);
+
+        MainViewport = new RenderViewport("Main", _camera);
+        MainViewport.Resize(new Vector2(GameClient.Options.Width, GameClient.Options.Height));
     }
 
     internal void Init(SpriteBatch batch, ShapeBatch shapeBatch)
     {
         _spriteBatch = batch;
         _shapeBatch = shapeBatch;
+        SyncMainViewport();
     }
-
-    #region Matrix
-
-    /// <summary>
-    /// Traslate a real position to the viewport virtual position.
-    /// </summary>
-    /// <param name="screenPos">Real screen position</param>
-    /// <returns>Translated virtual position</returns>
-    public Vector2 ScreenToWorld(Vector2 screenPos)
-    {
-        return _camera.ScreenToWorld(screenPos);
-    }
-
-    /// <summary>
-    /// Sets a plain full-size viewport (no letterboxing)
-    /// </summary>
-    public void SetFullViewport(int width, int height)
-        => GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, width, height);
-
-    internal void UpdateScaleMatrix()
-    {
-        _viewport.UpdateScaleMatrix();
-    }
-
-    // Shared viewport/transform-matrix setup used by both Begin() (SpriteBatch)
-    // and BeginShapes() (ShapeBatch)
-    private Matrix ComputeTransform()
-    {
-        // Only force a viewport swap when we're rendering directly to the backbuffer.
-        bool isOnBackbuffer = GameClient.GraphicsDevice.GetRenderTargets().Length == 0
-                              || GameClient.GraphicsDevice.GetRenderTargets()[0].RenderTarget is null;
-
-        if (isOnBackbuffer && Resizing)
-        {
-            var pp = GameClient.GraphicsDevice.PresentationParameters;
-            int viewportX = (pp.BackBufferWidth - _viewport.VirtualWidth) / 2;
-            int viewportY = (pp.BackBufferHeight - _viewport.VirtualHeight) / 2;
-
-            GameClient.GraphicsDevice.Viewport = new Viewport(
-                viewportX,
-                viewportY,
-                _viewport.VirtualWidth,
-                _viewport.VirtualHeight
-            );
-        }
-        else if (isOnBackbuffer)
-        {
-            GameClient.GraphicsDevice.Viewport = new Viewport(
-                0,
-                0,
-                GameClient.GraphicsDevice.PresentationParameters.BackBufferWidth,
-                GameClient.GraphicsDevice.PresentationParameters.BackBufferHeight
-            );
-        }
-
-        if (Resizing && isOnBackbuffer)
-            return _camera.GetViewMatrix();
-        else if (isOnBackbuffer)
-            return Matrix.Identity;
-        else
-            return _camera.GetViewMatrix(); // world-space draws into an offscreen target
-    }
-
-    /// <summary>
-    /// Sets the backbuffer viewport to the centered, scaled-virtual-size rect
-    /// used for letterboxing/pillarboxing.
-    /// </summary>
-    public void SetLetterboxedBackbufferViewport()
-    {
-        var pp = GameClient.GraphicsDevice.PresentationParameters;
-        int viewportX = (pp.BackBufferWidth - _viewport.VirtualWidth) / 2;
-        int viewportY = (pp.BackBufferHeight - _viewport.VirtualHeight) / 2;
-        GameClient.GraphicsDevice.Viewport = new Viewport(
-            viewportX,
-            viewportY,
-            _viewport.VirtualWidth,
-            _viewport.VirtualHeight);
-    }
-    #endregion
 
     #region Queue
 
-    /// <summary>
-    /// Add a IRenderable to be draw queued.
-    /// </summary>
     public void Submit(IRenderable renderable, Vector2 position, Effect? shader = null)
     {
         Enqueue(new RenderQueue(renderable, position, shader, IsEffectUnshaded(shader)));
@@ -152,7 +91,7 @@ public sealed partial class RenderManager
     {
         var box = RenderPool<T>.Rent();
         box.Value = renderable;
-        _pooledEntries.Add(box);
+        _queue.Pooled.Add(box);
         Enqueue(new RenderQueue(box, position, shader, IsEffectUnshaded(shader)));
     }
 
@@ -161,42 +100,41 @@ public sealed partial class RenderManager
         Enqueue(queue);
     }
 
-    /// <summary>
-    /// Add an <see cref="IShapeRenderable"/> to be draw queued.
-    /// </summary>
     public void SubmitShape<T>(T renderable, Vector2 position)
         where T : struct, IShapeRenderable
     {
         var box = ShapeRenderPool<T>.Rent();
         box.Value = renderable;
-        _pooledEntries.Add(box);
+        _queue.Pooled.Add(box);
         Enqueue(new RenderQueue(box, position, unshaded: renderable.Unshaded));
     }
 
     private void Enqueue(RenderQueue queue)
     {
         queue.SubmitOrder = _submitCounter++;
-        _renderQueue.Add(queue);
+        _queue.Entries.Add(queue);
+        _frameStats.Submitted++;
     }
 
-    /// <summary>
-    /// Draw all IRenderable in queue.
-    /// Call this after all submit calls.
-    /// </summary>
-    public void DrawQueue()
+    // Draws and empties the queue into the target that is set.
+    private void DrawQueue()
     {
-        _submitCounter = 0; // reset per frame so SubmitOrder doesnt climb toward int overflow
-        DrawStopwatch.Reset();
+        _submitCounter = 0; // reset per draw so SubmitOrder doesnt climb toward int overflow
 
-        if (_renderQueue.Count == 0)
+        if (_queue.Entries.Count == 0)
             return;
 
-        DrawStopwatch.Start();
-        DrawRenderQueue(_renderQueue, _pooledEntries);
-        DrawStopwatch.Stop();
+        var sortStart = Stopwatch.GetTimestamp();
+        _queue.Entries.Sort();
+        _frameStats.SortMs += Stopwatch.GetElapsedTime(sortStart).TotalMilliseconds;
+
+        var flushStart = Stopwatch.GetTimestamp();
+        DrawRenderQueue(_queue.Entries, _queue.Pooled);
+
+        _frameStats.FlushMs += Stopwatch.GetElapsedTime(flushStart).TotalMilliseconds;
     }
 
-    // Single draw loop for the merged queue. target/viewport must already be set.
+    // Single draw loop for the sorted queue. target/viewport must already be set.
     // Interleaves two batchers (SpriteBatch for sprites/text, ShapeBatch for debug
     // shapes).
     private void DrawRenderQueue(
@@ -209,15 +147,9 @@ public sealed partial class RenderManager
         SamplerState? currentSampler = null;
         bool currentUnshaded = false;
 
-        // Shaders working in screen space map their pixel position to a UV,
-        // and the pixel position is framebuffer relative - so they need the
-        // viewport rect, not the target size: a letterboxed viewport doesn't
-        // start at the origin.
+        // for shaders working in screen space
         var vp = GameClient.GraphicsDevice.Viewport;
         var viewportSize = new Vector2(vp.Width, vp.Height);
-        var viewportOffset = new Vector2(vp.X, vp.Y);
-
-        queue.Sort();
 
         foreach (var r in queue)
         {
@@ -229,14 +161,23 @@ public sealed partial class RenderManager
                     spriteOpen = false;
                     currentShader = null;
                     currentSampler = null;
+                    _frameStats.BreaksByKind++;
                 }
 
                 if (!shapeOpen || r.Target.SamplerState != currentSampler || r.Unshaded != currentUnshaded)
                 {
                     if (shapeOpen)
+                    {
                         EndShapes();
+                        if (r.Target.SamplerState != currentSampler)
+                            _frameStats.BreaksBySampler++;
+                        else
+                            _frameStats.BreaksByUnshaded++;
+                    }
 
                     BeginShapes(r.Target.SamplerState, DepthStencilState.None);
+
+                    _frameStats.ShapeBatches++;
                     shapeOpen = true;
                     currentSampler = r.Target.SamplerState;
                     currentUnshaded = r.Unshaded;
@@ -247,21 +188,30 @@ public sealed partial class RenderManager
                 if (shapeOpen)
                 {
                     EndShapes();
+
                     shapeOpen = false;
                     currentSampler = null;
+                    _frameStats.BreaksByKind++;
                 }
 
                 if (!spriteOpen || r.Shader != currentShader || r.Target.SamplerState != currentSampler || r.Unshaded != currentUnshaded)
                 {
                     if (spriteOpen)
+                    {
                         End();
+                        if (r.Shader != currentShader)
+                            _frameStats.BreaksByShader++;
+                        else if (r.Target.SamplerState != currentSampler)
+                            _frameStats.BreaksBySampler++;
+                        else
+                            _frameStats.BreaksByUnshaded++;
+                    }
 
                     var shaderToUse = r.Shader;
 
                     if (shaderToUse is not null)
                     {
                         shaderToUse.Parameters["ViewportSize"]?.SetValue(viewportSize);
-                        shaderToUse.Parameters["ViewportOffset"]?.SetValue(viewportOffset);
                         shaderToUse.Parameters["Time"]?.SetValue((float)GameClient.Timing.TotalTime);
 
                         if (r.Target is Boxed<Sprite2D> { Value.CachedTexture: { } texture } boxed) // The size of one texel of the texture the sprite samples (its atlas page)
@@ -276,6 +226,7 @@ public sealed partial class RenderManager
                     }
 
                     Begin(shaderToUse, r.Target.SamplerState, DepthStencilState.None);
+                    _frameStats.SpriteBatches++;
                     spriteOpen = true;
                     currentShader = r.Shader;
                     currentSampler = r.Target.SamplerState;
@@ -288,6 +239,7 @@ public sealed partial class RenderManager
 
         if (spriteOpen)
             End();
+
         if (shapeOpen)
             EndShapes();
 
@@ -295,15 +247,12 @@ public sealed partial class RenderManager
 
         foreach (var p in pooled)
             p.ReturnToPool();
+            
         pooled.Clear();
     }
 
     #endregion
 
-    /// <summary>
-    /// Prepares and begins a new sprite and text batch with the specified render state.
-    /// This should be called before any draw call.
-    /// </summary>
     public void Begin(Effect? effect = null, SamplerState? samplerState = null, DepthStencilState? depthStencilState = null)
     {
         var transform = ComputeTransform();
@@ -316,19 +265,11 @@ public sealed partial class RenderManager
             effect: effect);
     }
 
-    /// <summary>
-    /// Ends the SpriteBatch that flushes all batched text and sprites to the screen.
-    /// This should be called after <code>RenderManager.Start()</code>
-    /// </summary>
     public void End()
     {
         _spriteBatch.End();
     }
 
-    /// <summary>
-    /// Prepares and begins a new Apos.Shapes batch for shapes.
-    /// <see cref="EndShapes"/> should be called after all shape draw calls.
-    /// </summary>
     public void BeginShapes(SamplerState? samplerState = null, DepthStencilState? depthStencilState = null)
     {
         var transform = ComputeTransform();
@@ -340,9 +281,6 @@ public sealed partial class RenderManager
             depthStencilState: depthStencilState);
     }
 
-    /// <summary>
-    /// Ends the ShapeBatch and draw in the screen.
-    /// </summary>
     public void EndShapes()
     {
         _shapeBatch.End();

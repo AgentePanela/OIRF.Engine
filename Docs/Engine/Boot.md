@@ -108,8 +108,7 @@ Once `GameState == GameState.Running`:
 4. **ECS Update**: Ticks systems logic via `EntityManager.Update()`.
 
 ### Draw Loop
-1. **Clear Screen**: Clears the canvas buffer.
-2. **MonoGame Components**: Draw calls route through active game components (like `SceneManager`).
-3. **ECS Draw**: Invokes systems render logic via `EntityManager.Draw()`.
-4. **Queue Render**: Flushes all layers in `Renderer.DrawQueue()`.
-5. **UI Draw**: Draws the UI and windows overlay (`InterfaceManager.Draw()`).
+1. **MonoGame Components**: Draw calls route through active game components (like `SceneManager`), the current scene submits what it draws.
+2. **Viewports**: `RenderManager.RenderFrame()` draws each enabled viewport into its own target: clear, ECS draw systems (`Draw(in DrawContext)`), then the sorted queue.
+3. **Present**: Clears the window and puts the main viewport's target on it.
+4. **UI Draw**: Draws the UI and windows overlay (`InterfaceManager.Draw()`).
