@@ -120,7 +120,10 @@ public sealed class ShaderInstance : IDisposable
     public void SetParameter(string name, Vector4 value)
     {
         if (Effect?.Parameters[name] is not { } param)
+        {
+            Log.Warn($"Unknow shader param name {name} for instance using {Prototype ?? "NO PROTOTYPE"}");
             return;
+        }
 
         if (param.ParameterClass == EffectParameterClass.Scalar)
         {
@@ -137,7 +140,6 @@ public sealed class ShaderInstance : IDisposable
                     break;
             }
 
-            Log.Warn($"Unknow shader param name {name} for instance using {Prototype ?? "NO PROTOTYPE"}");
             return;
         }
 

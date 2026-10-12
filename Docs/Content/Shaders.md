@@ -7,6 +7,8 @@ A shader has two halves:
 
 Sprites and tilemaps never name a `.fx` file, they name a shader prototype.
 
+The engine ships no shaders of its own, only the header every shader includes (`Sprite.fxh`). Every shader named in this document (`Grayscale`, `Tint`, `Outline`, `Dissolve`...) is an example of one you would write.
+
 ```
 Resources/
   Shaders/
@@ -97,15 +99,15 @@ Declared by the header, set by the renderer. Just use them; never set them from 
 
 ```yaml
 - type: shader
-  id: WallCut             # what sprites put in `shader:`
-  path: WallCut           # the .fx file name, without extension. Defaults to the id
+  id: Dissolve            # what sprites put in `shader:`
+  path: Dissolve          # the .fx file name, without extension. Defaults to the id
   lit: true               # false: ignores the lighting (screens, glows, debug)
   blend: Alpha            # Alpha | Additive | Multiply | Opaque
   params:                 # starting values
-    CutFloor: 1
+    EdgeWidth: 0.05
   perSprite:              # parameters that travel with each sprite
-    CutLine: custom0
-    CutFloor: custom1.x
+    Amount: custom0.x
+    EdgeColor: custom1
 ```
 
 | Field | Default | Description |
@@ -165,14 +167,14 @@ This costs nothing: every sprite with this shader is drawn together.
 ```csharp
 [Dependency] private readonly ShaderManager _shaders = default!;
 
-_shaders.GetInstance("ScanLines")?.SetParameter("LineCount", 128f);
+_shaders.GetSharedInstance("ScanLines")?.SetParameter("LineCount", 128f);
 ```
 
-`GetInstance` returns the one `ShaderInstance` every sprite with that shader shares, so this changes all of them. Still drawn together.
+`GetSharedInstance` returns the one `ShaderInstance` every sprite with that shader shares, so this changes all of them. Still drawn together. `GetUniqueInstance` gives a copy with parameters of its own instead (dispose it when done); what is drawn with a copy is drawn apart from the rest.
 
 ### 3. Per sprite, the cheap way
 
-For a value that is different on each sprite (how far a wall is cut, the color of an outline), **do not** declare a parameter in the `.fx`. List it under `perSprite` in the prototype and read it from `Custom0` / `Custom1` in the shader:
+For a value that is different on each sprite (how far it has dissolved, the color of its outline), **do not** declare a parameter in the `.fx`. List it under `perSprite` in the prototype and read it from `Custom0` / `Custom1` in the shader:
 
 ```yaml
 - type: shader
@@ -195,10 +197,10 @@ float4 MainPS(SpritePixel input) : COLOR
 [Dependency] private readonly SpriteSystem _sprite = default!;
 
 _sprite.SetShaderParam(uid, null, "DrawColor", Color.Red);       // the base sprite
-_sprite.SetShaderParam(uid, "face", "CutFloor", 0.4f);           // one layer
+_sprite.SetShaderParam(uid, "face", "Amount", 0.4f);             // one layer
 ```
 
-The value is written into the vertices of that sprite. Sprites with different values are **still drawn in the same draw call**, which is the whole point: a room of walls each cut at a different height is one draw call, not one per wall.
+The value is written into the vertices of that sprite. Sprites with different values are **still drawn in the same draw call**, which is the whole point: a hundred sprites each at a different point of a dissolve are one draw call, not a hundred.
 
 Where a parameter goes:
 
@@ -216,7 +218,7 @@ Components have to follow each other (`xy`, `yzw`; not `xz`), and it is up to yo
 
 ### 4. Per sprite, the expensive way
 
-`SetShaderParam` with a name that is **not** under `perSprite` but is a parameter of the `.fx` still works: the sprite gets its own copy of the shader with that value. A sprite with its own copy cannot be drawn together with the others, so it costs a draw call of its own. Fine for one or two things on screen (the player under an effect), wrong for something every wall does.
+`SetShaderParam` with a name that is **not** under `perSprite` but is a parameter of the `.fx` still works: the sprite gets its own copy of the shader with that value. A sprite with its own copy cannot be drawn together with the others, so it costs a draw call of its own. Fine for one or two things on screen (the player under an effect), wrong for something a whole room of sprites does.
 
 The profiler's RENDERING panel shows how many copies exist (`Shaders: N shared | N owned`) and how many batches were split by a shader change (`Breaks: ... shader`).
 
@@ -231,72 +233,63 @@ The profiler's RENDERING panel shows how many copies exist (`Shaders: N shared |
 | The value is... | Put it in | Cost |
 |---|---|---|
 | Fixed for the shader | `params` | none |
-| Changing, same for every sprite | `GetInstance(id).SetParameter` | none |
+| Changing, same for every sprite | `GetSharedInstance(id).SetParameter` | none |
 | Different per sprite, up to 8 floats | `perSprite` + `SetShaderParam` | none |
 | Different per sprite, beyond that | `SetShaderParam` on a `.fx` parameter | one draw call per sprite |
 
 ---
 
-## Full example: cutting a wall
+## Full example: a dissolve, per sprite
 
-The wall cut fades out the part of a wall above a line. Each wall piece has its own line.
+Eats a sprite away from the top down, with a colored line where it is being eaten. How far along it is and the color of the line are different for each sprite, so both travel with it.
 
-Before the header existed, the shader had to be told where the sprite sat in its atlas page to work out a 0..1 position, and each wall needed its own shader copy to hold its own line:
-
-```hlsl
-// OLD - do not write shaders like this
-float4 SpriteRegion = float4(0, 0, 1, 1);   // set by the renderer, per batch
-float4 CutLine = float4(0, 0, 0, 0);        // one shader copy per wall piece
-float CutFloor = 1;
-
-float4 MainPS(VertexShaderOutput input) : COLOR
-{
-    float4 color = tex2D(SpriteTextureSampler, input.TextureCoordinates) * input.Color;
-    float2 local = (input.TextureCoordinates - SpriteRegion.xy) / SpriteRegion.zw;
-    float cut = min(lerp(CutLine.x, CutLine.y, local.x), CutFloor);
-    ...
-}
-```
-
-Now `LocalUV` is that 0..1 position, and the line travels with the sprite:
+`Shaders/Dissolve.fx`:
 
 ```hlsl
 #include "Sprite.fxh"
 
+// How tall the line is, 0..1 of the sprite. The same for every sprite: a plain parameter.
+float EdgeWidth = 0.05;
+
 float4 MainPS(SpritePixel input) : COLOR
 {
     float4 color = SampleSprite(input);
-    float4 cutLine = input.Custom0;     // CutLine
-    float cutFloor = input.Custom1.x;   // CutFloor
 
-    float2 local = input.LocalUV;
-    float cut = min(lerp(cutLine.x, cutLine.y, local.x), cutFloor);
+    float amount = input.Custom0.x;      // Amount: 0 leaves the sprite whole, 1 removes all of it
+    float4 edgeColor = input.Custom1;    // EdgeColor
 
-    float above = step(local.y, cut);
-    float edge = (1 - above) * step(local.y, cut + cutLine.z);
+    // LocalUV.y is 0 at the top of the sprite and 1 at its bottom, wherever it sits in its atlas page
+    float gone = step(input.LocalUV.y, amount);
+    float edge = (1 - gone) * step(input.LocalUV.y, amount + EdgeWidth) * step(0.001, amount);
 
-    color.rgb *= 1 - 0.65 * edge * cutLine.w;
-    return color * (1 - above * cutLine.w);
+    color.rgb = lerp(color.rgb, edgeColor.rgb * color.a, edge);
+    return color * (1 - gone);
 }
 
 SPRITE_TECHNIQUE(MainPS)
 ```
 
+The prototype:
+
 ```yaml
 - type: shader
-  id: WallCut
+  id: Dissolve
   perSprite:
-    CutLine: custom0
-    CutFloor: custom1.x
+    Amount: custom0.x
+    EdgeColor: custom1
   params:
-    CutFloor: 1
+    EdgeColor: [1, 0.5, 0, 1]     # what a sprite gets until it sets its own
 ```
 
+And from code:
+
 ```csharp
-_sprite.SetDrawShader(uid, "WallCut");
-_sprite.SetShaderParam(uid, layerId, "CutLine", new Vector4(left, right, edge, fade));
-_sprite.SetShaderParam(uid, layerId, "CutFloor", floor);
+_sprite.SetDrawShader(uid, "Dissolve");
+_sprite.SetShaderParam(uid, null, "Amount", progress);
+_sprite.SetShaderParam(uid, null, "EdgeColor", Color.Cyan);
 ```
+
+Every dissolving sprite on screen, whatever its `Amount` and `EdgeColor`, is drawn in the same draw call.
 
 ---
 
@@ -327,20 +320,48 @@ tilemap.Shader = "Grayscale";
 When submitting to the renderer yourself:
 
 ```csharp
-var shader = _shaders.GetInstance("Grayscale");
+var shader = _shaders.GetSharedInstance("Grayscale");
 _renderer.Submit(sprite, position, shader);
 
 // with per sprite values
 _renderer.Submit(sprite, position, shader, custom0: new Vector4(1, 0, 0, 1));
 ```
 
-`ShaderManager.Unlit` is a built in instance with no `.fx` at all: it draws like no shader, but ignores the lighting. Use it for debug drawing.
+`ShaderManager.UnshadedInstance` is a built in instance with no `.fx` at all: it draws like no shader, but ignores the lighting. Use it for debug drawing.
+
+---
+
+## On the whole screen (post effects)
+
+There is no separate kind of shader for the screen. A post effect draws the finished frame of a viewport as one sprite as big as the target, through any shader prototype:
+
+- `SampleSprite(input)` is the pixel of the frame.
+- `input.LocalUV` (and `input.UV`, they are the same here) runs 0..1 over the screen.
+- `TexelSize` is one pixel of the frame, `ScreenSize` its size in pixels, `Time` works as always.
+
+So `Grayscale` above already works as a post effect, unchanged:
+
+```csharp
+[Dependency] private readonly IRenderManager _renderer = default!;
+[Dependency] private readonly ShaderManager _shaders = default!;
+
+var gray = _shaders.GetUniqueInstance("Grayscale")!;
+gray.SetParameter("Saturation", 0f);
+
+_renderer.MainViewport.PostEffects.Add(gray);      // on
+_renderer.MainViewport.PostEffects.Remove(gray);   // off
+gray.Dispose();
+```
+
+`PostEffects` is a list on each `RenderViewport`, applied in order after everything else of that viewport; the engine UI is drawn after and is not affected. Each entry costs one full screen draw. Per sprite parameters get the prototype's starting values (there is only one "sprite"), so prefer plain parameters for a screen shader.
+
+For anything more than "run the frame through a shader" (only part of the screen, a mask, several textures), write a [render overlay](Graphics.md#render-overlays) that asks for the screen texture.
 
 ---
 
 ## Lighting
 
-A shader ignores the lighting when its prototype says `lit: false`. Nothing in the `.fx` decides it, and the name of the technique no longer matters.
+A shader ignores the lighting when its prototype says `lit: false`. Nothing in the `.fx` decides it: the simplest unlit shader is a `.fx` that only returns `SampleSprite(input)`, with a prototype like this.
 
 ```yaml
 - type: shader

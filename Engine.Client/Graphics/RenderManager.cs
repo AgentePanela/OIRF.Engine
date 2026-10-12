@@ -107,6 +107,26 @@ public sealed partial class RenderManager : IRenderManager
         _frameStats.Submitted++;
     }
 
+    public void Submit(RawTexture texture, Vector2 position, ShaderInstance? shader = null,
+        Vector4 custom0 = default, Vector4 custom1 = default)
+    {
+        ref var command = ref _queue.Add(texture.Layer, texture.Depth);
+        command.Kind = DrawCommandType.Sprite;
+        command.Lit = shader?.Lit ?? true;
+        command.Shader = shader;
+        command.Sampler = texture.SamplerState;
+        command.Position = position;
+        command.Texture = texture.Texture;
+        command.Source = texture.Region;
+        command.Color = texture.Color;
+        command.Rotation = texture.Rotation;
+        command.Origin = texture.Origin;
+        command.Scale = texture.Scale;
+        command.Custom0 = custom0;
+        command.Custom1 = custom1;
+        _frameStats.Submitted++;
+    }
+
     public void Submit(IRenderable renderable, Vector2 position, ShaderInstance? shader = null)
     {
         ref var command = ref _queue.Add(renderable.Layer, renderable.Depth);
@@ -137,6 +157,12 @@ public sealed partial class RenderManager : IRenderManager
         if (typeof(T) == typeof(Sprite2D))
         {
             Submit(Unsafe.As<T, Sprite2D>(ref renderable), position, shader);
+            return;
+        }
+
+        if (typeof(T) == typeof(RawTexture))
+        {
+            Submit(Unsafe.As<T, RawTexture>(ref renderable), position, shader);
             return;
         }
 

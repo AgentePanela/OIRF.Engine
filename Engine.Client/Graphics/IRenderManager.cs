@@ -67,6 +67,18 @@ public interface IRenderManager
     void RemoveViewport(RenderViewport viewport);
 
     /// <summary>
+    /// Every overlay added, in the order they draw within a stage.
+    /// </summary>
+    IReadOnlyList<RenderOverlay> Overlays { get; }
+
+    /// <summary>
+    /// Starts drawing an overlay, in every viewport it applies to.
+    /// </summary>
+    void AddOverlay(RenderOverlay overlay);
+
+    void RemoveOverlay(RenderOverlay overlay);
+
+    /// <summary>
     /// For draw systems to tell the profiler how much they skipped for being off screen.
     /// </summary>
     void ReportCulled(int count = 1);
@@ -79,10 +91,15 @@ public interface IRenderManager
     #region Queue
 
     /// <summary>
-    /// Queues a sprite. <paramref name="custom0"/> and <paramref name="custom1"/> are the two values the sprite
-    /// carries to its shader on its own (see perSprite in the shader prototype).
+    /// Queues a sprite. <paramref name="custom0"/> and <paramref name="custom1"/> is the shaders custom parameters.
     /// </summary>
     void Submit(Sprite2D sprite, Vector2 position, ShaderInstance? shader = null,
+        Vector4 custom0 = default, Vector4 custom1 = default);
+
+    /// <summary>
+    /// Queues a raw texture. <paramref name="custom0"/> and <paramref name="custom1"/> is the shaders custom parameters.
+    /// </summary>
+    void Submit(RawTexture texture, Vector2 position, ShaderInstance? shader = null,
         Vector4 custom0 = default, Vector4 custom1 = default);
 
     /// <summary>

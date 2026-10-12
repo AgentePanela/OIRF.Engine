@@ -18,7 +18,7 @@ RenderViewport main = _renderer.MainViewport;   // what the player sees, its cam
 // another view of the world, drawn every frame before the main one
 RenderViewport cctv = _renderer.CreateViewport("Cctv", new Vector2(320, 180), renderScale: 1f);
 cctv.Camera.LookAt(somewhere);
-Texture2D frame = cctv.ColorTarget;              // last frame drawn, null until the first one
+RawTexture? frame = cctv.Frame;                  // last frame drawn, null until the first one
 
 _renderer.RemoveViewport(cctv);
 ```
@@ -30,6 +30,8 @@ _renderer.RemoveViewport(cctv);
 | `TargetSize` | Target size in pixels. Defaults to `Size * RenderScale`; a different one keeps the view centered and crops or shows more |
 | `ClearColor` | What the target is cleared to (the scene background when null) |
 | `Enabled` | A disabled viewport is not drawn |
+| `PostEffects` | Shaders the finished frame is drawn through, in order (see [Shaders](Shaders.md#on-the-whole-screen-post-effects)) |
+| `Frame` | The last frame drawn, as a `RawTexture` ready to submit. Ask for it again each frame instead of keeping it |
 | `Resize(size, renderScale, targetSize)` | Changes the three above; the target is recreated on the next draw |
 
 `IRenderManager.MainViewportScaling` says how the main viewport follows the window: `Scaled` (the game resolution fit to the window, the default), `Native` (one world unit per window pixel) or `Manual` (the engine leaves it alone). With `PresentMainViewport = false` the main viewport is still drawn into its target but not put on the window, and the engine UI is skipped - that is how the editor shows the world inside one of its own panels.
@@ -62,7 +64,7 @@ Rather than drawing directly to the screen, you **submit** to the queue. The que
 _renderer.Submit(mySprite, position);
 
 // Submit with a shader (see Shaders.md)
-_renderer.Submit(mySprite, position, _shaders.GetInstance("Grayscale"));
+_renderer.Submit(mySprite, position, _shaders.GetSharedInstance("Grayscale"));
 ```
 
 Lower layer values are drawn first (behind).
@@ -83,11 +85,126 @@ public void Draw(IRenderManager renderer, Vector2 pos)
 }
 ```
 
+### Textures that are not sprites
+
+Anything that is not being handled by the atlas (the frame of another viewport, the screen texture an overlay gets) is drawn as a `RawTexture`:
+
+```csharp
+if (cctv.Frame is { } frame)
+{
+    frame.Size = new Vector2(320, 180);   // stretch it, whatever size the viewport renders at
+    frame.Layer = 5;
+    _renderer.Submit(frame, new Vector2(100, 100), shader);
+}
+```
+
+When creating your own textures prefer to add they in the TextureAtlas making them a `Sprite2D` instead of using `RawTextures` for everything.
+
 ### Screen-to-World Conversion
 
 ```csharp
 Vector2 worldPos = _renderer.ScreenToWorld(screenPosition);
 ```
+
+---
+
+## Render overlays
+
+A `RenderOverlay` draws at one point of every viewport's frame, outside of the entities: under the world, over it, or on the finished image. It is the place for what is not "an entity being drawn": a background, a field of view mask, markers over everything, an effect on the screen.
+
+```csharp
+public sealed class DamageFlashOverlay : RenderOverlay
+{
+    public override RenderStage Stage => RenderStage.Screen;
+
+    public float Strength;
+
+    public override void Draw(in RenderOverlayArgs args)
+    {
+        if (Strength <= 0f)
+            return;
+
+        // Screen stage: positions are pixels of the viewport's target
+        args.Renderer.DrawRect(args.ScreenBounds, fillColor: Color.Red * Strength);
+    }
+}
+
+// once, e.g. when a system inits
+_renderer.AddOverlay(_flash = new DamageFlashOverlay());
+
+// to stop
+_flash.Enabled = false;          // or _renderer.RemoveOverlay(_flash)
+```
+
+An overlay draws exactly like a draw system does: by submitting to `args.Renderer` (`Submit`, `DrawRect`, `DrawCircle`...). What it submits is sorted by layer and depth among what the same stage submitted, and drawn when the stage ends.
+
+### Stages
+
+In the order they happen for each viewport:
+
+| `RenderStage` | Positions are | Drawn |
+|---|---|---|
+| `BelowWorld` | world | On the cleared target, before anything of the world |
+| `World` | world | Together with what the draw systems submit, sorted with it by layer and depth |
+| `BeforeLighting` | world | Over the finished world, before the lighting is put on it |
+| `AfterLighting` | world | Over the lit world: not darkened by it |
+| `Screen` | pixels of the target, `(0, 0)` top left | Over everything. The viewport's post effects run right after |
+
+Lighting is being reworked: until it is back, `BeforeLighting` and `AfterLighting` simply draw one after the other.
+
+Text submitted in the `Screen` stage is in pixels too, so a `Label2D` there has the size its font says.
+
+### What an overlay gets
+
+| `RenderOverlayArgs` | |
+|---|---|
+| `Renderer` | Where to submit |
+| `Viewport`, `Camera` | The viewport being drawn and its camera |
+| `Stage` | The stage being drawn |
+| `WorldBounds` | The world area the viewport shows |
+| `ScreenBounds` | The whole target in pixels, for the `Screen` stage |
+| `DeltaTime` | |
+| `ScreenTexture` | The frame so far as a `RawTexture`, only when the overlay asks for it (below) |
+
+### Options
+
+| Member | Default | |
+|---|---|---|
+| `Stage` | required | When it draws |
+| `Order` | `0` | Among overlays of the same stage, lower draws first |
+| `Enabled` | `true` | |
+| `AppliesTo(viewport)` | every viewport | Return false to skip one, e.g. `=> viewport == _renderer.MainViewport` |
+| `RequestScreenTexture` | `false` | See below |
+
+Overlays run for every viewport, the main one and any other, unless `AppliesTo` says otherwise.
+
+### Reading the screen
+
+A target cannot be read while it is being drawn into. An overlay that needs what was drawn so far overrides `RequestScreenTexture`, and gets it in `args.ScreenTexture`:
+
+```csharp
+public sealed class UnderwaterOverlay : RenderOverlay
+{
+    private readonly ShaderInstance _shader;
+
+    public override RenderStage Stage => RenderStage.Screen;
+    public override bool RequestScreenTexture => true;
+
+    public UnderwaterOverlay(ShaderInstance shader) => _shader = shader;
+
+    public override void Draw(in RenderOverlayArgs args)
+    {
+        // draw the frame again over itself, through the shader, on the left half only
+        var frame = args.ScreenTexture!.Value;
+        frame.Region = new Rectangle(0, 0, args.ScreenBounds.Width / 2, args.ScreenBounds.Height);
+        args.Renderer.Submit(frame, Vector2.Zero, _shader);
+    }
+}
+```
+
+The frame the overlay draws on already has everything that was there, so it only needs to draw what changes. Asking for the screen texture costs a copy of the whole frame each time, and is not available in the `World` stage.
+
+To run the whole frame through a shader there is something simpler: the viewport's `PostEffects`, see [Shaders](Shaders.md#on-the-whole-screen-post-effects).
 
 ---
 

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Engine.Client.Graphics.Shaders;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -47,7 +49,28 @@ public sealed class RenderViewport : IDisposable
     /// <summary>
     /// The last frame drawn for this viewport, null until it is drawn once.
     /// </summary>
-    public RenderTarget2D? ColorTarget { get; private set; }
+    public RenderTarget2D? Target { get; private set; }
+
+    /// <summary>
+    /// The last frame drawn, ready to be submitted: its top left sits on the position it is submitted at. Null until
+    /// the viewport is drawn once.
+    /// </summary>
+    public RawTexture? Frame => Target is { } target ? new RawTexture(target) { Origin = Vector2.Zero } : null;
+
+    /// <summary>
+    /// Shaders the finished frame is drawn through, one after the other, after the Screen stage. Any shader works:
+    /// the frame is a sprite as big as the target, so LocalUV runs 0..1 over the screen.
+    /// </summary>
+    public List<ShaderInstance> PostEffects { get; } = new();
+
+    /// <summary>
+    /// The light of this viewport.
+    /// </summary>
+    // todo: light rework
+    public RenderTarget2D? LightTarget { get; internal set; }
+
+    // The other target of the same size: reading the frame while drawing needs one to read and one to draw into.
+    private RenderTarget2D? _scratch;
 
     // todo: multi z
     // public int Z { get; set; }
@@ -93,17 +116,44 @@ public sealed class RenderViewport : IDisposable
 
     internal RenderTarget2D EnsureTarget(GraphicsDevice device)
     {
-        if (ColorTarget is { IsDisposed: false } target && target.Width == TargetSize.X && target.Height == TargetSize.Y)
+        if (Target is { IsDisposed: false } target && target.Width == TargetSize.X && target.Height == TargetSize.Y)
             return target;
 
-        ColorTarget?.Dispose();
-        ColorTarget = new RenderTarget2D(device, TargetSize.X, TargetSize.Y, false, SurfaceFormat.Color, DepthFormat.None);
-        return ColorTarget;
+        Target?.Dispose();
+        Target = new RenderTarget2D(device, TargetSize.X, TargetSize.Y, false, SurfaceFormat.Color, DepthFormat.None);
+        return Target;
     }
+
+    /// <summary>
+    /// Makes the other target the one being drawn into and returns the one that held the frame, which can now be
+    /// read.
+    /// </summary>
+    internal RenderTarget2D SwapTargets(GraphicsDevice device)
+    {
+        var frame = EnsureTarget(device);
+
+        if (_scratch is not { IsDisposed: false } scratch || scratch.Width != frame.Width || scratch.Height != frame.Height)
+        {
+            _scratch?.Dispose();
+            scratch = new RenderTarget2D(device, frame.Width, frame.Height, false, SurfaceFormat.Color, DepthFormat.None);
+        }
+
+        Target = scratch;
+        _scratch = frame;
+        return frame;
+    }
+
+    /// <summary>
+    /// The video memory its targets take.
+    /// </summary>
+    internal long TargetBytes
+        => TargetSize.X * (long)TargetSize.Y * 4 * ((Target is null ? 0 : 1) + (_scratch is null ? 0 : 1));
 
     public void Dispose()
     {
-        ColorTarget?.Dispose();
-        ColorTarget = null;
+        Target?.Dispose();
+        Target = null;
+        _scratch?.Dispose();
+        _scratch = null;
     }
 }

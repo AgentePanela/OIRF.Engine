@@ -213,8 +213,13 @@ public sealed class ProfilerOverlay : Overlay
             $"Shaders: {stats.SharedShaders} shared | {stats.OwnedShaders} owned\n" +
             $"Submitted: {stats.Submitted} | Culled: {stats.Culled} | Target switches: {stats.TargetSwitches}";
 
+        text += $"\nPost effects: {stats.PostEffects} ({FormatMs(stats.PostProcessMs)}) | Targets: {stats.TargetBytes / (1024.0 * 1024.0):0.0}MB";
+
         foreach (var viewport in stats.Viewports)
             text += $"\n{viewport.Name}: {viewport.Width}x{viewport.Height} | {viewport.Items} items | {FormatMs(viewport.Ms)}";
+
+        foreach (var overlay in stats.Overlays)
+            text += $"\n{overlay.Name} ({overlay.Stage}): {FormatMs(overlay.Ms)}";
 
         _renderStatsLabel.Text = text;
     }

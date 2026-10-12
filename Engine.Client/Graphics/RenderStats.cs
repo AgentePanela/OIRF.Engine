@@ -9,6 +9,8 @@ public sealed class RenderStats
 {
     public readonly record struct ViewportStat(string Name, int Width, int Height, int Items, double Ms);
 
+    public readonly record struct OverlayStat(string Name, RenderStage Stage, double Ms);
+
     /// <summary>
     /// Entries queued to be drawn.
     /// </summary>
@@ -49,7 +51,16 @@ public sealed class RenderStats
     public double PresentMs;
     public double TotalMs;
 
+    public int PostEffects;
+    public double PostProcessMs;
+
+    /// <summary>
+    /// Video memory taken by the targets of the viewports drawn.
+    /// </summary>
+    public long TargetBytes;
+
     public readonly List<ViewportStat> Viewports = new();
+    public readonly List<OverlayStat> Overlays = new();
 
     public int Batches => SpriteBatches + ShapeBatches;
 
@@ -61,7 +72,11 @@ public sealed class RenderStats
         Quads = SharedShaders = OwnedShaders = 0;
         DrawCalls = Primitives = TextureSwaps = TargetSwitches = 0;
         SubmitMs = SortMs = FlushMs = PresentMs = TotalMs = 0;
+        PostEffects = 0;
+        PostProcessMs = 0;
+        TargetBytes = 0;
         Viewports.Clear();
+        Overlays.Clear();
     }
 
     internal void CopyFrom(RenderStats other)
@@ -88,7 +103,13 @@ public sealed class RenderStats
         PresentMs = other.PresentMs;
         TotalMs = other.TotalMs;
 
+        PostEffects = other.PostEffects;
+        PostProcessMs = other.PostProcessMs;
+        TargetBytes = other.TargetBytes;
+
         Viewports.Clear();
         Viewports.AddRange(other.Viewports);
+        Overlays.Clear();
+        Overlays.AddRange(other.Overlays);
     }
 }

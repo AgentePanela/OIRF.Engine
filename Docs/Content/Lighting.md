@@ -146,7 +146,7 @@ _lighting.LightIntensity = 1.2f;              // global brightness multiplier
 
 ## Unshaded Sprites
 
-Sprites are lit by default. To exclude a sprite from lighting entirely (UI elements drawn in world space, fullbright VFX, etc.), assign it a shader whose prototype says `lit: false` (see [Shaders](Shaders.md)), like `Unshaded`:
+Sprites are lit by default. To exclude a sprite from lighting entirely (UI elements drawn in world space, fullbright VFX, etc.), assign it a shader whose prototype says `lit: false` (see [Shaders](Shaders.md)). With one you wrote and called `Unshaded`:
 
 ```yaml
 components:

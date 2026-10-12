@@ -92,7 +92,7 @@ public sealed partial class RenderManager
         device.SetRenderTarget(null);
         device.Clear(clearColor);
 
-        if (PresentMainViewport && MainViewport.ColorTarget is { } frame)
+        if (PresentMainViewport && MainViewport.Target is { } frame)
         {
             _spriteBatch.Begin(SpriteSortMode.Deferred, BlendState.Opaque, SamplerState.PointClamp);
             _spriteBatch.Draw(frame, MainViewport.ScreenOffset, Color.White);
@@ -124,6 +124,8 @@ public sealed partial class RenderManager
         _current = viewport;
         viewport.Camera.CacheFrame();
 
+        DrawOverlays(viewport, RenderStage.BelowWorld, dt);
+
         if (GameClient.GameState == GameState.Running)
         {
             var submitStart = Stopwatch.GetTimestamp();
@@ -131,9 +133,25 @@ public sealed partial class RenderManager
             _frameStats.SubmitMs += Stopwatch.GetElapsedTime(submitStart).TotalMilliseconds;
         }
 
+        DrawOverlays(viewport, RenderStage.World, dt);
+
         var items = _queue.Count;
         DrawQueue();
+
+        DrawOverlays(viewport, RenderStage.BeforeLighting, dt);
+
+        // todo: light rework
+
+        DrawOverlays(viewport, RenderStage.AfterLighting, dt);
+
+        _screenSpace = true;
+        DrawOverlays(viewport, RenderStage.Screen, dt);
+        _screenSpace = false;
+
+        ApplyPostEffects(viewport);
+
         _current = null;
+        _frameStats.TargetBytes += viewport.TargetBytes;
 
         _frameStats.Viewports.Add(new RenderStats.ViewportStat(viewport.Name, viewport.TargetSize.X, viewport.TargetSize.Y,
             items, Stopwatch.GetElapsedTime(start).TotalMilliseconds));
@@ -141,7 +159,7 @@ public sealed partial class RenderManager
 
     // The transform every batch of the viewport being drawn starts with.
     private Matrix ComputeTransform()
-        => _current?.GetViewMatrix() ?? Matrix.Identity;
+        => _screenSpace ? Matrix.Identity : _current?.GetViewMatrix() ?? Matrix.Identity;
 
     #endregion
 }

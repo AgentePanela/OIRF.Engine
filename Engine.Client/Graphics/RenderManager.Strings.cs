@@ -76,7 +76,7 @@ public sealed partial class RenderManager
     {
         shrink = 1f;
 
-        if (_current is not { } viewport || font is not DynamicSpriteFont dynamic)
+        if (_screenSpace || _current is not { } viewport || font is not DynamicSpriteFont dynamic)
             return font;
 
         var onTarget = font.FontSize * viewport.RenderScale * viewport.Camera.Zoom;
