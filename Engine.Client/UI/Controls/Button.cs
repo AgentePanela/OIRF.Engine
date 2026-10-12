@@ -6,7 +6,7 @@ namespace Engine.Client.UI;
 /// <summary>
 /// A clickable button showing a centered line of text.
 /// </summary>
-public sealed partial class Button : BaseButton
+public partial class Button : BaseButton
 {
     private Label? _label;
 
