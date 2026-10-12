@@ -1,6 +1,7 @@
 using Apos.Shapes;
 using Engine.Client.Assets;
 using Engine.Client.Assets.Atlas;
+using Engine.Client.Graphics.Batching;
 using Engine.Client.Graphics.Fonts;
 using Engine.Client.Graphics.Shaders;
 using Engine.Shared.IoC;
@@ -10,6 +11,7 @@ using Microsoft.Xna.Framework.Graphics;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace Engine.Client.Graphics;
 
@@ -19,6 +21,7 @@ public sealed partial class RenderManager : IRenderManager
     [Dependency] private readonly IAssetManager _asset = default!;
     [Dependency] private readonly ViewportAdapter _viewport = default!;
     [Dependency] private readonly Camera2D _camera = default!;
+    [Dependency] private readonly ShaderManager _shaders = default!;
 
     public BlendState BlendState { get; set; } = BlendState.AlphaBlend;
     public SamplerState DefaultSampler => GameClient.Options.Samplimg;
@@ -40,22 +43,12 @@ public sealed partial class RenderManager : IRenderManager
     /// <summary>
     /// What is waiting to be drawn.
     /// </summary>
-    private sealed class QueueBuffer
-    {
-        public readonly List<RenderQueue> Entries = new();
-        public readonly List<IPooledRenderable> Pooled = new();
-    }
-
-    private QueueBuffer _queue = new();
+    private DrawCommandBuffer _queue = new();
 
     /// <summary>
     /// holds what was submitted outside of a viewport draw while the other viewports are drawn
     /// </summary>
-    private QueueBuffer _mainQueue = new();
-
-    // Stamped on every RenderQueue entry as it's enqueued, so same-Depth entries
-    // in a layer keep their submit order instead of jumping around.
-    private int _submitCounter;
+    private DrawCommandBuffer _mainQueue = new();
 
     // counts for the frame being drawn, copied to Stats once it is done
     private readonly RenderStats _frameStats = new();
@@ -63,6 +56,10 @@ public sealed partial class RenderManager : IRenderManager
     // Screen
     private SpriteBatch _spriteBatch;
     private ShapeBatch _shapeBatch;
+    private SpriteBatcher _batcher;
+
+    // The sampler of the command being drawn, what an IRenderable drawing itself goes back to after text.
+    private SamplerState _commandSampler = SamplerState.PointClamp;
 
     public RenderManager()
     {
@@ -76,28 +73,82 @@ public sealed partial class RenderManager : IRenderManager
     {
         _spriteBatch = batch;
         _shapeBatch = shapeBatch;
+        _batcher = new SpriteBatcher(GameClient.GraphicsDevice, _frameStats);
+        _textRenderer = new TextRenderer(GameClient.GraphicsDevice, _batcher);
         SyncMainViewport();
     }
 
     #region Queue
 
-    public void Submit(IRenderable renderable, Vector2 position, Effect? shader = null)
+    public void Submit(Sprite2D sprite, Vector2 position, ShaderInstance? shader = null,
+        Vector4 custom0 = default, Vector4 custom1 = default)
     {
-        Enqueue(new RenderQueue(renderable, position, shader, IsEffectUnshaded(shader)));
+        if (!TryResolveSprite(sprite, out var texture, out var region))
+            return;
+
+        region.X += (int)sprite.Offset.X;
+        region.Y += (int)sprite.Offset.Y;
+
+        ref var command = ref _queue.Add(sprite.Layer, sprite.Depth);
+        command.Kind = DrawCommandType.Sprite;
+        command.Lit = shader?.Lit ?? true;
+        command.Shader = shader;
+        command.Sampler = sprite.SamplerState;
+        command.Position = position;
+        command.Texture = texture;
+        command.Source = region;
+        command.Color = sprite.Color;
+        command.Rotation = sprite.Rotation;
+        command.Origin = sprite.Origin;
+        command.Scale = sprite.Scale;
+        command.Effects = sprite.Effects;
+        command.Custom0 = custom0;
+        command.Custom1 = custom1;
+        _frameStats.Submitted++;
     }
 
-    public void Submit<T>(T renderable, Vector2 position, Effect? shader = null)
+    public void Submit(IRenderable renderable, Vector2 position, ShaderInstance? shader = null)
+    {
+        ref var command = ref _queue.Add(renderable.Layer, renderable.Depth);
+        command.Target = renderable;
+        command.Position = position;
+        command.Sampler = renderable.SamplerState;
+
+        if (renderable is IShapeRenderable shape)
+        {
+            // shapes cannot hold a shader
+            command.Kind = DrawCommandType.Shape;
+            command.Lit = !shape.Unshaded;
+        }
+        else
+        {
+            command.Kind = DrawCommandType.Renderable;
+            command.Shader = shader;
+            command.Lit = shader?.Lit ?? true;
+        }
+
+        _frameStats.Submitted++;
+    }
+
+    public void Submit<T>(T renderable, Vector2 position, ShaderInstance? shader = null)
         where T : struct, IRenderable
     {
+        // a sprite is plain data, it needs no box
+        if (typeof(T) == typeof(Sprite2D))
+        {
+            Submit(Unsafe.As<T, Sprite2D>(ref renderable), position, shader);
+            return;
+        }
+
         var box = RenderPool<T>.Rent();
         box.Value = renderable;
         _queue.Pooled.Add(box);
-        Enqueue(new RenderQueue(box, position, shader, IsEffectUnshaded(shader)));
+        Submit((IRenderable)box, position, shader);
     }
 
     public void Submit(RenderQueue queue)
     {
-        Enqueue(queue);
+        Submit(queue.Target, queue.Position, queue.Shader);
     }
 
     public void SubmitShape<T>(T renderable, Vector2 position)
@@ -106,169 +157,97 @@ public sealed partial class RenderManager : IRenderManager
         var box = ShapeRenderPool<T>.Rent();
         box.Value = renderable;
         _queue.Pooled.Add(box);
-        Enqueue(new RenderQueue(box, position, unshaded: renderable.Unshaded));
-    }
-
-    private void Enqueue(RenderQueue queue)
-    {
-        queue.SubmitOrder = _submitCounter++;
-        _queue.Entries.Add(queue);
-        _frameStats.Submitted++;
+        Submit((IRenderable)box, position);
     }
 
     // Draws and empties the queue into the target that is set.
     private void DrawQueue()
     {
-        _submitCounter = 0; // reset per draw so SubmitOrder doesnt climb toward int overflow
-
-        if (_queue.Entries.Count == 0)
+        if (_queue.Count == 0)
             return;
 
         var sortStart = Stopwatch.GetTimestamp();
-        _queue.Entries.Sort();
+        _queue.Sort();
         _frameStats.SortMs += Stopwatch.GetElapsedTime(sortStart).TotalMilliseconds;
 
         var flushStart = Stopwatch.GetTimestamp();
-        DrawRenderQueue(_queue.Entries, _queue.Pooled);
+        DrawCommands(_queue);
+        _queue.Clear();
 
         _frameStats.FlushMs += Stopwatch.GetElapsedTime(flushStart).TotalMilliseconds;
     }
 
     // Single draw loop for the sorted queue. target/viewport must already be set.
-    // Interleaves two batchers (SpriteBatch for sprites/text, ShapeBatch for debug
-    // shapes).
-    private void DrawRenderQueue(
-        List<RenderQueue> queue,
-        List<IPooledRenderable> pooled)
+    // Interleaves two batchers (ours for sprites/text, ShapeBatch for debug shapes).
+    private void DrawCommands(DrawCommandBuffer queue)
     {
-        bool spriteOpen = false;
-        bool shapeOpen = false;
-        Effect? currentShader = null;
-        SamplerState? currentSampler = null;
-        bool currentUnshaded = false;
+        var shapeOpen = false;
+        SamplerState? shapeSampler = null;
 
-        // for shaders working in screen space
-        var vp = GameClient.GraphicsDevice.Viewport;
-        var viewportSize = new Vector2(vp.Width, vp.Height);
+        _batcher.Begin(ComputeTransform(), BlendState, (float)GameClient.Timing.TotalTime);
 
-        foreach (var r in queue)
+        for (var i = 0; i < queue.Count; i++)
         {
-            if (r.Target is IShapeRenderable)
+            ref var command = ref queue.Commands[queue.Order[i].Index];
+
+            if (command.Kind == DrawCommandType.Shape)
             {
-                if (spriteOpen)
+                if (!shapeOpen)
                 {
-                    End();
-                    spriteOpen = false;
-                    currentShader = null;
-                    currentSampler = null;
-                    _frameStats.BreaksByKind++;
+                    // the sprites before it have to be on the target before the shapes go over them
+                    _batcher.Flush();
+                    if (i > 0)
+                        _frameStats.BreaksByKind++;
+                }
+                else if (command.Sampler != shapeSampler)
+                {
+                    EndShapes();
+                    _frameStats.BreaksBySampler++;
+                    shapeOpen = false;
                 }
 
-                if (!shapeOpen || r.Target.SamplerState != currentSampler || r.Unshaded != currentUnshaded)
+                if (!shapeOpen)
                 {
-                    if (shapeOpen)
-                    {
-                        EndShapes();
-                        if (r.Target.SamplerState != currentSampler)
-                            _frameStats.BreaksBySampler++;
-                        else
-                            _frameStats.BreaksByUnshaded++;
-                    }
-
-                    BeginShapes(r.Target.SamplerState, DepthStencilState.None);
-
+                    BeginShapes(command.Sampler, DepthStencilState.None);
                     _frameStats.ShapeBatches++;
                     shapeOpen = true;
-                    currentSampler = r.Target.SamplerState;
-                    currentUnshaded = r.Unshaded;
+                    shapeSampler = command.Sampler;
                 }
+
+                command.Target!.Draw(this, command.Position);
+                continue;
+            }
+
+            if (shapeOpen)
+            {
+                EndShapes();
+                shapeOpen = false;
+                _frameStats.BreaksByKind++;
+            }
+
+            _commandSampler = command.Sampler ?? DefaultSampler;
+            _batcher.SetState(command.Shader, _commandSampler);
+            _batcher.Custom0 = command.Custom0;
+            _batcher.Custom1 = command.Custom1;
+
+            if (command.Kind == DrawCommandType.Sprite)
+            {
+                _batcher.Draw(command.Texture, command.Position, command.Source, command.Color, command.Rotation,
+                    command.Origin, command.Scale, command.Effects);
             }
             else
             {
-                if (shapeOpen)
-                {
-                    EndShapes();
-
-                    shapeOpen = false;
-                    currentSampler = null;
-                    _frameStats.BreaksByKind++;
-                }
-
-                if (!spriteOpen || r.Shader != currentShader || r.Target.SamplerState != currentSampler || r.Unshaded != currentUnshaded)
-                {
-                    if (spriteOpen)
-                    {
-                        End();
-                        if (r.Shader != currentShader)
-                            _frameStats.BreaksByShader++;
-                        else if (r.Target.SamplerState != currentSampler)
-                            _frameStats.BreaksBySampler++;
-                        else
-                            _frameStats.BreaksByUnshaded++;
-                    }
-
-                    var shaderToUse = r.Shader;
-
-                    if (shaderToUse is not null)
-                    {
-                        shaderToUse.Parameters["ViewportSize"]?.SetValue(viewportSize);
-                        shaderToUse.Parameters["Time"]?.SetValue((float)GameClient.Timing.TotalTime);
-
-                        if (r.Target is Boxed<Sprite2D> { Value.CachedTexture: { } texture } boxed) // The size of one texel of the texture the sprite samples (its atlas page)
-                        {
-                            shaderToUse.Parameters["TexelSize"]?.SetValue(new Vector2(1f / texture.Width, 1f / texture.Height));
-
-                            var region = boxed.Value.CachedRegion;
-                            shaderToUse.Parameters["SpriteRegion"]?.SetValue(new Vector4(
-                                (float)region.X / texture.Width, (float)region.Y / texture.Height,
-                                (float)region.Width / texture.Width, (float)region.Height / texture.Height));
-                        }
-                    }
-
-                    Begin(shaderToUse, r.Target.SamplerState, DepthStencilState.None);
-                    _frameStats.SpriteBatches++;
-                    spriteOpen = true;
-                    currentShader = r.Shader;
-                    currentSampler = r.Target.SamplerState;
-                    currentUnshaded = r.Unshaded;
-                }
+                command.Target!.Draw(this, command.Position);
             }
-
-            r.Target.Draw(this, r.Position);
         }
 
-        if (spriteOpen)
-            End();
+        _batcher.Flush();
 
         if (shapeOpen)
             EndShapes();
-
-        queue.Clear();
-
-        foreach (var p in pooled)
-            p.ReturnToPool();
-            
-        pooled.Clear();
     }
 
     #endregion
-
-    public void Begin(Effect? effect = null, SamplerState? samplerState = null, DepthStencilState? depthStencilState = null)
-    {
-        var transform = ComputeTransform();
-
-        _spriteBatch.Begin(
-            samplerState: samplerState ?? DefaultSampler,
-            transformMatrix: transform,
-            blendState: BlendState,
-            depthStencilState: depthStencilState,
-            effect: effect);
-    }
-
-    public void End()
-    {
-        _spriteBatch.End();
-    }
 
     public void BeginShapes(SamplerState? samplerState = null, DepthStencilState? depthStencilState = null)
     {

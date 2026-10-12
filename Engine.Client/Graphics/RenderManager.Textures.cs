@@ -12,16 +12,8 @@ public sealed partial class RenderManager
         Color color = default, float rotation = 0f, Vector2 origin = default, Vector2 scale = default, SpriteEffects effects = SpriteEffects.None,
         float layerDepth = 0f)
     {
-        _spriteBatch.Draw(
-            page.Texture,
-            position,
-            sprite.Region,
-            color,
-            rotation,
-            origin,
-            scale,
-            effects,
-            layerDepth);
+        _batcher.SetSampler(_commandSampler);
+        _batcher.Draw(page.Texture, position, sprite.Region, color, rotation, origin, scale, effects);
     }
 
     /// <summary>
@@ -31,16 +23,14 @@ public sealed partial class RenderManager
         Color color = default, float rotation = 0f, Vector2 origin = default, Vector2 scale = default, SpriteEffects effects = SpriteEffects.None,
         float layerDepth = 0f)
     {
-        _spriteBatch.Draw(
-            texture,
-            position,
-            null,
-            color,
-            rotation,
-            origin,
-            scale,
-            effects,
-            layerDepth);
+        _batcher.SetSampler(_commandSampler);
+        _batcher.Draw(texture, position, texture.Bounds, color, rotation, origin, scale, effects);
+    }
+
+    public void DrawQuad(Texture2D texture, Rectangle source, Vector2 position, Color color)
+    {
+        _batcher.SetSampler(_commandSampler);
+        _batcher.Draw(texture, position, source, color, 0f, Vector2.Zero, Vector2.One, SpriteEffects.None);
     }
 
     /// <summary>
@@ -77,30 +67,16 @@ public sealed partial class RenderManager
 
         region.X += (int)sprite.Offset.X;
         region.Y += (int)sprite.Offset.Y;
-        _spriteBatch.Draw(
-            texture,
-            position,
-            region,
-            sprite.Color,
-            sprite.Rotation,
-            sprite.Origin,
-            sprite.Scale,
-            sprite.Effects,
-            0f);
+
+        _batcher.SetSampler(_commandSampler);
+        _batcher.Draw(texture, position, region, sprite.Color, sprite.Rotation, sprite.Origin, sprite.Scale, sprite.Effects);
     }
 
     public void DrawTexture(RawTexture texture, Vector2 position)
     {
-        _spriteBatch.Draw(
-            texture.Texture,
-            position,
-            texture.Region,
-            texture.Color,
-            texture.Rotation,
-            texture.Origin,
-            texture.Scale,
-            SpriteEffects.None,
-            0f);
+        _batcher.SetSampler(_commandSampler);
+        _batcher.Draw(texture.Texture, position, texture.Region, texture.Color, texture.Rotation, texture.Origin,
+            texture.Scale, SpriteEffects.None);
     }
 
     public void DrawNineSlice(NineSlice2D slice, Vector2 position)
@@ -110,7 +86,8 @@ public sealed partial class RenderManager
 
         var dest = new Rectangle((int)position.X, (int)position.Y, (int)slice.Size.X, (int)slice.Size.Y);
 
+        _batcher.SetSampler(_commandSampler);
         foreach (var patch in NineSlicePatch.Compute(region, slice.Margin, dest))
-            _spriteBatch.Draw(texture, patch.Dest, patch.Source, slice.Tint);
+            _batcher.Draw(texture, patch.Dest, patch.Source, slice.Tint);
     }
 }

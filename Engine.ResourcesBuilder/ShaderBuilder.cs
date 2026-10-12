@@ -35,7 +35,7 @@ public static class ShaderBuilder
         {
             // Shaders are pre-processed in memory (source files under Shaders/
             // are never touched) - see ShaderLightingInjector.
-            var generatedRoot = ShaderLightingInjector.GenerateRoot(root, saveDir);
+            var generatedRoot = ShaderLightingInjector.GenerateRoot(root, saveDir, resourceFolders);
 
             // A fresh ContentBuilder per root
             var builder = new ShaderContentBuilder();

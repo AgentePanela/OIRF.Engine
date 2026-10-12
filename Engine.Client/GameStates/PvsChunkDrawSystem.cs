@@ -29,7 +29,7 @@ public sealed class PvsChunkDrawSystem : EntityDrawSystem
 
     public bool Enabled { get; set; }
 
-    private Effect? _unshaded;
+    private ShaderInstance? _unshaded;
     private bool _gridTooBigLogged;
 
     private int _chunkSize;
@@ -40,7 +40,7 @@ public sealed class PvsChunkDrawSystem : EntityDrawSystem
     {
         base.Init();
 
-        _unshaded = _shaderMan.GetShader("Unshaded");
+        _unshaded = _shaderMan.UnshadedInstance;
 
         _cfg.Subs(NetworkingCvars.NetPvsChunkSize, value => _chunkSize = value);
         _cfg.Subs(NetworkingCvars.NetPvsRange, value => _range = value);

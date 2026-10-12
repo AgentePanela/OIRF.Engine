@@ -23,10 +23,19 @@ public sealed class RenderStats
     public int ShapeBatches;
 
     // why a batch had to end and another begin
+    public int BreaksByTexture;
     public int BreaksByShader;
     public int BreaksBySampler;
-    public int BreaksByUnshaded;
+    public int BreaksByBlend;
     public int BreaksByKind;
+
+    /// <summary>
+    /// Sprites, glyphs and tiles sent through the sprite batch.
+    /// </summary>
+    public int Quads;
+
+    public int SharedShaders;
+    public int OwnedShaders;
 
     // from the graphics device, for the world only (the UI draws after)
     public int DrawCalls;
@@ -48,7 +57,8 @@ public sealed class RenderStats
     {
         Submitted = Culled = 0;
         SpriteBatches = ShapeBatches = 0;
-        BreaksByShader = BreaksBySampler = BreaksByUnshaded = BreaksByKind = 0;
+        BreaksByTexture = BreaksByShader = BreaksBySampler = BreaksByBlend = BreaksByKind = 0;
+        Quads = SharedShaders = OwnedShaders = 0;
         DrawCalls = Primitives = TextureSwaps = TargetSwitches = 0;
         SubmitMs = SortMs = FlushMs = PresentMs = TotalMs = 0;
         Viewports.Clear();
@@ -60,10 +70,14 @@ public sealed class RenderStats
         Culled = other.Culled;
         SpriteBatches = other.SpriteBatches;
         ShapeBatches = other.ShapeBatches;
+        BreaksByTexture = other.BreaksByTexture;
         BreaksByShader = other.BreaksByShader;
         BreaksBySampler = other.BreaksBySampler;
-        BreaksByUnshaded = other.BreaksByUnshaded;
+        BreaksByBlend = other.BreaksByBlend;
         BreaksByKind = other.BreaksByKind;
+        Quads = other.Quads;
+        SharedShaders = other.SharedShaders;
+        OwnedShaders = other.OwnedShaders;
         DrawCalls = other.DrawCalls;
         Primitives = other.Primitives;
         TextureSwaps = other.TextureSwaps;

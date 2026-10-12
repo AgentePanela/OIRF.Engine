@@ -146,7 +146,7 @@ _lighting.LightIntensity = 1.2f;              // global brightness multiplier
 
 ## Unshaded Sprites
 
-Sprites are lit by default. To exclude a sprite from lighting entirely (UI elements drawn in world space, fullbright VFX, etc.), assign it the `Unshaded` shader:
+Sprites are lit by default. To exclude a sprite from lighting entirely (UI elements drawn in world space, fullbright VFX, etc.), assign it a shader whose prototype says `lit: false` (see [Shaders](Shaders.md)), like `Unshaded`:
 
 ```yaml
 components:
@@ -155,5 +155,5 @@ components:
     shader: Unshaded
 ```
 
-Anything using the `Unshaded` technique draws at full brightness, bypassing the lightmap - but its `Layer`/`Depth` is still respected normally against every other sprite and shape. An unshaded sprite on a lower `Layer` than a lit sprite gets occluded by it like any other sprite would; it isn't unconditionally drawn on top.
+Anything drawn with a `lit: false` shader draws at full brightness, bypassing the lightmap - but its `Layer`/`Depth` is still respected normally against every other sprite and shape. An unshaded sprite on a lower `Layer` than a lit sprite gets occluded by it like any other sprite would; it isn't unconditionally drawn on top.
 

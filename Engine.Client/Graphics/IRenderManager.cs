@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Apos.Shapes;
 using Engine.Client.Assets.Atlas;
+using Engine.Client.Graphics.Shaders;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -78,14 +79,21 @@ public interface IRenderManager
     #region Queue
 
     /// <summary>
+    /// Queues a sprite. <paramref name="custom0"/> and <paramref name="custom1"/> are the two values the sprite
+    /// carries to its shader on its own (see perSprite in the shader prototype).
+    /// </summary>
+    void Submit(Sprite2D sprite, Vector2 position, ShaderInstance? shader = null,
+        Vector4 custom0 = default, Vector4 custom1 = default);
+
+    /// <summary>
     /// Add a IRenderable to be draw queued.
     /// </summary>
-    void Submit(IRenderable renderable, Vector2 position, Effect? shader = null);
+    void Submit(IRenderable renderable, Vector2 position, ShaderInstance? shader = null);
 
-    /// <inheritdoc cref="Submit(IRenderable, Vector2, Effect?)"/>
-    void Submit<T>(T renderable, Vector2 position, Effect? shader = null) where T : struct, IRenderable;
+    /// <inheritdoc cref="Submit(IRenderable, Vector2, ShaderInstance?)"/>
+    void Submit<T>(T renderable, Vector2 position, ShaderInstance? shader = null) where T : struct, IRenderable;
 
-    /// <inheritdoc cref="Submit(IRenderable, Vector2, Effect?)"/>
+    /// <inheritdoc cref="Submit(IRenderable, Vector2, ShaderInstance?)"/>
     void Submit(RenderQueue queue);
 
     /// <summary>
@@ -96,16 +104,6 @@ public interface IRenderManager
     #endregion
 
     #region Batches
-
-    /// <summary>
-    /// Prepares and begins a new sprite and text batch with the specified render state.
-    /// </summary>
-    void Begin(Effect? effect = null, SamplerState? samplerState = null, DepthStencilState? depthStencilState = null);
-
-    /// <summary>
-    /// Ends the batch started by <see cref="Begin"/>, sending its sprites and text to the target.
-    /// </summary>
-    void End();
 
     /// <summary>
     /// Prepares and begins a new Apos.Shapes batch for shapes.
@@ -163,6 +161,11 @@ public interface IRenderManager
     void DrawRawTexture2D(Texture2D texture, Vector2 position,
         Color color = default, float rotation = 0f, Vector2 origin = default, Vector2 scale = default, SpriteEffects effects = SpriteEffects.None,
         float layerDepth = 0f);
+
+    /// <summary>
+    /// A region of a texture with its top left at <paramref name="position"/>, nothing else applied.
+    /// </summary>
+    void DrawQuad(Texture2D texture, Rectangle source, Vector2 position, Color color);
 
     void DrawSprite(Sprite2D sprite, Vector2 position);
     void DrawTexture(RawTexture texture, Vector2 position);

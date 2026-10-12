@@ -207,9 +207,10 @@ public sealed class ProfilerOverlay : Overlay
             $"World: {FormatMs(stats.TotalMs)} (submit {FormatMs(stats.SubmitMs)} | sort {FormatMs(stats.SortMs)} | " +
             $"flush {FormatMs(stats.FlushMs)} | present {FormatMs(stats.PresentMs)})\n" +
             $"Draw calls: {stats.DrawCalls} | Triangles: {stats.Primitives} | Texture swaps: {stats.TextureSwaps}\n" +
-            $"Batches: {stats.Batches} ({stats.SpriteBatches} sprite, {stats.ShapeBatches} shape)\n" +
-            $"Breaks: {stats.BreaksByShader} shader | {stats.BreaksBySampler} sampler | {stats.BreaksByUnshaded} unshaded | " +
-            $"{stats.BreaksByKind} sprite/shape\n" +
+            $"Batches: {stats.Batches} ({stats.SpriteBatches} sprite, {stats.ShapeBatches} shape) | Quads: {stats.Quads}\n" +
+            $"Breaks: {stats.BreaksByTexture} texture | {stats.BreaksByShader} shader | {stats.BreaksBySampler} sampler | " +
+            $"{stats.BreaksByBlend} blend | {stats.BreaksByKind} sprite/shape\n" +
+            $"Shaders: {stats.SharedShaders} shared | {stats.OwnedShaders} owned\n" +
             $"Submitted: {stats.Submitted} | Culled: {stats.Culled} | Target switches: {stats.TargetSwitches}";
 
         foreach (var viewport in stats.Viewports)

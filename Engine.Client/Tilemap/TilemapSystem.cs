@@ -19,6 +19,7 @@ public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
 {
     [Dependency] private readonly IRenderManager _renderMan = default!;
     [Dependency] private readonly IAssetManager _assetMan = default!;
+    [Dependency] private readonly ShaderManager _shaderMan = default!;
     [Dependency] private readonly TerrainBlendingSystem _blending = default!;
 
     public bool FreezeDraw { get; set; } = false;
@@ -26,7 +27,16 @@ public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
     // cache textures
     private Dictionary<ProtoId<TilePrototype>, (AtlasPage page, AtlasSprite spr)> _textures = new();
     private readonly Dictionary<(EntityUid Uid, int Cx, int Cy), RenderableChunk> _renderCache = new();
-    private readonly Dictionary<EntityUid, (string? Name, ShaderPath Path)> _shaderCache = new();
+
+    /// <summary>
+    /// One thing a chunk draws: a tile, or the blend overlay that goes over it.
+    /// </summary>
+    public struct ChunkQuad
+    {
+        public Texture2D Texture;
+        public Rectangle Source;
+        public Vector2 Position;
+    }
 
     /// <summary>
     /// Represents the renderable chunk piece, this replaces creating a sprite 2D per tile, so render manager does not get a ton of sprites
@@ -34,11 +44,7 @@ public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
     /// </summary>
     public struct RenderableChunk : IRenderable
     {
-        private static TilemapSystem _system => IoCManager.Resolve<TilemapSystem>();
-
-        public ProtoId<TilePrototype>?[,] Tiles;
-        public Vector2?[,] Pos;
-        public Texture2D?[,] BlendOverlays;
+        public ChunkQuad[] Quads;
 
         public int Layer { get; set; }
         public float Depth { get; set; }
@@ -46,22 +52,8 @@ public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
 
         public void Draw(IRenderManager renderer, Vector2 pos)
         {
-            for (int x = 0; x < Tiles.GetLength(0); x++)
-            for (int y = 0; y < Tiles.GetLength(1); y++)
-            {
-                var tile = Tiles[x, y];
-                var tpos = Pos[x, y];
-                if (tile is null || tpos is null ||
-                    !_system._textures.TryGetValue(tile.Value, out var tex))
-                    continue;
-
-                renderer.DrawRaw(tex.page, tex.spr, tpos.Value, Color.White, scale: Vector2.One);
-
-                // draw blend overlay on top ih have one
-                var overlay = BlendOverlays[x, y];
-                if (overlay is not null)
-                    renderer.DrawRawTexture2D(overlay, tpos.Value, Color.White, scale: Vector2.One);
-            }
+            foreach (ref readonly var quad in Quads.AsSpan())
+                renderer.DrawQuad(quad.Texture, quad.Source, quad.Position, Color.White);
         }
     }
 
@@ -69,6 +61,7 @@ public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
     {
         base.Init();
         SubscribeEvent<LoadingFinishedEvent>(OnLoaded); //! change this if we do prototype hot reload some day
+        SubscribeEvent<TilemapComponent, CompRemovedEvent>(OnTilemapRemoved);
     }
 
     private void OnLoaded(LoadingFinishedEvent args)
@@ -86,28 +79,25 @@ public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
         }
     }
 
+    // the chunks of a tilemap that is gone would stay baked forever otherwise
+    private void OnTilemapRemoved(EntityUid uid, TilemapComponent comp, CompRemovedEvent args)
+    {
+        foreach (var chunk in comp.Chunks.Values)
+            _renderCache.Remove((uid, chunk.ChunkX, chunk.ChunkY));
+    }
+
     public void Draw(in DrawContext ctx)
     {
         var query = GetEntitiesWithComp<TilemapComponent, TransformComponent>();
         foreach ((var uid, var comp, var trans) in query)
         {
-            var shader = ResolveShader(uid, comp.Shader);
+            var shader = _shaderMan.GetSharedInstance(comp.Shader);
             foreach (var chunk in comp.Chunks.Values)
                 DrawChunk(ctx.Camera, uid, comp, shader, trans, chunk);
         }
     }
 
-    private ShaderPath ResolveShader(EntityUid uid, string? name)
-    {
-        if (_shaderCache.TryGetValue(uid, out var cached) && cached.Name == name)
-            return cached.Path;
-
-        var path = new ShaderPath(name);
-        _shaderCache[uid] = (name, path);
-        return path;
-    }
-
-    private void DrawChunk(Camera2D camera, EntityUid uid, TilemapComponent comp, ShaderPath shader, TransformComponent trans,
+    private void DrawChunk(Camera2D camera, EntityUid uid, TilemapComponent comp, ShaderInstance? shader, TransformComponent trans,
         TilemapChunk chunk)
     {
         int worldChunkSize = comp.ChunkSize * comp.TileSize;
@@ -128,16 +118,13 @@ public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
             chunk.Dirty = false;
         }
 
-        _renderMan.Submit(renderable, Vector2.Zero, shader.Effect);
+        _renderMan.Submit(renderable, Vector2.Zero, shader);
     }
 
     private RenderableChunk MakeRenderable(TilemapComponent comp, TransformComponent trans, TilemapChunk chunk)
     {
         var size = chunk.Size;
-
-        var tiles = new ProtoId<TilePrototype>?[size, size];
-        var positions = new Vector2?[size, size];
-        var blendOverlays = new Texture2D?[size, size];
+        var quads = new List<ChunkQuad>(size * size);
 
         int worldChunkSize = comp.ChunkSize * comp.TileSize;
 
@@ -155,28 +142,25 @@ public sealed class TilemapSystem : SharedTilemapSystem, IEntityDrawSystem
                 if (tileId is null)
                     continue;
 
-                if (!_textures.ContainsKey(tileId.Value))
+                if (!_textures.TryGetValue(tileId.Value, out var tex))
                     continue;
 
-                tiles[x, y] = tileId;
-
-                positions[x, y] = new Vector2(
+                var position = new Vector2(
                     chunkWorldX + x * comp.TileSize,
                     chunkWorldY + y * comp.TileSize);
 
-                // compute blend overlay for this tile
-                int worldTileX = worldTileStartX + x;
-                int worldTileY = worldTileStartY + y;
-                if (comp.TileBlending)
-                    blendOverlays[x, y] = _blending.GetBlendOverlay(comp, worldTileX, worldTileY, comp.TileSize);
+                quads.Add(new ChunkQuad { Texture = tex.page.Texture, Source = tex.spr.Region, Position = position });
+
+                // the blend overlay goes right over its tile
+                if (comp.TileBlending
+                    && _blending.GetBlendOverlay(comp, worldTileStartX + x, worldTileStartY + y, comp.TileSize) is { } overlay)
+                    quads.Add(new ChunkQuad { Texture = overlay, Source = overlay.Bounds, Position = position });
             }
         }
 
         return new RenderableChunk
         {
-            Tiles = tiles,
-            Pos = positions,
-            BlendOverlays = blendOverlays,
+            Quads = quads.ToArray(),
             Layer = comp.Layer,
             SamplerState = comp.SamplerState
         };

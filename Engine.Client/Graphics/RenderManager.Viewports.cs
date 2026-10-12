@@ -104,6 +104,8 @@ public sealed partial class RenderManager
         _frameStats.Primitives = (int)(after.PrimitiveCount - before.PrimitiveCount);
         _frameStats.TextureSwaps = (int)(after.TextureCount - before.TextureCount);
         _frameStats.TargetSwitches = (int)(after.TargetCount - before.TargetCount);
+        _frameStats.SharedShaders = _shaders.SharedInstances;
+        _frameStats.OwnedShaders = _shaders.OwnedInstances;
         _frameStats.PresentMs = Stopwatch.GetElapsedTime(presentStart).TotalMilliseconds;
         _frameStats.TotalMs = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
 
@@ -129,7 +131,7 @@ public sealed partial class RenderManager
             _frameStats.SubmitMs += Stopwatch.GetElapsedTime(submitStart).TotalMilliseconds;
         }
 
-        var items = _queue.Entries.Count;
+        var items = _queue.Count;
         DrawQueue();
         _current = null;
 

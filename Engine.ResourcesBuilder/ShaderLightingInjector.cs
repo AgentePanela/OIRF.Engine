@@ -44,11 +44,25 @@ public static class ShaderLightingInjector
     /// re-transformed nor written to the temp folder, so the content builder
     /// never sees it and leaves its already-compiled `.xnb` alone.
     /// </summary>
-    public static string GenerateRoot(string sourceRoot, string baseDir)
+    /// <param name="allRoots">
+    /// Every resources folder being built. The headers (`.fxh`) under any of their Shaders/ folders are put next
+    /// to the shaders of this one, so `#include "Sprite.fxh"` finds the engine's header from a content shader.
+    /// </param>
+    public static string GenerateRoot(string sourceRoot, string baseDir, IReadOnlyList<string>? allRoots = null)
     {
         var shadersDir = Path.Combine(sourceRoot, "Shaders");
         if (!Directory.Exists(shadersDir))
             return sourceRoot;
+
+        var headers = (allRoots ?? [sourceRoot])
+            .Select(root => Path.Combine(root, "Shaders"))
+            .Where(Directory.Exists)
+            .SelectMany(dir => Directory.GetFiles(dir, "*.fxh", SearchOption.TopDirectoryOnly))
+            .OrderBy(Path.GetFileName, StringComparer.Ordinal)
+            .ToList();
+
+        // a header changing changes every shader that could include it
+        var headerBytes = headers.SelectMany(File.ReadAllBytes).ToArray();
 
         var absoluteBaseDir = Path.IsPathRooted(baseDir) ? baseDir : Path.Combine(AppContext.BaseDirectory, baseDir);
         var cacheRoot = Path.Combine(absoluteBaseDir, SafeFolderName(sourceRoot));
@@ -63,6 +77,9 @@ public static class ShaderLightingInjector
         if (Directory.Exists(buildDir))
             Directory.Delete(buildDir, recursive: true);
         Directory.CreateDirectory(buildDir);
+
+        foreach (var header in headers)
+            File.Copy(header, Path.Combine(buildDir, Path.GetFileName(header)), overwrite: true);
 
         var manifestChanged = false;
 
@@ -91,7 +108,7 @@ public static class ShaderLightingInjector
         {
             var name = Path.GetFileName(file);
             var raw = File.ReadAllBytes(file);
-            var hash = Convert.ToHexString(SHA256.HashData(raw));
+            var hash = Convert.ToHexString(SHA256.HashData([.. raw, .. headerBytes]));
             var encPath = Path.Combine(cacheRoot, name + ".enc");
 
             // Unchanged since last time and we still have its encrypted cache entry -

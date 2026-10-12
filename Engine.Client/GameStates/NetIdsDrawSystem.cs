@@ -30,12 +30,12 @@ public sealed class NetIdsDrawSystem : EntityDrawSystem
     [Dependency] private readonly ShaderManager _shaderMan = default!;
 
     public bool Enabled { get; set; }
-    private Effect? _unshaded;
+    private ShaderInstance? _unshaded;
 
     public override void Init()
     {
         base.Init();
-        _unshaded = _shaderMan.GetShader("Unshaded");
+        _unshaded = _shaderMan.UnshadedInstance;
     }
 
     public override void Draw(in DrawContext ctx)

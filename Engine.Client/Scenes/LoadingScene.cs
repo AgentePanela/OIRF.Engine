@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Threading.Tasks;
 using Engine.Client.Extensions;
@@ -34,6 +35,11 @@ public abstract class LoadingScene : Scene
     protected bool _autoStartLoading = true;
 
     protected LoadingState _state = LoadingState.Idle;
+
+    /// <summary>
+    /// Happens if the shaders fail to build.
+    /// </summary>
+    public static Action OnShaderBuildFailure;
     
     protected enum LoadingState
     {
@@ -85,6 +91,11 @@ public abstract class LoadingScene : Scene
     {
         if (_shaderTask?.IsCompleted == true)
         {
+            if (_shaderTask.Exception is { } failure)
+            {                
+                Log.Error($"Building the shaders failed, nothing will be drawn with one: {failure.GetBaseException()}");
+                OnShaderBuildFailure.Invoke();
+            }
             _state = LoadingState.Registry;
             return;
         }

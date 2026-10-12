@@ -36,18 +36,30 @@ The backbuffer is no longer created with `RenderTargetUsage.PreserveContents`: e
 
 ## 2. Render Queue & Batching (`DrawQueue()`)
 
-The rendering engine works by delaying draws rather than rendering immediately. When systems draw, they submit an `IRenderable` instance (like a `Sprite2D` or a tilemap chunk renderable).
+The rendering engine works by delaying draws rather than rendering immediately. What systems submit is kept in a `DrawCommandBuffer`.
 
-### 1. Zero-Allocation Struct Submission
-Boxing structures inside reference objects causes heavy garbage collector (GC) load. To prevent this, `Submit<T>` rents wrapper class instances from a pool (`RenderPool<T>.Rent()`). After drawing, these wrappers are returned (`ReturnToPool()`). The rented boxes are kept together with the queue they were submitted to (`QueueBuffer`), so setting a queue aside never returns boxes that are still waiting to be drawn.
+### 1. Commands
+A queue entry is a `DrawCommand` struct in an array, not an object. There are three kinds:
+* **Sprite**: a textured quad. The texture, source region, transform, color, shader and the two per sprite values are all in the command; nothing is called to draw it and nothing is allocated to queue it.
+* **Renderable**: an `IRenderable` that draws itself (a tilemap chunk, a `Label2D`). A struct one is boxed through a pool (`RenderPool<T>`), and the boxes are kept with the buffer they were submitted to so setting a buffer aside never returns boxes that are still waiting.
+* **Shape**: an `IShapeRenderable`, drawn through Apos.Shapes' own batch.
 
-### 2. State Batch Sorting
-Entries are sorted by layer, then depth, then submit order. When rendering the queue:
-* Every batch starts with the view matrix of the viewport being drawn (`RenderViewport.GetViewMatrix()`).
-* It loops through the items. If an item requests a different shader (`Effect`) or `SamplerState` (texture filter mode) than the current one, or switches between sprites and shapes, the system ends the current batch and starts a new one.
+### 2. Sorting
+Sorting moves `DrawSortEntry` values (16 bytes), not the commands. The key is one 64 bit number, layer in the high half and depth in the low one, both made to sort right as unsigned; ties keep submit order through the entry's index.
 
-### 3. Stats
-`RenderManager` counts what it does into `RenderStats` while the frame is drawn and publishes the finished frame in `IRenderManager.Stats`: draw calls, triangles, texture swaps and target switches (from `GraphicsDevice.Metrics`, world only), batches and why each one broke, items submitted and culled, and the time spent submitting, sorting, flushing and presenting, plus a line per viewport. The profiler overlay shows them in its RENDERING panel.
+### 3. `SpriteBatcher`
+Sprites, text and tile quads all go through the engine's own batcher (`Graphics/Batching/SpriteBatcher.cs`), not MonoGame's `SpriteBatch`. Each vertex carries position, color, the atlas UV, a `LocalUV` (0..1 over the quad) and two free `Vector4` (`Custom0`, `Custom1`).
+
+Quads pile up in one array and are sent with a single `DrawUserIndexedPrimitives` when something they all have to share changes: the texture, the shader instance, the sampler or the blend state. Per sprite shader values are in the vertices, so they never split a batch. That is what lets a room full of walls, each cut at its own height, be one draw call.
+
+At each flush the batcher fills the shader's engine parameters (`MatrixTransform`, `TexelSize`, `Time`, `ScreenSize`), through `EffectParameter`s the `ShaderInstance` looked up once. With no shader it uses MonoGame's `SpriteEffect`.
+
+Text goes in through a small `IFontStashRenderer2` (`RenderManager.Strings.cs`): FontStashSharp works the glyph quads out and they are appended like any other. `DrawString` asks for the font at the size it ends up on the target (font size x render scale x zoom, in steps of 2 px) and scales it back down, so glyphs are not stretched.
+
+Shapes are the one thing that still breaks out: the batcher is flushed, the shape batch opened, and closed again when the next sprite comes.
+
+### 4. Stats
+`RenderManager` counts what it does into `RenderStats` while the frame is drawn and publishes the finished frame in `IRenderManager.Stats`: draw calls, triangles, texture swaps and target switches (from `GraphicsDevice.Metrics`, world only), batches, quads and why each batch broke (texture, shader, sampler, blend, sprite/shape), shader instances shared and owned, items submitted and culled, and the time spent submitting, sorting, flushing and presenting, plus a line per viewport. The profiler overlay shows them in its RENDERING panel.
 
 ---
 
@@ -67,10 +79,11 @@ A viewport is a logical `Size` (what its camera centers on), a `RenderScale` (ta
 
 ---
 
-## 4. Shaders & Effects (`ShaderManager`)
+## 4. Shaders (`ShaderManager`, `ShaderInstance`)
 
-Custom shader effects are handled in the graphics pipeline:
-* `ShaderManager` loads shader files (`.fx`) from the resources directory.
-* Shaders are resolved via prototype key mappings.
-* Custom parameters are passed into the `Effect` instance, and the shader is submitted alongside the sprite to the `RenderManager`.
-* `RenderManager` binds the shader effect parameter into the native MonoGame `SpriteBatch.Begin()` call.
+The content facing side is in `Docs/Content/Shaders.md`. Underneath:
+
+* `Engine.ResourcesBuilder` compiles each `.fx`. Before that, `ShaderLightingInjector.GenerateRoot` copies every `.fxh` found under the `Shaders/` folder of any resources folder next to the shaders being built, which is how a content shader includes the engine's `Sprite.fxh`. The headers are part of each shader's hash, so editing one rebuilds everything.
+* `ShaderManager` loads the compiled effects by file name and creates one `ShaderInstance` per `shader` prototype the first time it is asked for: a clone of the effect with the prototype's `params` applied, its `lit` and `blend`, and the `perSprite` map parsed into slots. Starting values of per sprite parameters are kept on the instance (`DefaultCustom0/1`) instead of being set on the effect.
+* `SpriteSystem` keeps, per sprite and per layer, the shader instance, the parameters set through `SetShaderParam` (by name) and the two custom values built from them. They are rebuilt only when the shader or a parameter changes. A parameter with no slot makes the target `Duplicate()` its instance, which is disposed when the shader changes or the sprite is removed.
+* Batches are compared by instance, so two prototypes on the same `.fx` do not batch together, and neither does a duplicated instance with anything else.

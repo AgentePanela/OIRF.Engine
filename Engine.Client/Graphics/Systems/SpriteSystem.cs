@@ -18,6 +18,7 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 {
     [Dependency] private readonly IRenderManager _renderMan = default!;
     [Dependency] private readonly IAssetManager _assetMan = default!;
+    [Dependency] private readonly ShaderManager _shaderMan = default!;
 
     private const string PlaceholderKey = "EngineInternal/Placeholders/Null";
 
@@ -58,7 +59,18 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         public string? DrawKey;
 
         public string? ShaderName;
-        public ShaderPath Shader;
+
+        public ShaderInstance? Shader;
+
+        /// <summary>
+        /// What was set through <see cref="SetShaderParam(EntityUid, string?, string, Vector4)"/>, by name.
+        /// </summary>
+        public Dictionary<string, Vector4>? Params;
+        public bool ParamsDirty;
+
+        // the per sprite parameters of Params, where the shader wants them
+        public Vector4 Custom0;
+        public Vector4 Custom1;
     }
 
     public override void Init()
@@ -68,7 +80,14 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     }
 
     private void OnSpriteRemoved(EntityUid uid, SpriteComponent comp, CompRemovedEvent args)
-        => _render.Remove(uid);
+    {
+        if (!_render.Remove(uid, out var data))
+            return;
+
+        ReleaseShader(data.Base);
+        foreach (var target in data.Layers.Values)
+            ReleaseShader(target);
+    }
 
     public void Draw(in DrawContext ctx)
     {
@@ -138,8 +157,8 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     /// </summary>
     private void SubmitWithLayers(SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Sprite2D spr, Vector2 pos)
     {
-        var shader = ResolveShader(data.Base, data.DrawShader ?? comp.Shader).Effect;
-        ApplyDrawColor(shader, data);
+        ApplyDrawColor(data.Base, data);
+        var shader = ResolveShader(data.Base, data.DrawShader ?? comp.Shader);
 
         if (comp.Layers is null || comp.Layers.Count == 0)
         {
@@ -165,10 +184,10 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
             SubmitBase(data, spr, pos, shader);
     }
 
-    private void SubmitBase(SpriteRenderData data, Sprite2D spr, Vector2 pos, Effect? shader)
+    private void SubmitBase(SpriteRenderData data, Sprite2D spr, Vector2 pos, ShaderInstance? shader)
     {
         if (!data.HideBaseSprite)
-            _renderMan.Submit(spr, pos, shader);
+            _renderMan.Submit(spr, pos, shader, data.Base.Custom0, data.Base.Custom1);
     }
 
     private static void SortLayers(SpriteComponent comp)
@@ -196,18 +215,18 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         if (layer.Offset != Vector2.Zero)
             pos += Vector2.Transform(layer.Offset, Matrix.CreateRotationZ(trans.Angle + data.DrawRotation));
 
-        var shader = ResolveShader(target, data.DrawShader ?? layer.Shader).Effect;
-        ApplyDrawColor(shader, data);
-        _renderMan.Submit(spr, pos, shader);
+        ApplyDrawColor(target, data);
+        var shader = ResolveShader(target, data.DrawShader ?? layer.Shader);
+        _renderMan.Submit(spr, pos, shader, target.Custom0, target.Custom1);
     }
 
     // only the shader set through SetDrawShader gets it, a shader that has no such parameter just ignores it
-    private static void ApplyDrawColor(Effect? shader, SpriteRenderData data)
+    private static void ApplyDrawColor(SpriteTarget target, SpriteRenderData data)
     {
-        if (shader is null || data.DrawShader is null || data.DrawShaderColor is not { } color)
+        if (data.DrawShader is null || data.DrawShaderColor is not { } color)
             return;
 
-        shader.Parameters["DrawColor"]?.SetValue(color.ToVector4());
+        SetTargetParam(target, "DrawColor", color.ToVector4());
     }
 
     /// <summary>
@@ -344,17 +363,92 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         }
     }
 
-    // resolving a ShaderPath clones the Effect, so only do it when the name changes
-    private static ShaderPath ResolveShader(SpriteTarget target, string? name)
+    // The shader is looked up again only when its name changes, and the parameters go to it again only when one of
+    // them (or the shader) did.
+    private ShaderInstance? ResolveShader(SpriteTarget target, string? name)
     {
         if (target.ShaderName != name)
         {
             target.ShaderName = name;
-            target.Shader = new ShaderPath(name);
+            ReleaseShader(target);
+            target.Shader = _shaderMan.GetSharedInstance(name);
+            target.ParamsDirty = true;
         }
+
+        if (target.ParamsDirty)
+            ApplyParams(target);
 
         return target.Shader;
     }
+
+    private static void ReleaseShader(SpriteTarget target)
+    {
+        if (target.Shader is { IsOwned: true } owned)
+            owned.Dispose();
+
+        target.Shader = null;
+    }
+
+    private static void ApplyParams(SpriteTarget target)
+    {
+        target.ParamsDirty = false;
+        target.Custom0 = target.Shader?.DefaultCustom0 ?? default;
+        target.Custom1 = target.Shader?.DefaultCustom1 ?? default;
+
+        if (target.Shader is not { } shader || target.Params is null)
+            return;
+
+        foreach (var (name, value) in target.Params)
+        {
+            // travels with the sprite, the shader itself is left alone and stays shared
+            if (shader.TryGetSpriteSlot(name, out var slot))
+            {
+                ShaderInstance.WriteSlot(ref target.Custom0, ref target.Custom1, slot, value);
+                continue;
+            }
+
+            if (!shader.HasParameter(name))
+                continue;
+
+            // a value only this sprite has needs a shader only this sprite has
+            if (!shader.IsOwned)
+                target.Shader = shader = shader.Duplicate();
+
+            shader.SetParameter(name, value);
+        }
+    }
+
+    private static void SetTargetParam(SpriteTarget target, string name, Vector4 value)
+    {
+        target.Params ??= new Dictionary<string, Vector4>();
+        if (target.Params.TryGetValue(name, out var current) && current == value)
+            return;
+
+        target.Params[name] = value;
+        target.ParamsDirty = true;
+    }
+
+    /// <summary>
+    /// Sets a parameter of the shader the sprite (or a layer, with <paramref name="layerId"/>) is drawn with, for
+    /// this sprite only.
+    /// </summary>
+    public void SetShaderParam(EntityUid uid, string? layerId, string name, Vector4 value)
+    {
+        var data = GetData(uid);
+        SetTargetParam(layerId is null ? data.Base : GetLayerTarget(data, layerId), name, value);
+    }
+
+    /// <inheritdoc cref="SetShaderParam(EntityUid, string?, string, Vector4)"/>
+    public void SetShaderParam(EntityUid uid, string? layerId, string name, float value)
+        => SetShaderParam(uid, layerId, name, new Vector4(value, 0f, 0f, 0f));
+
+    /// <inheritdoc cref="SetShaderParam(EntityUid, string?, string, Vector4)"/>
+    public void SetShaderParam(EntityUid uid, string? layerId, string name, Vector2 value)
+        => SetShaderParam(uid, layerId, name, new Vector4(value, 0f, 0f));
+
+    /// <inheritdoc cref="SetShaderParam(EntityUid, string?, string, Vector4)"/>
+    public void SetShaderParam(EntityUid uid, string? layerId, string name, Color value)
+        => SetShaderParam(uid, layerId, name, value.ToVector4());
 
     /// <summary>
     /// Draws <paramref name="key"/> instead of the sprite's own key (or a layer's, with <paramref name="layerId"/>)
@@ -443,19 +537,19 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     /// <summary>
     /// Get the shader instance of a layer or base sprite.
     /// </summary>
-    public Effect? GetDrawShaderEffect(EntityUid uid, string? layerId = null)
+    public ShaderInstance? GetDrawShaderInstance(EntityUid uid, string? layerId = null)
     {
         if (!TryComp<SpriteComponent>(uid, out var comp))
             return null;
 
         var data = GetData(uid);
         if (layerId is null)
-            return ResolveShader(data.Base, data.DrawShader ?? comp.Shader).Effect;
+            return ResolveShader(data.Base, data.DrawShader ?? comp.Shader);
 
         if (GetLayer(comp, layerId) is not { } layer)
             return null;
 
-        return ResolveShader(GetLayerTarget(data, layerId), data.DrawShader ?? layer.Shader).Effect;
+        return ResolveShader(GetLayerTarget(data, layerId), data.DrawShader ?? layer.Shader);
     }
 
     private SpriteRenderData GetData(EntityUid uid)

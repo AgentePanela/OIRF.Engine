@@ -55,33 +55,33 @@ public override void Draw(in DrawContext ctx)
 
 ### Render Queue
 
-Rather than drawing directly to the screen, you **submit** renderables to the queue. The queue is sorted by layer, then flushed in one pass after all systems have run.
+Rather than drawing directly to the screen, you **submit** to the queue. The queue is sorted by layer, then depth, then the order things were submitted in, and drawn in one pass after all systems have run.
 
 ```csharp
-// Submit a Sprite2D renderable
+// Submit a Sprite2D
 _renderer.Submit(mySprite, position);
 
-// Submit with a custom shader (Effect)
-_renderer.Submit(mySprite, position, shader: myEffect);
+// Submit with a shader (see Shaders.md)
+_renderer.Submit(mySprite, position, _shaders.GetInstance("Grayscale"));
 ```
 
-All `IRenderable` types have a `Layer` property. Lower layer values are drawn first (behind).
+Lower layer values are drawn first (behind).
 
-### Raw Drawing (inside Begin/End)
+A `Sprite2D` goes into the queue as plain data. Anything else that needs its own drawing code implements `IRenderable`: its `Draw(IRenderManager renderer, Vector2 pos)` is called when its turn comes, and from there it uses the immediate methods below.
 
-For immediate rendering (e.g., inside a custom draw call), you can use the lower-level methods:
+### Immediate drawing (inside an `IRenderable`)
+
+These draw right away, into the batch of the queue entry being drawn and with its shader. They are only meant to be called from an `IRenderable.Draw`:
 
 ```csharp
-_renderer.Begin();
-
-_renderer.DrawSprite(sprite2D, position);
-_renderer.DrawString(label2D, position);
-_renderer.DrawTexture(textureRect, position);
-
-_renderer.End();
+public void Draw(IRenderManager renderer, Vector2 pos)
+{
+    renderer.DrawSprite(sprite2D, pos);
+    renderer.DrawString(label2D, pos);
+    renderer.DrawTexture(rawTexture, pos);
+    renderer.DrawQuad(texture, sourceRect, pos, Color.White);
+}
 ```
-
-> **Note:** Prefer using the queue via `Submit()`. Only use `Begin()/End()` when you specifically need immediate rendering outside the queue.
 
 ### Screen-to-World Conversion
 
@@ -139,6 +139,8 @@ _renderer.Submit(label, position);
 var title = new Label2D("Game Over", size: 32f);
 _renderer.Submit(title, position);
 ```
+
+Text in the world is drawn sharp whatever the zoom or the window size: its glyphs are made at the size they end up on screen instead of being stretched. For a pixel art font that should scale with the world like a sprite does, blocky pixels and all, set `Pixelated = true` on the label.
 
 ### TextureRect
 
@@ -230,7 +232,7 @@ Every shape struct implements `IShapeRenderable` (which extends `IRenderable`) a
 _renderer.DrawCircle(center, radius, fillColor: Color.Yellow, unshaded: true);
 ```
 
-This is a separate concept from the `Unshaded` **shader** used by sprites (see [Unshaded Sprites in Lighting.md](Lighting.md#unshaded-sprites)). Shapes can't hold a custom `Effect`, so `Unshaded` is just a bool that marks the shape as exempt from lighting. As with unshaded sprites, `Layer`/`Depth` are still respected normally against everything else in the scene.
+This is a separate concept from the `Unshaded` **shader** used by sprites (see [Unshaded Sprites in Lighting.md](Lighting.md#unshaded-sprites)). Shapes can't hold a shader, so `Unshaded` is just a bool that marks the shape as exempt from lighting. As with unshaded sprites, `Layer`/`Depth` are still respected normally against everything else in the scene.
 
 For immediate-mode drawing outside the queue (rare, prefer the `Draw*` methods above), `GameClient.ShapeBatch` exposes the underlying `Apos.Shapes` batch directly, e.g. `_renderer.FillRectImmediate(rect, color)`.
 
