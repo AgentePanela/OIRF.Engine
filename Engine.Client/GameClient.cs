@@ -308,7 +308,7 @@ public class GameClient : Game
         // Create the sprite batch instance.
         SpriteBatch = new SpriteBatch(GraphicsDevice);
         ShapeBatch = new ShapeBatch(GraphicsDevice);
-        Renderer.UpdateBatch(SpriteBatch, ShapeBatch);
+        Renderer.Init(SpriteBatch, ShapeBatch);
         InterfaceManager.Init();
         Components.Add(Scenes);
 
