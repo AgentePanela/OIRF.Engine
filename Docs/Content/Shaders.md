@@ -57,14 +57,6 @@ Effect? effect = _shaders.GetShader("Grayscale");
 
 ---
 
-## Automatic Lighting Support
+## Lighting
 
-Ordinary sprite shaders don't need to know anything about the lighting system: `ShaderLightingInjector` rewrites a copy of your `.fx` source in memory before compiling it (your file on disk is never touched), renaming your pixel shader entry point and wrapping it so its output gets multiplied by the scene's lightmap. This is the same idea as RobustToolbox's own shader wrapping: write a plain shader, get lighting for free.
-
-A shader is left alone (not wrapped) if any of these are true:
-
-- It declares `technique Unshaded`. Use this when you want the shader to always draw at full brightness, ignoring lighting entirely.
-- It already declares `Texture2D LightMap`, meaning it was hand-written with lighting support already (like the engine's own `DefaultLit.fx`).
-- It doesn't use `VertexShaderOutput` at all, meaning it's not a sprite shader (the internal lighting shaders such as `LightSoft.fx`, `ShadowDepth.fx`, `LightBlur.fx`, and `WallMerge.fx` fall in this category).
-
-To opt a custom shader out of lighting, just declare an (unused) `technique Unshaded` block in it, following the same pattern as the engine's built-in `Unshaded.fx`.
+A shader whose technique is named `Unshaded` is flagged as unshaded by `RenderManager` (see `Unshaded.fx`), which is how a shader opts out of lighting.

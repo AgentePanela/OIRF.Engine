@@ -384,12 +384,7 @@ public class GameClient : Game
         base.Draw(gameTime);
 
         // Lock the backbuffer viewport to the letterboxed rect before any
-        // world draw. The lighting SceneTarget path in Renderer.DrawQueue
-        // bypasses Begin on-backbuffer branch, so without this
-        // LastBackbufferViewport ends up as the full backbuffer and the
-        // apply pass stretches the (uniformly-scaled) SceneTarget to fill
-        // it, producing a vertical squash whenever the window aspect ratio
-        // doesn't match the virtual resolution.
+        // world draw.
         if (Renderer.Resizing)
         {
             if (Renderer.FinalTarget is not null)
@@ -401,32 +396,10 @@ public class GameClient : Game
         if (GameState == GameState.Running)
         {
             Camera.CacheFrame();
-
-            // Allocate (or resize) the offscreen scene target. The world is
-            // drawn into this target first so the lighting pass can sample it
-            // and blend the lightmap on top in Renderer.DrawQueue(). Sized to
-            // FinalTarget when one's active (editor viewport panel) rather than
-            // the virtual viewport - otherwise this target's aspect ratio locks
-            // to the OS window while the final blit's destination rect is
-            // whatever the docked panel happens to be, and LightingSystem's
-            // ApplyAfterWorld fullscreen-quads one onto the other, stretching
-            // the whole scene to match. Matching the aspect here up front means
-            // that blit is always a same-shape copy.
-            var (sceneTargetWidth, sceneTargetHeight) = Renderer.FinalTarget is { } finalTarget
-                ? (finalTarget.Width, finalTarget.Height)
-                : (Viewport.VirtualWidth, Viewport.VirtualHeight);
-            Renderer.EnsureSceneTarget(sceneTargetWidth, sceneTargetHeight);
-
             EntityManager.Draw(Timing.DeltaTime);
         }
 
         Renderer.DrawQueue();
-
-        if (GameState == GameState.Running)
-        {
-            var lightingSystem = EntityManager.GetSystem<LightingSystem>();
-            lightingSystem?.ApplyAfterWorld();
-        }
 
         //Renderer.End();
 

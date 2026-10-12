@@ -31,7 +31,6 @@ public sealed partial class PointLightComponent : Component, IRadialLight
     /// <summary>
     /// Softness multiplier for the shadow PCF kernel. 0 = hard edges
     /// (single-sample), 1 = default soft penumbra, larger = wider.
-    /// Combined with <see cref="LightingManager.LightSoftness"/>.
     /// </summary>
     [NetField] public partial float Softness { get; set; } = 1.0f;
 }

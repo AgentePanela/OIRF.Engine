@@ -2,7 +2,6 @@ using Apos.Shapes;
 using Engine.Client.Assets;
 using Engine.Client.Assets.Atlas;
 using Engine.Client.Graphics.Fonts;
-using Engine.Client.Graphics.Lighting;
 using Engine.Client.Graphics.Shaders;
 using Engine.Shared.IoC;
 using FontStashSharp;
@@ -21,8 +20,6 @@ public sealed partial class RenderManager
     [Dependency] private readonly IAssetManager _asset = default!;
     [Dependency] private readonly ViewportAdapter _viewport = default!;
     [Dependency] private readonly Camera2D _camera = default!;
-    [Dependency] private readonly LightingManager _lighting = default!;
-    [Dependency] private readonly ShaderManager _shaders = default!;
 
     public bool Resizing = true;
     public BlendState BlendState = BlendState.AlphaBlend;
@@ -38,74 +35,9 @@ public sealed partial class RenderManager
     private readonly List<RenderQueue> _renderQueue = new();
     private readonly List<IPooledRenderable> _pooledEntries = new();
 
-    /// <summary>
-    /// Whether this frame drew the world into <see cref="SceneTarget"/>. False
-    /// means it went straight to the backbuffer and there is nothing for the
-    /// lighting apply pass to composite.
-    /// </summary>
-    public bool WorldOnSceneTarget { get; private set; }
-
     // Stamped on every RenderQueue entry as it's enqueued, so same-Depth entries
     // in a layer keep their submit order instead of jumping around.
     private int _submitCounter;
-
-
-    // Marks stencil=0 (shaded) / stencil=1 (unshaded) while the merged queue draws
-    // into SceneTarget, so LightingSystem.ApplyAfterWorld can multiply the lightmap
-    // onto shaded pixels only, in place, without a second render target or every
-    // shader needing to sample the lightmap itself.
-    public static readonly DepthStencilState StencilWriteShaded = new()
-    {
-        StencilEnable = true,
-        DepthBufferEnable = false,
-        StencilFunction = CompareFunction.Always,
-        StencilPass = StencilOperation.Replace,
-        ReferenceStencil = 0,
-    };
-
-    public static readonly DepthStencilState StencilWriteUnshaded = new()
-    {
-        StencilEnable = true,
-        DepthBufferEnable = false,
-        StencilFunction = CompareFunction.Always,
-        StencilPass = StencilOperation.Replace,
-        ReferenceStencil = 1,
-    };
-
-    // Used by the lighting apply pass: only pixels stamped "shaded" (0) get multiplied.
-    public static readonly DepthStencilState StencilTestShadedOnly = new()
-    {
-        StencilEnable = true,
-        DepthBufferEnable = false,
-        StencilFunction = CompareFunction.Equal,
-        StencilPass = StencilOperation.Keep,
-        StencilFail = StencilOperation.Keep,
-        ReferenceStencil = 0,
-    };
-
-    // dest = dest * light, alpha untouched - reproduces the old LightingApply.fx
-    // multiply (scene.rgb * light, scene.a) as a fixed-function blend instead of a
-    // shader, applied in place onto SceneTarget.
-    public static readonly BlendState LightMultiplyBlend = new()
-    {
-        ColorBlendFunction = BlendFunction.Add,
-        ColorSourceBlend = Blend.DestinationColor,
-        ColorDestinationBlend = Blend.Zero,
-        AlphaBlendFunction = BlendFunction.Add,
-        AlphaSourceBlend = Blend.Zero,
-        AlphaDestinationBlend = Blend.One,
-    };
-
-    // Lazily resolved: default (no custom shader) sprites use this instead of
-    // MonoGame's built-in effect while lighting is active, so they can sample
-    // the lightmap themselves (see DrawRenderQueue) instead of relying on a
-    // full-screen post-process. See DefaultLit.fx.
-    private Effect? _defaultLitEffect;
-    private Effect? GetDefaultLitEffect()
-    {
-        _defaultLitEffect ??= _shaders.GetShader("DefaultLit")?.Clone();
-        return _defaultLitEffect;
-    }
 
     // Screen
     private SpriteBatch _spriteBatch;
@@ -199,52 +131,12 @@ public sealed partial class RenderManager
     public void SetFullViewport(int width, int height)
         => GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, width, height);
 
-    // Where the frame ultimately lands: a caller-provided FinalTarget, or the
-    // backbuffer, letterboxed while resizing.
-    private Viewport ComputeDestinationViewport()
-    {
-        if (FinalTarget is not null)
-            return new Viewport(0, 0, FinalTarget.Width, FinalTarget.Height);
-
-        var pp = GameClient.GraphicsDevice.PresentationParameters;
-
-        if (!Resizing)
-            return new Viewport(0, 0, pp.BackBufferWidth, pp.BackBufferHeight);
-
-        int vx = (pp.BackBufferWidth  - _viewport.VirtualWidth)  / 2;
-        int vy = (pp.BackBufferHeight - _viewport.VirtualHeight) / 2;
-        return new Viewport(vx, vy, _viewport.VirtualWidth, _viewport.VirtualHeight);
-    }
-
-    // Only shapes stamp stencil 0, so only they need the lighting apply pass.
-    // Checked before the world is drawn, so the SceneTarget round-trip can be
-    // skipped for the common frame that has none.
-    private bool QueueHasShadedShape()
-    {
-        foreach (var r in _renderQueue)
-        {
-            if (r.Target is IShapeRenderable && !r.Unshaded)
-                return true;
-        }
-        return false;
-    }
-
     // Single draw loop for the merged queue. target/viewport must already be set.
     // Interleaves two batchers (SpriteBatch for sprites/text, ShapeBatch for debug
-    // shapes). When writeStencil is true (lighting active):
-    // - Shapes stamp stencil 0 (shaded, needs the post-multiply) or 1 (unshaded,
-    //   skip it) per r.Unshaded, same as before - Apos.Shapes' own shader can't
-    //   sample the lightmap, so this is still the only way shapes support
-    //   Unshaded (see LightingSystem.ApplyAfterWorld's StencilTestShadedOnly).
-    // - Sprites/text always stamp 1 ("skip me"), regardless of r.Unshaded, since
-    //   they now sample the lightmap themselves (DefaultLit/Grayscale/MetallicFloor)
-    //   or intentionally don't (Unshaded.fx) - the shared post-multiply must never
-    //   touch them, or a shaded sprite would get lit twice.
+    // shapes).
     private void DrawRenderQueue(
         List<RenderQueue> queue,
-        List<IPooledRenderable> pooled,
-        bool lightingActive,
-        bool writeStencil)
+        List<IPooledRenderable> pooled)
     {
         bool spriteOpen = false;
         bool shapeOpen = false;
@@ -252,17 +144,13 @@ public sealed partial class RenderManager
         SamplerState? currentSampler = null;
         bool currentUnshaded = false;
 
-        // Sprites map their pixel position to a lightmap UV, and the pixel
-        // position is framebuffer relative - so the shaders need the viewport
-        // rect, not the target size. They match when the world goes to
-        // SceneTarget; on the backbuffer a letterboxed viewport doesn't start
-        // at the origin.
+        // Shaders working in screen space map their pixel position to a UV,
+        // and the pixel position is framebuffer relative - so they need the
+        // viewport rect, not the target size: a letterboxed viewport doesn't
+        // start at the origin.
         var vp = GameClient.GraphicsDevice.Viewport;
         var viewportSize = new Vector2(vp.Width, vp.Height);
         var viewportOffset = new Vector2(vp.X, vp.Y);
-
-        DepthStencilState StencilFor(bool unshaded) =>
-            !writeStencil ? DepthStencilState.None : (unshaded ? StencilWriteUnshaded : StencilWriteShaded);
 
         queue.Sort();
 
@@ -283,7 +171,7 @@ public sealed partial class RenderManager
                     if (shapeOpen)
                         EndShapes();
 
-                    BeginShapes(r.Target.SamplerState, StencilFor(r.Unshaded));
+                    BeginShapes(r.Target.SamplerState, DepthStencilState.None);
                     shapeOpen = true;
                     currentSampler = r.Target.SamplerState;
                     currentUnshaded = r.Unshaded;
@@ -303,26 +191,12 @@ public sealed partial class RenderManager
                     if (spriteOpen)
                         End();
 
-                    // Default (no custom shader) sprites use DefaultLit so they
-                    // can sample the lightmap themselves; Unshaded.fx and any
-                    // other custom shader (Grayscale/MetallicFloor) are used as-is.
-                    var shaderToUse = (lightingActive && r.Shader is null) ? GetDefaultLitEffect() : r.Shader;
+                    var shaderToUse = r.Shader;
 
                     if (shaderToUse is not null)
                     {
-                        // LightingEnabled must always be pushed, not just when
-                        // writeStencil is true: Grayscale/MetallicFloor's
-                        // injected lighting wrapper is baked into the compiled
-                        // shader unconditionally, so when lighting is off it
-                        // still runs - without this flag it would sample an
-                        // unbound LightMap (black) and multiply every sprite
-                        // to solid black instead of skipping the multiply.
-                        shaderToUse.Parameters["LightingEnabled"]?.SetValue(lightingActive);
-                        shaderToUse.Parameters["LightMap"]?.SetValue(_lighting.CurrentLightMap);
                         shaderToUse.Parameters["ViewportSize"]?.SetValue(viewportSize);
                         shaderToUse.Parameters["ViewportOffset"]?.SetValue(viewportOffset);
-                        shaderToUse.Parameters["LightMapFlipY"]?.SetValue(!writeStencil);
-                        shaderToUse.Parameters["PixelatedLighting"]?.SetValue(_lighting.PixelatedLighting);
                         shaderToUse.Parameters["Time"]?.SetValue((float)GameClient.Timing.TotalTime);
 
                         if (r.Target is Boxed<Sprite2D> { Value.CachedTexture: { } texture } boxed) // The size of one texel of the texture the sprite samples (its atlas page)
@@ -336,14 +210,7 @@ public sealed partial class RenderManager
                         }
                     }
 
-                    // Sprites always self-light or self-bypass now, so the
-                    // shape-oriented post-multiply must never touch them -
-                    // always mark "skip me", regardless of r.Unshaded, so a
-                    // sprite drawn over a shape overwrites any stale "shape
-                    // needs multiply" stencil value left underneath it.
-                    var dss = !writeStencil ? DepthStencilState.None : StencilWriteUnshaded;
-
-                    Begin(shaderToUse, r.Target.SamplerState, dss);
+                    Begin(shaderToUse, r.Target.SamplerState, DepthStencilState.None);
                     spriteOpen = true;
                     currentShader = r.Shader;
                     currentSampler = r.Target.SamplerState;
@@ -372,8 +239,8 @@ public sealed partial class RenderManager
     {
         // Only force a viewport swap when we're rendering directly to the
         // backbuffer. When the caller has already configured a target
-        // (e.g. the lighting SceneTarget during DrawQueue) we leave the
-        // viewport alone — it's been sized to match the target.
+        // (e.g. FinalTarget) we leave the viewport alone — it's been sized
+        // to match the target.
         bool isOnBackbuffer = GameClient.GraphicsDevice.GetRenderTargets().Length == 0
                               || GameClient.GraphicsDevice.GetRenderTargets()[0].RenderTarget is null;
 
@@ -405,7 +272,7 @@ public sealed partial class RenderManager
         else if (isOnBackbuffer)
             return Matrix.Identity;
         else
-            return _camera.GetViewMatrix(); // world-space draws into SceneTarget
+            return _camera.GetViewMatrix(); // world-space draws into an offscreen target
     }
 
     /// <summary>
@@ -461,9 +328,6 @@ public sealed partial class RenderManager
     /// Sets the backbuffer viewport to the centered, scaled-virtual-size rect
     /// used for letterboxing/pillarboxing. Mirrors the on-backbuffer +
     /// Resizing branch of <see cref="Begin"/> without opening a SpriteBatch.
-    /// Call this at the top of a frame (before any draw that may capture
-    /// <see cref="LastBackbufferViewport"/>) so the lighting apply pass blits
-    /// the SceneTarget at the correct aspect ratio.
     /// </summary>
     public void SetLetterboxedBackbufferViewport()
     {
@@ -485,68 +349,12 @@ public sealed partial class RenderManager
     {
         _submitCounter = 0; // reset per frame so SubmitOrder doesnt climb toward int overflow
         DrawStopwatch.Reset();
-        WorldOnSceneTarget = false;
 
-        bool lightingActive = _lighting?.Enabled ?? false;
-        if (_renderQueue.Count == 0 && !lightingActive)
+        if (_renderQueue.Count == 0)
             return;
 
         DrawStopwatch.Start();
-
-        // When the lighting system is active, draw the world into the
-        // offscreen SceneTarget so the lighting pass can sample it. The
-        // final composite (apply pass + blit) is performed separately by
-        // GameClient.Draw after this returns.
-        Viewport previousViewport = default;
-        bool didSwitchTarget = false;
-
-        // Recompute the destination viewport directly — do NOT read
-        // GraphicsDevice.Viewport here. LightingSystem.Draw() sets per-light
-        // row viewports during shadow-map rendering and never restores them,
-        // so the device viewport is stale by this point.
-        if (lightingActive)
-            previousViewport = ComputeDestinationViewport();
-
-        // SceneTarget exists so the apply pass can multiply the lightmap onto
-        // shape pixels, gated by the stencil. Sprites and text light
-        // themselves in their own shader and always stamp "skip me", so with
-        // no shaded shape queued the whole round-trip - offscreen target,
-        // full-res clear, per-sprite stencil write, final blit - buys nothing
-        // and the world can go straight to the backbuffer like it does with
-        // lighting off.
-        if (lightingActive && SceneTarget is not null && QueueHasShadedShape())
-        {
-            var clearColor = GameClient.Scenes.CurrentScene?.BackgroundColor ?? GameClient.Options.BackgroundColor;
-            GameClient.GraphicsDevice.SetRenderTarget(SceneTarget);
-            GameClient.GraphicsDevice.Clear(ClearOptions.Target | ClearOptions.Stencil, clearColor, 0f, 0);
-            GameClient.GraphicsDevice.Viewport = new Viewport(0, 0, SceneTarget.Width, SceneTarget.Height);
-            didSwitchTarget = true;
-            WorldOnSceneTarget = true;
-        }
-        else if (lightingActive)
-        {
-            // The lightmap passes left their own render target and a per-light
-            // row viewport bound. Nothing restores them, and without the
-            // SceneTarget switch below there'd be nothing else to - so the
-            // world would draw into the lightmap and Present would fault on a
-            // still-active render target.
-            GameClient.GraphicsDevice.SetRenderTarget(FinalTarget);
-            GameClient.GraphicsDevice.Viewport = previousViewport;
-        }
-
-        if (_renderQueue.Count > 0)
-            DrawRenderQueue(_renderQueue, _pooledEntries, lightingActive, writeStencil: didSwitchTarget);
-
-        if (didSwitchTarget)
-        {
-            GameClient.GraphicsDevice.SetRenderTarget(FinalTarget);
-            GameClient.GraphicsDevice.Viewport = previousViewport;
-        }
-
-        // Cache the final backbuffer viewport so the lighting apply pass
-        // can use the same letterboxed layout.
-        LastBackbufferViewport = GameClient.GraphicsDevice.Viewport;
-
+        DrawRenderQueue(_renderQueue, _pooledEntries);
         DrawStopwatch.Stop();
     }
 

@@ -32,7 +32,6 @@ Every world system skips entities that have a `ContainedComponent`:
 | Skipped by | Effect |
 |------------|--------|
 | `SpriteSystem` | not drawn |
-| `LightingSystem` | its lights and occluders are off |
 | `CollisionSystem`, `TileCollisionSystem` | no collisions, not hit by point queries or raycasts |
 | `PhysicsSystem` | does not move on its own |
 | `TransformSystem` | no `MoveEvent`; not returned by `TryGetEntityAtWorld`/`GetEntitiesInArea` |

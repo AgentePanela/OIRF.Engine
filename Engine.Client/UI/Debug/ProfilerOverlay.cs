@@ -6,7 +6,6 @@ using System.Reflection;
 using Engine.Client.Debug.Diagnostics;
 using Engine.Client.GameStates;
 using Engine.Client.Graphics;
-using Engine.Client.Graphics.Lighting;
 using Engine.Shared.Configuration;
 using Engine.Shared.Configuration.CVars;
 using Engine.Shared.Debug.Diagnostics;
@@ -25,7 +24,6 @@ public sealed class ProfilerOverlay : Overlay
 {
     [Dependency] private readonly Camera2D _camera = default!;
     [Dependency] private readonly RenderManager _renderMan = default!;
-    [Dependency] private readonly LightingManager _lighting = default!;
     [Dependency] private readonly IConfigurationManager _cfg = default!;
     [Dependency] private readonly SystemsProfiler _profiler = default!;
     [Dependency] private readonly INetManager _net = default!;
@@ -47,7 +45,6 @@ public sealed class ProfilerOverlay : Overlay
     private readonly Label _cameraLabel;
     private readonly Label _resourcesLabel;
     private readonly Label _renderLabel;
-    private readonly Label _lightingLabel;
     private readonly Label _memoryLabel;
     private readonly Label _stateLabel;
 
@@ -94,7 +91,6 @@ public sealed class ProfilerOverlay : Overlay
         _cameraLabel = CreateLabel();
         _resourcesLabel = CreateLabel();
         _renderLabel = CreateLabel();
-        _lightingLabel = CreateLabel();
         _memoryLabel = CreateLabel();
         _stateLabel = CreateLabel();
 
@@ -106,7 +102,6 @@ public sealed class ProfilerOverlay : Overlay
         left.AddChild(_resourcesLabel);
         left.AddChild(new Separator());
         left.AddChild(_renderLabel);
-        left.AddChild(_lightingLabel);
         left.AddChild(_memoryLabel);
         left.AddChild(new Separator());
         left.AddChild(_stateLabel);
@@ -183,12 +178,6 @@ public sealed class ProfilerOverlay : Overlay
 
         _renderLabel.Text = $"Render draw: {FormatMs(_renderMan.DrawStopwatch.Elapsed.TotalMilliseconds)}\n" +
                              UIProfiler.LogSnapshot(true).TrimEnd();
-
-        _lightingLabel.Text = $"Lighting: {FormatMs(_lighting.LastLightingTotalMs)} | " +
-                               $"lights {_lighting.LastVisibleLights}/{_lighting.LastShadowLights} | occ {_lighting.LastOccluders}\n" +
-                               $"  shadow {FormatMs(_lighting.LastShadowPassMs)} " +
-                               $"(build {FormatMs(_lighting.LastShadowBuildMs)} / setup {FormatMs(_lighting.LastShadowSetupMs)} / draw {FormatMs(_lighting.LastShadowDrawMs)}) | " +
-                               $"light {FormatMs(_lighting.LastLightPassMs)} | bleed {FormatMs(_lighting.LastWallBleedMs)} | blur {FormatMs(_lighting.LastLightBlurMs)}";
 
         _memoryLabel.Text = MemoryMeter.GetInfo();
         _stateLabel.Text = $"State: {GameClient.GameState} | Elapsed: {FormatTime(time.TotalTime)}";

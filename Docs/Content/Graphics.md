@@ -185,7 +185,7 @@ Every shape struct implements `IShapeRenderable` (which extends `IRenderable`) a
 _renderer.DrawCircle(center, radius, fillColor: Color.Yellow, unshaded: true);
 ```
 
-This is a separate concept from the `Unshaded` **shader** used by sprites (see [Unshaded Sprites in Lighting.md](Lighting.md#unshaded-sprites)). Shapes can't hold a custom `Effect`, so `Unshaded` is just a bool that tells the renderer to skip lighting for that shape. As with unshaded sprites, `Layer`/`Depth` are still respected normally against everything else in the scene.
+This is a separate concept from the `Unshaded` **shader** used by sprites (see [Unshaded Sprites in Lighting.md](Lighting.md#unshaded-sprites)). Shapes can't hold a custom `Effect`, so `Unshaded` is just a bool that marks the shape as exempt from lighting. As with unshaded sprites, `Layer`/`Depth` are still respected normally against everything else in the scene.
 
 For immediate-mode drawing outside the queue (rare, prefer the `Draw*` methods above), `GameClient.ShapeBatch` exposes the underlying `Apos.Shapes` batch directly, e.g. `_renderer.FillRectImmediate(rect, color)`.
 

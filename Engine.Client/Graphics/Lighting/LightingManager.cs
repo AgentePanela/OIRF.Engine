@@ -1,17 +1,16 @@
 using System;
-using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
-using Microsoft.Xna.Framework.Graphics;
 
 namespace Engine.Client.Graphics.Lighting;
 
 /// <summary>
 /// Runtime configuration for the lighting pipeline.
 /// </summary>
+// todo: light rework - nothing reads these yet, the backend is being rewritten
 public sealed class LightingManager
 {
     /// <summary>
-    /// Master toggle. When false the lighting system does no work at all.
+    /// Master toggle.
     /// </summary>
     public bool Enabled { get; private set; } = false;
 
@@ -26,215 +25,7 @@ public sealed class LightingManager
     public float LightIntensity { get; set; } = 1f;
 
     /// <summary>
-    /// Max lights processed per frame, sorted by distance to the camera.
-    /// </summary>
-    public int MaxLights
-    {
-        get => _maxLights;
-        set => _maxLights = Math.Clamp(value, 1, 256);
-    }
-    private int _maxLights = 64;
-
-    /// <summary>
-    /// Shadow-casting light budget. Caps the height of the shadow map (one
-    /// row per light). Lights over the cap still render, just without shadows.
-    /// </summary>
-    public int MaxShadowcastingLights
-    {
-        get => _maxShadowcastingLights;
-        set => _maxShadowcastingLights = Math.Clamp(value, 1, 64);
-    }
-    private int _maxShadowcastingLights = 16;
-
-    /// <summary>
-    /// Shadow map width in texels. Each row is a full 360° unwrap around one
-    /// light, so too few texels makes shadows look like ray slices.
-    /// </summary>
-    public int ShadowMapSize
-    {
-        get => _shadowMapSize;
-        set => _shadowMapSize = Math.Clamp(value, 128, 4096);
-    }
-    private int _shadowMapSize = 1024;
-
-    /// <summary>
-    /// Extra shadow bias in world pixels, so filtered light doesn't leave a
-    /// bright fringe around wall edges.
-    /// </summary>
-    public float ShadowContactBias { get; set; } = 1.5f;
-
-    /// <summary>
-    /// Multiplier on the soft-shadow kernel size. Larger = wider penumbra.
-    /// </summary>
-    public float LightSoftness { get; set; } = 1.0f;
-
-    /// <summary>
-    /// Adds a blurred copy of the lightmap on top of walls, so they pick up
-    /// the glow of nearby lights instead of staying pitch black.
-    /// </summary>
-    public bool WallBleedEnabled { get; set; } = true;
-
-    /// <summary>
-    /// Multiplier on the wall bleed glow. 1.0 = as sampled from the blurred
-    /// lightmap, less than 1 dims it (darker walls), more than 1 boosts it.
-    /// </summary>
-    public float WallBleedStrength
-    {
-        get => _wallBleedStrength;
-        set => _wallBleedStrength = Math.Clamp(value, 0f, 4f);
-    }
-    private float _wallBleedStrength = 1.0f;
-
-    /// <summary>
-    /// How wide the wall bleed blur reaches, as a multiplier on the tap
-    /// spacing.
-    /// </summary>
-    public float WallBleedRadius
-    {
-        get => _wallBleedRadius;
-        set => _wallBleedRadius = Math.Clamp(value, 0.25f, 6f);
-    }
-    private float _wallBleedRadius = 1f;
-
-    /// <summary>
-    /// Separable blur iterations for the wall bleed, each a horizontal plus a
-    /// vertical pass.
-    /// </summary>
-    public int WallBleedIterations
-    {
-        get => _wallBleedIterations;
-        set => _wallBleedIterations = Math.Clamp(value, 1, 4);
-    }
-
-    private int _wallBleedIterations = 1;
-
-    /// <summary>
-    /// Gaussian blur over the finished lightmap, smooths shadow banding.
-    /// </summary>
-    public bool LightBlurEnabled { get; set; } = true;
-
-    /// <summary>
-    /// Fraction of the viewport resolution used for the lightmap.
-    /// 1.0 = native, 0.5 = half res (~4x cheaper fill, blurrier edges).
-    /// </summary>
-    public float LightmapScale
-    {
-        get => _lightmapScale;
-        set => _lightmapScale = Math.Clamp(value, 0.1f, 1.0f);
-    }
-    private float _lightmapScale = 1.0f;
-
-    /// <summary>
-    /// Renders the lightmap at one texel per LightPixelSize screen pixels
-    /// and upscales with nearest-neighbour, for a chunky pixel-art look.
-    /// </summary>
-    public bool PixelatedLighting { get; set; } = false;
-
-    /// <summary>
-    /// Size of each light "pixel" in screen pixels when PixelatedLighting is on.
-    /// </summary>
-    public int LightPixelSize
-    {
-        get => _lightPixelSize;
-        set => _lightPixelSize = Math.Clamp(value, 1, 64);
-    }
-    private int _lightPixelSize = 8;
-
-    /// <summary>
-    /// Draws the raw lightmap instead of applying it. Debug only.
-    /// </summary>
-    public bool DebugDraw { get; set; } = false;
-
-    /// <summary>
-    /// The lightmap built this frame, set by <see cref="LightingSystem"/> once
-    /// per frame after building it. Sprite shaders that want to sample light
-    /// themselves (see RenderManager's per-sprite lightmap sampling) read this
-    /// instead of taking a direct dependency on LightingSystem.
-    /// </summary>
-    public Texture2D? CurrentLightMap { get; internal set; }
-
-    /// <summary>
-    /// Single-sample shadows instead of the 7-tap PCF kernel. Cheaper,
-    /// hard edges.
-    /// </summary>
-    public bool HardShadows { get; set; } = false;
-
-    public int LastVisibleLights { get; private set; }
-    public int LastShadowLights { get; private set; }
-    public int LastOccluders { get; private set; }
-    public int LastShadowMapWidth { get; private set; }
-    public int LastShadowMapHeight { get; private set; }
-    public double LastLightingTotalMs { get; private set; }
-    public double LastShadowPassMs { get; private set; }
-
-    /// <summary>
-    /// Slices of <see cref="LastShadowPassMs"/>: building occluder edge
-    /// geometry, binding and clearing the shadow map, and submitting the
-    /// per-light draws.
-    /// </summary>
-    public double LastShadowBuildMs { get; private set; }
-    public double LastShadowSetupMs { get; private set; }
-    public double LastShadowDrawMs { get; private set; }
-
-    public double LastLightPassMs { get; private set; }
-    public double LastWallBleedMs { get; private set; }
-    public double LastLightBlurMs { get; private set; }
-
-    internal void RecordFrameStats(
-        int visibleLights,
-        int shadowLights,
-        int occluders,
-        int shadowMapWidth,
-        int shadowMapHeight,
-        double totalMs,
-        double shadowPassMs,
-        double shadowBuildMs,
-        double shadowSetupMs,
-        double shadowDrawMs,
-        double lightPassMs,
-        double wallBleedMs,
-        double lightBlurMs)
-    {
-        LastVisibleLights = visibleLights;
-        LastShadowLights = shadowLights;
-        LastOccluders = occluders;
-        LastShadowMapWidth = shadowMapWidth;
-        LastShadowMapHeight = shadowMapHeight;
-        LastLightingTotalMs = totalMs;
-        LastShadowPassMs = shadowPassMs;
-        LastShadowBuildMs = shadowBuildMs;
-        LastShadowSetupMs = shadowSetupMs;
-        LastShadowDrawMs = shadowDrawMs;
-        LastLightPassMs = lightPassMs;
-        LastWallBleedMs = wallBleedMs;
-        LastLightBlurMs = lightBlurMs;
-    }
-
-    /// <summary>
-    /// Zeroes the per-frame stats. Called on frames where the lighting system
-    /// bails out before doing any work, so the debug readouts don't keep
-    /// showing the last frame that did run.
-    /// </summary>
-    internal void ClearFrameStats()
-    {
-        LastVisibleLights = 0;
-        LastShadowLights = 0;
-        LastOccluders = 0;
-        LastShadowMapWidth = 0;
-        LastShadowMapHeight = 0;
-        LastLightingTotalMs = 0;
-        LastShadowPassMs = 0;
-        LastShadowBuildMs = 0;
-        LastShadowSetupMs = 0;
-        LastShadowDrawMs = 0;
-        LastLightPassMs = 0;
-        LastWallBleedMs = 0;
-        LastLightBlurMs = 0;
-    }
-
-    /// <summary>
-    /// Fired when Enabled changes, in case something needs to reallocate
-    /// render targets.
+    /// Fired when Enabled changes.
     /// </summary>
     public event Action<bool>? OnEnabledChanged;
 

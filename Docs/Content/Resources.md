@@ -129,4 +129,4 @@ This is enabled by default in debug builds.
 
 ## Shaders
 
-Custom shaders are compiled from `Resources/Shaders/*.fx` by a separate build-time tool. See [Shaders](Shaders.md) for setup and the automatic lighting support built into it.
+Custom shaders are compiled from `Resources/Shaders/*.fx` by a separate build-time tool. See [Shaders](Shaders.md) for setup.
