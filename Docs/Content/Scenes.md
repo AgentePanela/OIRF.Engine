@@ -138,7 +138,7 @@ See the [UI docs](Ui.md#wiring-ui-to-a-scene) for details on writing a `Layout`.
 protected GameClient _game;        // GameClient instance
 protected SceneManager _scene;     // SceneManager
 protected IAssetManager _asset;    // Asset manager
-protected RenderManager _renderer; // Render manager
+protected IRenderManager _renderer; // Render manager
 protected EntityManager _entManager; // Entity manager
 ```
 

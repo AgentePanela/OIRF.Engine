@@ -235,6 +235,15 @@ preview.EntityUid = anotherUid; // swap target
 preview.Refresh();               // force a redraw after external changes
 ```
 
+### ViewportControl
+
+Shows what a `RenderViewport` sees, live: a camera feed, a monitor, a minimap. See [Graphics](Graphics.md#showing-a-viewport-in-the-ui).
+
+```csharp
+var feed = new ViewportControl { Viewport = cameraViewport };
+var world = feed.ScreenToWorld(mousePosition);   // what is under the mouse, in the world
+```
+
 ---
 
 ## Misc

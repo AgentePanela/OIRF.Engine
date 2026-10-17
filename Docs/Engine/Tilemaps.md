@@ -9,13 +9,12 @@ This document covers the optimization designs and algorithmic details behind OIR
 Drawing thousands of individual tiles by submitting separate sprite batch transactions creates massive GPU state bottlenecks. OIRF Engine optimizes this using a chunked rendering technique:
 
 1. **Chunk Segregation**: Tiles are grouped into local grids (`TilemapChunk`) defined by `ChunkSize` (e.g. 16x16).
-2. **Viewport Intersection Culling**: `TilemapSystem.Draw()` calculates the absolute screen coordinates of each chunk bounding box. If the chunk does not overlap with the camera's `ViewportBounds`, the system discards the drawing pass:
+2. **Viewport Intersection Culling**: `TilemapSystem.Draw()` works out the world box of each chunk and skips it when the camera of the viewport being drawn does not see it:
    ```csharp
-   var chunkRect = new Rectangle((int)chunkWorldX, (int)chunkWorldY, worldChunkSize, worldChunkSize);
-   if (!bounds.Intersects(chunkRect))
+   if (!camera.IsOnScreen(new Vector2(chunkWorldX, chunkWorldY), new Vector2(worldChunkSize)))
        return;
    ```
-3. **Geometry Caching**: Instead of queueing entities, each chunk compiles its textures and calculated positions into a single flat `RenderableChunk` struct.
+3. **Geometry Caching**: Instead of queueing entities, each chunk is baked into a `RenderableChunk`: one flat array of `ChunkQuad` (texture, source region, position), a tile followed by its blend overlay when it has one. Drawing a chunk is a loop over that array, with no lookups.
 4. **Geometry Rebuilding (Dirty Flag)**: When `SetTile()` is invoked, the target chunk is flagged as `Dirty = true`. The system caches the draw geometry during the next tick and resets the flag.
 
 ---

@@ -8,8 +8,7 @@ namespace Engine.Client.Physics;
 
 public sealed class CollisionDrawSystem : EntityDrawSystem
 {
-    [Dependency] private readonly RenderManager _renderer = default!;
-    [Dependency] private readonly Camera2D _camera = default!;
+    [Dependency] private readonly IRenderManager _renderer = default!;
     [Dependency] private readonly IConfigurationManager _cfg = default!;
     [Dependency] private readonly CollisionSystem _colSys = default!;
     
@@ -21,15 +20,15 @@ public sealed class CollisionDrawSystem : EntityDrawSystem
         _cfg.Subs(PhysicsCvars.CollisionMask, value => showMask = value, true);
     }
 
-    public override void Draw(float dt)
+    public override void Draw(in DrawContext ctx)
     {
-        base.Draw(dt);
+        base.Draw(ctx);
         if (!showMask)
             return;
             
         foreach (var (_, _, transform, col) in _colSys._entityBuffer)
         {
-            if (!_camera.IsOnScreen(transform.Position))
+            if (!ctx.Camera.IsOnScreen(transform.Position))
                     continue;
 
             foreach (var (_, fixture) in col.Fixtures)

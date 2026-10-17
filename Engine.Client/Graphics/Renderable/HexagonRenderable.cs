@@ -26,6 +26,6 @@ public struct HexagonRenderable : IShapeRenderable
     {
     }
 
-    public void Draw(RenderManager renderer, Vector2 pos)
+    public void Draw(IRenderManager renderer, Vector2 pos)
         => renderer.DrawHexagonShape(this);
 }

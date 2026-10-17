@@ -43,7 +43,7 @@ public class DefaultLoadingScene : LoadingScene
             0f
         );
 
-        _renderer.Resizing = false; // disable resizing for a better look
+        _renderer.MainViewportScaling = MainViewportScaling.Native; // unscaled for a better look
     }
 
     public override void Update(float dt)
@@ -103,7 +103,7 @@ public class DefaultLoadingScene : LoadingScene
             _scene.DisposeCurrentScene();
         }
 
-        _renderer.Resizing = true;
+        _renderer.MainViewportScaling = MainViewportScaling.Scaled;
     }
     
 }

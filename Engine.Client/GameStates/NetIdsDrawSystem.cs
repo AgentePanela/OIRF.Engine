@@ -24,24 +24,23 @@ public sealed class NetIdsDrawSystem : EntityDrawSystem
     /// </summary>
     private const uint StaleAfter = 30;
 
-    [Dependency] private readonly RenderManager _renderer = default!;
-    [Dependency] private readonly Camera2D _camera = default!;
+    [Dependency] private readonly IRenderManager _renderer = default!;
     [Dependency] private readonly IFontManager _fonts = default!;
     [Dependency] private readonly ClientGameStateMetrics _metrics = default!;
     [Dependency] private readonly ShaderManager _shaderMan = default!;
 
     public bool Enabled { get; set; }
-    private Effect? _unshaded;
+    private ShaderInstance? _unshaded;
 
     public override void Init()
     {
         base.Init();
-        _unshaded = _shaderMan.GetShader("Unshaded");
+        _unshaded = _shaderMan.UnshadedInstance;
     }
 
-    public override void Draw(float dt)
+    public override void Draw(in DrawContext ctx)
     {
-        base.Draw(dt);
+        base.Draw(ctx);
 
         if (!Enabled)
             return;
@@ -53,7 +52,7 @@ public sealed class NetIdsDrawSystem : EntityDrawSystem
             if (_entManager.GetEntity(uid) is not { } ent || !ent.NetId.IsValid || HasComp<ContainedComponent>(uid))
                 continue;
 
-            if (!_camera.IsOnScreen(transform.Position))
+            if (!ctx.Camera.IsOnScreen(transform.Position))
                 continue;
 
             var text = $"n{ent.NetId.Id}";

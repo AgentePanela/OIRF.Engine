@@ -1,48 +1,283 @@
 # Graphics
 
-The ORIF Engine renders all 2D content through `RenderManager`. It wraps MonoGame's `SpriteBatch` with a layered render queue, camera transforms, and viewport management.
+The ORIF Engine renders all 2D content through `IRenderManager`. It wraps MonoGame's `SpriteBatch` with a layered render queue, camera transforms, and viewports.
 
 ---
 
 ## RenderManager
 
-`RenderManager` (accessible via `GameClient.Renderer`) is the central rendering API.
+`IRenderManager` (injected with `[Dependency]`, or `GameClient.Renderer`) is the central rendering API.
+
+## Viewports
+
+The world is never drawn straight onto the window. Each `RenderViewport` has its own camera and its own render target; the engine draws every enabled viewport into its target and then puts the main one on the window.
+
+```csharp
+RenderViewport main = _renderer.MainViewport;   // what the player sees, its camera is the Camera2D from IoC
+
+// another view of the world, drawn every frame before the main one
+RenderViewport cctv = _renderer.CreateViewport("Cctv", new Vector2(320, 180), renderScale: 1f);
+cctv.Camera.LookAt(somewhere);
+RawTexture? frame = cctv.Frame;                  // last frame drawn, null until the first one
+
+_renderer.RemoveViewport(cctv);
+```
+
+| Member | Description |
+|---|---|
+| `Size` | The size the camera centers on, in world units at zoom 1 |
+| `RenderScale` | Target pixels per world unit at zoom 1 |
+| `TargetSize` | Target size in pixels. Defaults to `Size * RenderScale`; a different one keeps the view centered and crops or shows more |
+| `ClearColor` | What the target is cleared to (the scene background when null) |
+| `Enabled` | A disabled viewport is not drawn |
+| `PostEffects` | Shaders the finished frame is drawn through, in order (see [Shaders](Shaders.md#on-the-whole-screen-post-effects)) |
+| `Frame` | The last frame drawn, as a `RawTexture` ready to submit. Ask for it again each frame instead of keeping it |
+| `Resize(size, renderScale, targetSize)` | Changes the three above; the target is recreated on the next draw |
+
+`IRenderManager.MainViewportScaling` says how the main viewport follows the window: `Scaled` (the game resolution fit to the window, the default), `Native` (one world unit per window pixel) or `Manual` (the engine leaves it alone). With `PresentMainViewport = false` the main viewport is still drawn into its target but not put on the window, and the engine UI is skipped - that is how the editor shows the world inside one of its own panels.
+
+### Showing a viewport in the UI
+
+`ViewportControl` is a UI control that shows what a viewport sees: a camera feed, a monitor, a minimap.
+
+```csharp
+var cam = _renderer.CreateViewport("Security", new Vector2(320, 180));
+cam.Camera.Zoom = 0.5f;
+cam.Camera.LookAt(somewhere);
+
+window.AddChild(new ViewportControl { Viewport = cam });
+```
+
+| Property | Default | |
+|---|---|---|
+| `Viewport` | `null` | The viewport to show |
+| `AutoResize` | `true` | The viewport takes the size of the control and is drawn at the resolution of the screen: one world unit per UI unit at zoom 1, zoom with its camera. When false the viewport keeps its own size and the three options below say how its frame is placed |
+| `Stretch` | `true` | Without `AutoResize`: scales the frame to fill the control. When false it is shown at the size of the viewport |
+| `KeepAspect` | `true` | With `Stretch`: both axes scale by the same amount, so the frame grows as much as fits without being distorted, centered in the control |
+| `IntegerScale` | `false` | With `Stretch`: rounds the scale down to a whole number, so pixel art keeps even pixels |
+| `AutoEnable` | `true` | The viewport is only drawn while the control is visible, so a closed window costs nothing |
+| `Tint` | white | |
+
+`Stretch`, `KeepAspect` and `IntegerScale` are style fields (`stretch`, `keepAspect`, `integerScale`), like the ones of `EntityView`. A low resolution viewport scaled up this way is drawn with the control's `Sampler`: set it to `Point` to keep the pixels sharp.
+
+```csharp
+// a fixed 320x180 feed, as big as fits in the window without distorting it
+var cam = _renderer.CreateViewport("Security", new Vector2(320, 180));
+window.AddChild(new ViewportControl { Viewport = cam, AutoResize = false, Sampler = TextureSampling.Point });
+```
+
+`ScreenToWorld(point)` and `WorldToScreen(world)` on the control convert between a point of the UI (the space of `Bounds` and of the mouse events) and the world seen through it, wherever in the control the frame ends up.
+
+The control shows the viewport, it does not own it: call `IRenderManager.RemoveViewport` when you are done with it.
+
+### Draw systems run once per viewport
+
+`IEntityDrawSystem.Draw(in DrawContext ctx)` is called for each viewport being drawn. Anything that depends on the view has to come from the context, not from the main camera:
+
+```csharp
+public override void Draw(in DrawContext ctx)
+{
+    foreach (var (uid, xform) in GetEntitiesWithComp<TransformComponent>())
+    {
+        if (!ctx.Camera.IsOnScreen(xform.Position))   // the camera of the viewport being drawn
+            continue;
+
+        _renderer.DrawCircle(xform.Position, 2f, Color.Red);
+    }
+}
+```
+
+`DrawContext` carries `DeltaTime`, `Viewport`, `Camera` and `WorldBounds`. What a scene submits from its own `Draw(float dt)` goes to the main viewport.
 
 ### Render Queue
 
-Rather than drawing directly to the screen, you **submit** renderables to the queue. The queue is sorted by layer, then flushed in one pass after all systems have run.
+Rather than drawing directly to the screen, you **submit** to the queue. The queue is sorted by layer, then depth, then the order things were submitted in, and drawn in one pass after all systems have run.
 
 ```csharp
-// Submit a Sprite2D renderable
+// Submit a Sprite2D
 _renderer.Submit(mySprite, position);
 
-// Submit with a custom shader (Effect)
-_renderer.Submit(mySprite, position, shader: myEffect);
+// Submit with a shader (see Shaders.md)
+_renderer.Submit(mySprite, position, _shaders.GetSharedInstance("Grayscale"));
 ```
 
-All `IRenderable` types have a `Layer` property. Lower layer values are drawn first (behind).
+Lower layer values are drawn first (behind).
 
-### Raw Drawing (inside Begin/End)
+A `Sprite2D` goes into the queue as plain data. Anything else that needs its own drawing code implements `IRenderable`: its `Draw(IRenderManager renderer, Vector2 pos)` is called when its turn comes, and from there it uses the immediate methods below.
 
-For immediate rendering (e.g., inside a custom draw call), you can use the lower-level methods:
+### Immediate drawing (inside an `IRenderable`)
+
+These draw right away, into the batch of the queue entry being drawn and with its shader. They are only meant to be called from an `IRenderable.Draw`:
 
 ```csharp
-_renderer.Begin();
-
-_renderer.DrawSprite(sprite2D, position);
-_renderer.DrawString(label2D, position);
-_renderer.DrawTexture(textureRect, position);
-
-_renderer.End();
+public void Draw(IRenderManager renderer, Vector2 pos)
+{
+    renderer.DrawSprite(sprite2D, pos);
+    renderer.DrawString(label2D, pos);
+    renderer.DrawTexture(rawTexture, pos);
+    renderer.DrawQuad(texture, sourceRect, pos, Color.White);
+}
 ```
 
-> **Note:** Prefer using the queue via `Submit()`. Only use `Begin()/End()` when you specifically need immediate rendering outside the queue.
+### Textures that are not sprites
+
+Anything that is not being handled by the atlas (the frame of another viewport, the screen texture an overlay gets) is drawn as a `RawTexture`:
+
+```csharp
+if (cctv.Frame is { } frame)
+{
+    frame.Size = new Vector2(320, 180);   // stretch it, whatever size the viewport renders at
+    frame.Layer = 5;
+    _renderer.Submit(frame, new Vector2(100, 100), shader);
+}
+```
+
+When creating your own textures prefer to add they in the TextureAtlas making them a `Sprite2D` instead of using `RawTextures` for everything.
 
 ### Screen-to-World Conversion
 
 ```csharp
 Vector2 worldPos = _renderer.ScreenToWorld(screenPosition);
 ```
+
+---
+
+## Render overlays
+
+A `RenderOverlay` draws at one point of every viewport's frame, outside of the entities: under the world, over it, or on the finished image. It is the place for what is not "an entity being drawn": a background, a field of view mask, markers over everything, an effect on the screen.
+
+```csharp
+public sealed class DamageFlashOverlay : RenderOverlay
+{
+    public override RenderStage Stage => RenderStage.Screen;
+
+    public float Strength;
+
+    public override void Draw(in RenderOverlayArgs args)
+    {
+        if (Strength <= 0f)
+            return;
+
+        // Screen stage: positions are pixels of the viewport's target
+        args.Renderer.DrawRect(args.ScreenBounds, fillColor: Color.Red * Strength);
+    }
+}
+
+// once, e.g. when a system inits
+_renderer.AddOverlay(_flash = new DamageFlashOverlay());
+
+// to stop
+_flash.Enabled = false;          // or _renderer.RemoveOverlay(_flash)
+```
+
+An overlay draws exactly like a draw system does: by submitting to `args.Renderer` (`Submit`, `DrawRect`, `DrawCircle`...). What it submits is sorted by layer and depth among what the same stage submitted, and drawn when the stage ends.
+
+### Stages
+
+In the order they happen for each viewport:
+
+| `RenderStage` | Positions are | Drawn |
+|---|---|---|
+| `BelowWorld` | world | On the cleared target, before anything of the world |
+| `World` | world | Together with what the draw systems submit, sorted with it by layer and depth |
+| `BeforeLighting` | world | Over the finished world, before the lighting is put on it |
+| `AfterLighting` | world | Over the lit world: not darkened by it |
+| `Screen` | pixels of the target, `(0, 0)` top left | Over everything. The viewport's post effects run right after |
+
+Lighting is being reworked: until it is back, `BeforeLighting` and `AfterLighting` simply draw one after the other.
+
+Text submitted in the `Screen` stage is in pixels too, so a `Label2D` there has the size its font says.
+
+### What an overlay gets
+
+| `RenderOverlayArgs` | |
+|---|---|
+| `Renderer` | Where to submit |
+| `Viewport`, `Camera` | The viewport being drawn and its camera |
+| `Stage` | The stage being drawn |
+| `WorldBounds` | The world area the viewport shows |
+| `ScreenBounds` | The whole target in pixels, for the `Screen` stage |
+| `DeltaTime` | |
+| `ScreenTexture` | The frame so far as a `RawTexture`, only when the overlay asks for it (below) |
+
+### Options
+
+| Member | Default | |
+|---|---|---|
+| `Stage` | required | When it draws |
+| `Order` | `0` | Among overlays of the same stage, lower draws first |
+| `Enabled` | `true` | |
+| `AppliesTo(viewport)` | every viewport | Return false to skip one, e.g. `=> viewport == _renderer.MainViewport` |
+| `RequestScreenTexture` | `false` | See below |
+
+Overlays run for every viewport, the main one and any other, unless `AppliesTo` says otherwise.
+
+### Reading the screen
+
+A target cannot be read while it is being drawn into. An overlay that needs what was drawn so far overrides `RequestScreenTexture`, and gets it in `args.ScreenTexture`:
+
+```csharp
+public sealed class UnderwaterOverlay : RenderOverlay
+{
+    private readonly ShaderInstance _shader;
+
+    public override RenderStage Stage => RenderStage.Screen;
+    public override bool RequestScreenTexture => true;
+
+    public UnderwaterOverlay(ShaderInstance shader) => _shader = shader;
+
+    public override void Draw(in RenderOverlayArgs args)
+    {
+        // draw the frame again over itself, through the shader, on the left half only
+        var frame = args.ScreenTexture!.Value;
+        frame.Region = new Rectangle(0, 0, args.ScreenBounds.Width / 2, args.ScreenBounds.Height);
+        args.Renderer.Submit(frame, Vector2.Zero, _shader);
+    }
+}
+```
+
+The frame the overlay draws on already has everything that was there, so it only needs to draw what changes. Asking for the screen texture costs a copy of the whole frame each time, and is not available in the `World` stage.
+
+To run the whole frame through a shader there is something simpler: the viewport's `PostEffects`, see [Shaders](Shaders.md#on-the-whole-screen-post-effects).
+
+---
+
+## Masks
+
+A mask limits where things are drawn: only inside a shape, or everywhere but inside it. Anything can be the shape, and anything can be cut by it.
+
+```csharp
+// 1. the shape: nothing is drawn, the window sprite becomes mask 1
+using (_renderer.BeginMask(MaskMode.Write, 1))
+    _renderer.Submit(windowSprite, position);
+
+// 2. drawn only where mask 1 is
+using (_renderer.BeginMask(MaskMode.Inside, 1))
+    _renderer.Submit(skySprite, position);
+
+// 3. drawn everywhere except where mask 1 is
+using (_renderer.BeginMask(MaskMode.Outside, 1))
+    _renderer.DrawRect(area, fillColor: Color.Black * 0.5f);
+```
+
+Everything submitted inside the `using` block gets the mode, whatever it is (sprite, text, shape, `RawTexture`); what is submitted outside of one is drawn as usual.
+
+| `MaskMode` | |
+|---|---|
+| `Write` | Draws nothing, adds to the mask instead |
+| `Inside` | Drawn only where the mask is |
+| `Outside` | Drawn only where the mask is not |
+
+Rules:
+
+- **Order matters.** The mask has to be written before what it cuts is drawn, and the queue draws by layer, then depth, then submit order. Give the `Write` the same layer and depth as what it cuts (or a lower one) and submit it first.
+- **Masks are numbered** from 1 to 255, so several can be in use at once. A pixel holds one number: writing mask 2 over mask 1 leaves 2 there.
+- **A mask belongs to one viewport and one frame.** It is empty at the start of each viewport's frame.
+- **A sprite writes its own shape**: only its mostly opaque texels count, not its rectangle. A sprite that writes with a shader of its own uses that shader instead, and counts wherever the shader does not `clip`.
+- **A shape writes its bounding box**, whatever it is: a `DrawCircle` used as a mask masks a square. Use a sprite for a mask that is not a rectangle.
+- **Reading the screen empties the masks.** An overlay that asks for the screen texture, and the post effects, continue on another target: write the mask again after.
+
+Each change of mask mode ends a batch, like a change of shader does.
 
 ---
 
@@ -94,6 +329,8 @@ _renderer.Submit(label, position);
 var title = new Label2D("Game Over", size: 32f);
 _renderer.Submit(title, position);
 ```
+
+Text in the world is drawn sharp whatever the zoom or the window size: its glyphs are made at the size they end up on screen instead of being stretched. For a pixel art font that should scale with the world like a sprite does, blocky pixels and all, set `Pixelated = true` on the label.
 
 ### TextureRect
 
@@ -148,6 +385,51 @@ components:
 
 ---
 
+### A shader over the whole entity
+
+A shader set on a sprite or a layer is applied to that one piece. A **post shader** is applied to the entity as one image: the sprite and all its layers are first drawn into a texture of their own, and that texture goes on screen through the shader.
+
+```csharp
+_sprite.SetPostShader(uid, "Glow", padding: 4);
+_sprite.SetPostShaderParam(uid, "GlowColor", Color.Yellow);
+
+_sprite.SetPostShader(uid, null);     // off
+```
+
+Use it when the shader has to see the entity whole (an outline around the whole character and not around each piece of clothing) or has to draw past the edge of the sprite: `padding` is how many empty pixels it gets around the entity for that.
+
+In the shader, `LocalUV` runs 0..1 over that image (padding included) and `TexelSize` is one pixel of it. Per sprite parameters work as usual.
+
+An entity can have several, applied one after the other, each to what the one before it drew:
+
+```csharp
+_sprite.AddPostShader(uid, "Outline", padding: 2);   // first
+_sprite.AddPostShader(uid, "Glow", padding: 4);      // then this one, over the outlined image
+
+_sprite.SetPostShaderParam(uid, "Glow", "GlowColor", Color.Yellow);   // one of them
+_sprite.SetPostShaderParam(uid, "Strength", 0.5f);                     // every one that has it
+
+_sprite.RemovePostShader(uid, "Outline");
+_sprite.ClearPostShaders(uid);
+```
+
+| Method | |
+|---|---|
+| `SetPostShader(uid, shader, padding)` | Replaces whatever the entity had with this one. `null` removes them all |
+| `AddPostShader(uid, shader, padding, order)` | Adds one. Lower `order` is applied first, equal ones in the order they were added. Adding one it already has changes its padding and order |
+| `RemovePostShader(uid, shader)` / `ClearPostShaders(uid)` | |
+| `HasPostShader(uid, shader)` / `GetPostShaders(uid)` | |
+| `SetPostShaderParam(uid, shader, name, value)` | A parameter of one of them |
+| `SetPostShaderParam(uid, name, value)` | The same parameter on all of them, ignored by the ones that do not have it |
+
+Use `order` for something that has to stay on top of whatever else gets added later, whoever adds it and when: an outline with a high order always goes around the entity as it ends up, even if another post shader is added after it.
+
+The paddings add up: with the two above the image has 6 empty pixels around the entity, since the glow draws around the outline. The same shader prototype cannot be on an entity twice; make a second prototype on the same `.fx` for that.
+
+It is local (nothing replicates) and it has a cost: a texture per entity and one more draw of it for each post shader, every frame it is on screen. It is meant for a few entities at a time, not for every wall of a map. The first frame an entity is on screen it is drawn without the shaders, the image is ready from the next one on.
+
+---
+
 ## Shapes
 
 Beyond sprites and text, `RenderManager` can draw vector shapes directly: circles, rectangles, lines, polygons, and more, without needing a texture. These are backed by [Apos.Shapes](https://github.com/Apos-Games/Apos.Shapes) and queued through the same submit pipeline as everything else, so they respect `Layer`/`Depth` and participate in lighting like any other renderable.
@@ -185,7 +467,7 @@ Every shape struct implements `IShapeRenderable` (which extends `IRenderable`) a
 _renderer.DrawCircle(center, radius, fillColor: Color.Yellow, unshaded: true);
 ```
 
-This is a separate concept from the `Unshaded` **shader** used by sprites (see [Unshaded Sprites in Lighting.md](Lighting.md#unshaded-sprites)). Shapes can't hold a custom `Effect`, so `Unshaded` is just a bool that tells the renderer to skip lighting for that shape. As with unshaded sprites, `Layer`/`Depth` are still respected normally against everything else in the scene.
+This is a separate concept from the `Unshaded` **shader** used by sprites (see [Unshaded Sprites in Lighting.md](Lighting.md#unshaded-sprites)). Shapes can't hold a shader, so `Unshaded` is just a bool that marks the shape as exempt from lighting. As with unshaded sprites, `Layer`/`Depth` are still respected normally against everything else in the scene.
 
 For immediate-mode drawing outside the queue (rare, prefer the `Draw*` methods above), `GameClient.ShapeBatch` exposes the underlying `Apos.Shapes` batch directly, e.g. `_renderer.FillRectImmediate(rect, color)`.
 
@@ -209,7 +491,7 @@ Matrix view = GameClient.Camera.GetViewMatrix();
 Vector2 world = GameClient.Camera.ScreenToWorld(screenPos);
 ```
 
-The camera transform is applied automatically when `RenderManager.DrawQueue()` runs.
+The camera transform of the viewport being drawn is applied automatically to everything in the queue. `Camera2D` from IoC and `GameClient.Camera` are the main viewport's camera; every other viewport has its own in `RenderViewport.Camera`.
 
 ---
 
