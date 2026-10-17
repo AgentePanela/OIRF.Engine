@@ -331,6 +331,34 @@ _renderer.Submit(sprite, position, shader, custom0: new Vector4(1, 0, 0, 1));
 
 ---
 
+## On a whole entity (post shader)
+
+`SpriteSystem.SetPostShader(uid, shader, padding)` draws an entity's sprite and layers into one image and puts that image on screen through the shader, so the shader sees the entity whole and can draw around it. It is any shader prototype, written like the others; see [Graphics](Graphics.md#a-shader-over-the-whole-entity) for when to use it and what it costs.
+
+An outline that grows past the edge of the sprite, for an entity drawn with `padding: 2`:
+
+```hlsl
+#include "Sprite.fxh"
+
+float4 MainPS(SpritePixel input) : COLOR
+{
+    float4 color = SampleSprite(input);
+
+    // is there anything of the entity within 2 pixels of this one?
+    float near = 0;
+    for (int x = -2; x <= 2; x++)
+        for (int y = -2; y <= 2; y++)
+            near = max(near, tex2D(SpriteTextureSampler, input.UV + float2(x, y) * TexelSize).a);
+
+    float4 edgeColor = input.Custom0;   // per sprite, see the prototype's perSprite
+    return lerp(edgeColor * step(0.5, near), color, step(0.5, color.a));
+}
+
+SPRITE_TECHNIQUE(MainPS)
+```
+
+---
+
 ## On the whole screen (post effects)
 
 There is no separate kind of shader for the screen. A post effect draws the finished frame of a viewport as one sprite as big as the target, through any shader prototype:

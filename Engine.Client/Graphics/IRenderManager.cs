@@ -79,6 +79,13 @@ public interface IRenderManager
     void RemoveOverlay(RenderOverlay overlay);
 
     /// <summary>
+    /// Everything submitted until the returned scope is disposed writes to, or is cut by, the mask <paramref name="id"/>
+    /// (1 to 255) of the viewport being drawn.
+    /// <b>USE WITH "using BeginMask"</b>
+    /// </summary>
+    MaskScope BeginMask(MaskMode mode, int id = 1);
+
+    /// <summary>
     /// For draw systems to tell the profiler how much they skipped for being off screen.
     /// </summary>
     void ReportCulled(int count = 1);
@@ -93,14 +100,18 @@ public interface IRenderManager
     /// <summary>
     /// Queues a sprite. <paramref name="custom0"/> and <paramref name="custom1"/> is the shaders custom parameters.
     /// </summary>
-    void Submit(Sprite2D sprite, Vector2 position, ShaderInstance? shader = null,
-        Vector4 custom0 = default, Vector4 custom1 = default);
+    void Submit(Sprite2D sprite, Vector2 position, ShaderInstance? shader, Vector4 custom0, Vector4 custom1 = default);
+
+    /// <inheritdoc cref="Submit(Sprite2D, Vector2, ShaderInstance?, Vector4, Vector4)"/>
+    void Submit(Sprite2D sprite, Vector2 position, ShaderInstance? shader = null);
 
     /// <summary>
     /// Queues a raw texture. <paramref name="custom0"/> and <paramref name="custom1"/> is the shaders custom parameters.
     /// </summary>
-    void Submit(RawTexture texture, Vector2 position, ShaderInstance? shader = null,
-        Vector4 custom0 = default, Vector4 custom1 = default);
+    void Submit(RawTexture texture, Vector2 position, ShaderInstance? shader, Vector4 custom0, Vector4 custom1 = default);
+
+    /// <inheritdoc cref="Submit(RawTexture, Vector2, ShaderInstance?, Vector4, Vector4)"/>
+    void Submit(RawTexture texture, Vector2 position, ShaderInstance? shader = null);
 
     /// <summary>
     /// Add a IRenderable to be draw queued.

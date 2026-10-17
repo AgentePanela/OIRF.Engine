@@ -45,12 +45,12 @@ The backbuffer is created with the default `RenderTargetUsage` (its contents are
 
 `DrawOverlays(viewport, stage)` calls the overlays of one stage. Outside of the `World` stage they submit into their own buffer (`_overlayQueue`, swapped in as `_queue` while they run), so what a scene submitted for the world is not drawn early; the buffer is drawn when the stage ends.
 
-Each viewport has two targets of the same size, `ColorTarget` and a scratch one created the first time it is needed. Reading the frame is always the same move, `RenderViewport.SwapTargets()`: the scratch becomes the target being drawn into and the old one becomes readable.
+Each viewport has two targets of the same size, `Target` and a scratch one created the first time it is needed. Reading the frame is always the same move, `RenderViewport.SwapTargets()`: the scratch becomes the target being drawn into and the old one becomes readable.
 
 * An overlay with `RequestScreenTexture`: the queue is drawn, the targets are swapped, the frame is copied onto the new target (so the overlay draws over a complete image), the overlay runs with the old target as `ScreenTexture`, and what it submitted is drawn right away, before anything else can swap again.
 * A post effect: the targets are swapped and the old one is drawn over the whole new one through the shader. No copy is needed, the shader output covers everything.
 
-Nothing is copied back: `ColorTarget` is simply whichever target ended up holding the frame, which is why it can change from one frame to the next.
+Nothing is copied back: `Target` is simply whichever target ended up holding the frame, which is why it can change from one frame to the next.
 
 `RenderViewport.LightTarget` and the `BeforeLighting` / `AfterLighting` stages are the hooks the lighting rework plugs into; nothing fills or reads the light target yet.
 
@@ -81,7 +81,7 @@ Text goes in through a small `IFontStashRenderer2` (`RenderManager.Strings.cs`):
 Shapes are the one thing that still breaks out: the batcher is flushed, the shape batch opened, and closed again when the next sprite comes.
 
 ### 4. Stats
-`RenderManager` counts what it does into `RenderStats` while the frame is drawn and publishes the finished frame in `IRenderManager.Stats`: draw calls, triangles, texture swaps and target switches (from `GraphicsDevice.Metrics`, world only), batches, quads and why each batch broke (texture, shader, sampler, blend, sprite/shape), shader instances shared and owned, post effects and their time, the memory of the viewport targets, the time each overlay took, items submitted and culled, and the time spent submitting, sorting, flushing and presenting, plus a line per viewport. The profiler overlay shows them in its RENDERING panel.
+`RenderManager` counts what it does into `RenderStats` while the frame is drawn and publishes the finished frame in `IRenderManager.Stats`: draw calls, triangles, texture swaps and target switches (from `GraphicsDevice.Metrics`, world only), batches, quads and why each batch broke (texture, shader, sampler, blend, mask, sprite/shape), shader instances shared and owned, post effects and their time, the memory of the viewport targets, the time each overlay took, items submitted and culled, and the time spent submitting, sorting, flushing and presenting, plus a line per viewport. The profiler overlay shows them in its RENDERING panel.
 
 ---
 
@@ -98,6 +98,24 @@ A viewport is a logical `Size` (what its camera centers on), a `RenderScale` (ta
 
 ### 3. Coordinate Translation
 `Camera2D.ScreenToWorld` / `WorldToScreen` go through the viewport: subtract `ScreenOffset`, then the inverse view matrix. `Camera2D.CacheFrame()` stores the visible world box (taking rotation into account) for the `IsOnScreen` checks, and runs for each viewport before its draw systems.
+
+---
+
+### Masks
+
+A mask is the stencil of the viewport's target, which is why the targets are created with `Depth24Stencil8`. `BeginMask` only sets a mode and an id that every `Submit` stamps on its command; the returned `MaskScope` puts the previous ones back.
+
+When the queue is drawn, each command's mode becomes a `DepthStencilState` (cached per mode and id in `RenderManager.Masks.cs`): `Write` always passes and replaces the stencil with the id, `Inside` passes where the stencil equals it, `Outside` where it does not. While writing, the blend state has no color channels enabled, so only the stencil changes. A change of stencil state flushes the batcher, and restarts the shape batch.
+
+The stencil is written for every pixel a quad covers, so a sprite written with the plain sprite effect would mask its whole rectangle. A sprite in `Write` mode with no shader of its own is drawn with `EngineSpriteMask.fx` (in `EngineResources/Shaders`, compiled along with the content's), which clips texels under half alpha. Apos.Shapes has no such thing, hence shapes masking their bounding box.
+
+The clear at the start of `DrawViewport` clears the stencil too. `SwapTargets` moves to a target with its own stencil, which is why masks do not survive it.
+
+### Drawing into a texture before the frame
+
+Switching render targets in the middle of a viewport would discard what was drawn in it so far, so anything that needs a texture of its own is drawn before any viewport is: `RenderFrame` raises `BeforeFrame` first, and `RenderToTarget(target, transform, state, submit)` draws what `submit` submits into `target`, through its own queue and with `transform` in place of a viewport's matrix. Both are internal to the engine for now.
+
+The post shader of `SpriteSystem` (`SpriteSystem.PostShader.cs`) is built on it. For each entity with a post shader that some viewport drew last frame, `DrawPostTextures` measures the box around its sprite and layers with the entity at the origin and unrotated, makes sure its texture is big enough (they only grow, in steps of 32), and submits the entity through the same `SubmitWithLayers` the world uses, with `local: true` leaving the rotation out. With several post shaders, every one but the last is then applied right there: the image is drawn through the shader into a second texture of the same size and the two are swapped, once per shader. In `Draw`, such an entity is a single `RawTexture` of the resulting texture, rotated as a whole and drawn through the last post shader. An entity whose texture is not ready yet falls back to being drawn piece by piece, without the shader, for that frame.
 
 ---
 

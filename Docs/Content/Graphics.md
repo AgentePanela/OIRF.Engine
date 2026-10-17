@@ -36,6 +36,40 @@ _renderer.RemoveViewport(cctv);
 
 `IRenderManager.MainViewportScaling` says how the main viewport follows the window: `Scaled` (the game resolution fit to the window, the default), `Native` (one world unit per window pixel) or `Manual` (the engine leaves it alone). With `PresentMainViewport = false` the main viewport is still drawn into its target but not put on the window, and the engine UI is skipped - that is how the editor shows the world inside one of its own panels.
 
+### Showing a viewport in the UI
+
+`ViewportControl` is a UI control that shows what a viewport sees: a camera feed, a monitor, a minimap.
+
+```csharp
+var cam = _renderer.CreateViewport("Security", new Vector2(320, 180));
+cam.Camera.Zoom = 0.5f;
+cam.Camera.LookAt(somewhere);
+
+window.AddChild(new ViewportControl { Viewport = cam });
+```
+
+| Property | Default | |
+|---|---|---|
+| `Viewport` | `null` | The viewport to show |
+| `AutoResize` | `true` | The viewport takes the size of the control and is drawn at the resolution of the screen: one world unit per UI unit at zoom 1, zoom with its camera. When false the viewport keeps its own size and the three options below say how its frame is placed |
+| `Stretch` | `true` | Without `AutoResize`: scales the frame to fill the control. When false it is shown at the size of the viewport |
+| `KeepAspect` | `true` | With `Stretch`: both axes scale by the same amount, so the frame grows as much as fits without being distorted, centered in the control |
+| `IntegerScale` | `false` | With `Stretch`: rounds the scale down to a whole number, so pixel art keeps even pixels |
+| `AutoEnable` | `true` | The viewport is only drawn while the control is visible, so a closed window costs nothing |
+| `Tint` | white | |
+
+`Stretch`, `KeepAspect` and `IntegerScale` are style fields (`stretch`, `keepAspect`, `integerScale`), like the ones of `EntityView`. A low resolution viewport scaled up this way is drawn with the control's `Sampler`: set it to `Point` to keep the pixels sharp.
+
+```csharp
+// a fixed 320x180 feed, as big as fits in the window without distorting it
+var cam = _renderer.CreateViewport("Security", new Vector2(320, 180));
+window.AddChild(new ViewportControl { Viewport = cam, AutoResize = false, Sampler = TextureSampling.Point });
+```
+
+`ScreenToWorld(point)` and `WorldToScreen(world)` on the control convert between a point of the UI (the space of `Bounds` and of the mouse events) and the world seen through it, wherever in the control the frame ends up.
+
+The control shows the viewport, it does not own it: call `IRenderManager.RemoveViewport` when you are done with it.
+
 ### Draw systems run once per viewport
 
 `IEntityDrawSystem.Draw(in DrawContext ctx)` is called for each viewport being drawn. Anything that depends on the view has to come from the context, not from the main camera:
@@ -208,6 +242,45 @@ To run the whole frame through a shader there is something simpler: the viewport
 
 ---
 
+## Masks
+
+A mask limits where things are drawn: only inside a shape, or everywhere but inside it. Anything can be the shape, and anything can be cut by it.
+
+```csharp
+// 1. the shape: nothing is drawn, the window sprite becomes mask 1
+using (_renderer.BeginMask(MaskMode.Write, 1))
+    _renderer.Submit(windowSprite, position);
+
+// 2. drawn only where mask 1 is
+using (_renderer.BeginMask(MaskMode.Inside, 1))
+    _renderer.Submit(skySprite, position);
+
+// 3. drawn everywhere except where mask 1 is
+using (_renderer.BeginMask(MaskMode.Outside, 1))
+    _renderer.DrawRect(area, fillColor: Color.Black * 0.5f);
+```
+
+Everything submitted inside the `using` block gets the mode, whatever it is (sprite, text, shape, `RawTexture`); what is submitted outside of one is drawn as usual.
+
+| `MaskMode` | |
+|---|---|
+| `Write` | Draws nothing, adds to the mask instead |
+| `Inside` | Drawn only where the mask is |
+| `Outside` | Drawn only where the mask is not |
+
+Rules:
+
+- **Order matters.** The mask has to be written before what it cuts is drawn, and the queue draws by layer, then depth, then submit order. Give the `Write` the same layer and depth as what it cuts (or a lower one) and submit it first.
+- **Masks are numbered** from 1 to 255, so several can be in use at once. A pixel holds one number: writing mask 2 over mask 1 leaves 2 there.
+- **A mask belongs to one viewport and one frame.** It is empty at the start of each viewport's frame.
+- **A sprite writes its own shape**: only its mostly opaque texels count, not its rectangle. A sprite that writes with a shader of its own uses that shader instead, and counts wherever the shader does not `clip`.
+- **A shape writes its bounding box**, whatever it is: a `DrawCircle` used as a mask masks a square. Use a sprite for a mask that is not a rectangle.
+- **Reading the screen empties the masks.** An overlay that asks for the screen texture, and the post effects, continue on another target: write the mask again after.
+
+Each change of mask mode ends a batch, like a change of shader does.
+
+---
+
 ## Renderable Types
 
 ### Sprite2D
@@ -309,6 +382,51 @@ components:
     key: player/idle   # 32x64
     offset: [0, -32]   # the bottom of the sprite sits on the transform position
 ```
+
+---
+
+### A shader over the whole entity
+
+A shader set on a sprite or a layer is applied to that one piece. A **post shader** is applied to the entity as one image: the sprite and all its layers are first drawn into a texture of their own, and that texture goes on screen through the shader.
+
+```csharp
+_sprite.SetPostShader(uid, "Glow", padding: 4);
+_sprite.SetPostShaderParam(uid, "GlowColor", Color.Yellow);
+
+_sprite.SetPostShader(uid, null);     // off
+```
+
+Use it when the shader has to see the entity whole (an outline around the whole character and not around each piece of clothing) or has to draw past the edge of the sprite: `padding` is how many empty pixels it gets around the entity for that.
+
+In the shader, `LocalUV` runs 0..1 over that image (padding included) and `TexelSize` is one pixel of it. Per sprite parameters work as usual.
+
+An entity can have several, applied one after the other, each to what the one before it drew:
+
+```csharp
+_sprite.AddPostShader(uid, "Outline", padding: 2);   // first
+_sprite.AddPostShader(uid, "Glow", padding: 4);      // then this one, over the outlined image
+
+_sprite.SetPostShaderParam(uid, "Glow", "GlowColor", Color.Yellow);   // one of them
+_sprite.SetPostShaderParam(uid, "Strength", 0.5f);                     // every one that has it
+
+_sprite.RemovePostShader(uid, "Outline");
+_sprite.ClearPostShaders(uid);
+```
+
+| Method | |
+|---|---|
+| `SetPostShader(uid, shader, padding)` | Replaces whatever the entity had with this one. `null` removes them all |
+| `AddPostShader(uid, shader, padding, order)` | Adds one. Lower `order` is applied first, equal ones in the order they were added. Adding one it already has changes its padding and order |
+| `RemovePostShader(uid, shader)` / `ClearPostShaders(uid)` | |
+| `HasPostShader(uid, shader)` / `GetPostShaders(uid)` | |
+| `SetPostShaderParam(uid, shader, name, value)` | A parameter of one of them |
+| `SetPostShaderParam(uid, name, value)` | The same parameter on all of them, ignored by the ones that do not have it |
+
+Use `order` for something that has to stay on top of whatever else gets added later, whoever adds it and when: an outline with a high order always goes around the entity as it ends up, even if another post shader is added after it.
+
+The paddings add up: with the two above the image has 6 empty pixels around the entity, since the glow draws around the outline. The same shader prototype cannot be on an entity twice; make a second prototype on the same `.fx` for that.
+
+It is local (nothing replicates) and it has a cost: a texture per entity and one more draw of it for each post shader, every frame it is on screen. It is meant for a few entities at a time, not for every wall of a map. The first frame an entity is on screen it is drawn without the shaders, the image is ready from the next one on.
 
 ---
 

@@ -76,6 +76,9 @@ public sealed partial class RenderManager
 
         SyncMainViewport();
 
+        // textures that have to be ready before any viewport draws with them
+        BeforeFrame?.Invoke();
+
         // What is in the queue by now was submitted outside of a viewport draw (a scene's Draw), it belongs to
         // the main one.
         (_queue, _mainQueue) = (_mainQueue, _queue);
@@ -159,7 +162,40 @@ public sealed partial class RenderManager
 
     // The transform every batch of the viewport being drawn starts with.
     private Matrix ComputeTransform()
-        => _screenSpace ? Matrix.Identity : _current?.GetViewMatrix() ?? Matrix.Identity;
+        => _transformOverride ?? (_screenSpace ? Matrix.Identity : _current?.GetViewMatrix() ?? Matrix.Identity);
+
+    /// <summary>
+    /// Raised at the start of every frame, before any viewport is drawn: the only point where it is safe to draw
+    /// into a texture of your own with <see cref="RenderToTarget"/>.
+    /// </summary>
+    internal event Action? BeforeFrame;
+
+    // set while RenderToTarget draws, in place of the transform of a viewport
+    private Matrix? _transformOverride;
+
+    /// <summary>
+    /// Clears <paramref name="target"/> to transparent and draws into it what <paramref name="submit"/> submits,
+    /// through <paramref name="transform"/>. Only from <see cref="BeforeFrame"/>: switching targets in the middle of
+    /// a viewport would throw away what was drawn in it so far.
+    /// </summary>
+    internal void RenderToTarget<TState>(RenderTarget2D target, Matrix transform, TState state, Action<TState> submit)
+    {
+        var device = GameClient.GraphicsDevice;
+
+        // its own queue, so what a scene already submitted for the world is not drawn in here
+        (_queue, _overlayQueue) = (_overlayQueue, _queue);
+
+        submit(state);
+
+        device.SetRenderTarget(target);
+        device.Clear(Color.Transparent);
+
+        _transformOverride = transform;
+        DrawQueue();
+        _transformOverride = null;
+
+        (_queue, _overlayQueue) = (_overlayQueue, _queue);
+    }
 
     #endregion
 }

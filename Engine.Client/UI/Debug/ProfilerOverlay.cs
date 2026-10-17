@@ -209,7 +209,7 @@ public sealed class ProfilerOverlay : Overlay
             $"Draw calls: {stats.DrawCalls} | Triangles: {stats.Primitives} | Texture swaps: {stats.TextureSwaps}\n" +
             $"Batches: {stats.Batches} ({stats.SpriteBatches} sprite, {stats.ShapeBatches} shape) | Quads: {stats.Quads}\n" +
             $"Breaks: {stats.BreaksByTexture} texture | {stats.BreaksByShader} shader | {stats.BreaksBySampler} sampler | " +
-            $"{stats.BreaksByBlend} blend | {stats.BreaksByKind} sprite/shape\n" +
+            $"{stats.BreaksByBlend} blend | {stats.BreaksByMask} mask | {stats.BreaksByKind} sprite/shape\n" +
             $"Shaders: {stats.SharedShaders} shared | {stats.OwnedShaders} owned\n" +
             $"Submitted: {stats.Submitted} | Culled: {stats.Culled} | Target switches: {stats.TargetSwitches}";
 

@@ -53,6 +53,9 @@ internal sealed class SpriteBatcher
     private ShaderInstance? _shader;
     private SamplerState _sampler = SamplerState.PointClamp;
     private BlendState _blend = BlendState.AlphaBlend;
+    private DepthStencilState _stencil = DepthStencilState.None;
+
+    private BlendState? _blendOverride;
 
     private BlendState _defaultBlend = BlendState.AlphaBlend;
     private Matrix _view;
@@ -107,7 +110,27 @@ internal sealed class SpriteBatcher
         _texture = null;
         _shader = null;
         _blend = defaultBlend;
+        _stencil = DepthStencilState.None;
+        _blendOverride = null;
         Custom0 = Custom1 = default;
+    }
+
+    /// <summary>
+    /// Sets the stencil the next quads are drawn with, and a blend that replaces the shader's one while not null.
+    /// </summary>
+    public void SetStencil(DepthStencilState stencil, BlendState? blendOverride)
+    {
+        if (ReferenceEquals(stencil, _stencil) && ReferenceEquals(blendOverride, _blendOverride))
+            return;
+
+        if (_quads > 0)
+        {
+            _stats.BreaksByMask++;
+            Flush();
+        }
+
+        _stencil = stencil;
+        _blendOverride = blendOverride;
     }
 
     /// <summary>
@@ -301,8 +324,8 @@ internal sealed class SpriteBatcher
             effect = _defaultEffect;
         }
 
-        _device.BlendState = _blend;
-        _device.DepthStencilState = DepthStencilState.None;
+        _device.BlendState = _blendOverride ?? _blend;
+        _device.DepthStencilState = _stencil;
         _device.RasterizerState = RasterizerState.CullNone;
 
         foreach (var pass in effect.CurrentTechnique.Passes)

@@ -80,8 +80,10 @@ public sealed partial class RenderManager : IRenderManager
 
     #region Queue
 
-    public void Submit(Sprite2D sprite, Vector2 position, ShaderInstance? shader = null,
-        Vector4 custom0 = default, Vector4 custom1 = default)
+    public void Submit(Sprite2D sprite, Vector2 position, ShaderInstance? shader = null)
+        => Submit(sprite, position, shader, default, default);
+
+    public void Submit(Sprite2D sprite, Vector2 position, ShaderInstance? shader, Vector4 custom0, Vector4 custom1 = default)
     {
         if (!TryResolveSprite(sprite, out var texture, out var region))
             return;
@@ -104,11 +106,14 @@ public sealed partial class RenderManager : IRenderManager
         command.Effects = sprite.Effects;
         command.Custom0 = custom0;
         command.Custom1 = custom1;
+        StampMask(ref command);
         _frameStats.Submitted++;
     }
 
-    public void Submit(RawTexture texture, Vector2 position, ShaderInstance? shader = null,
-        Vector4 custom0 = default, Vector4 custom1 = default)
+    public void Submit(RawTexture texture, Vector2 position, ShaderInstance? shader = null)
+        => Submit(texture, position, shader, default, default);
+
+    public void Submit(RawTexture texture, Vector2 position, ShaderInstance? shader, Vector4 custom0, Vector4 custom1 = default)
     {
         ref var command = ref _queue.Add(texture.Layer, texture.Depth);
         command.Kind = DrawCommandType.Sprite;
@@ -124,6 +129,7 @@ public sealed partial class RenderManager : IRenderManager
         command.Scale = texture.Scale;
         command.Custom0 = custom0;
         command.Custom1 = custom1;
+        StampMask(ref command);
         _frameStats.Submitted++;
     }
 
@@ -147,6 +153,7 @@ public sealed partial class RenderManager : IRenderManager
             command.Lit = shader?.Lit ?? true;
         }
 
+        StampMask(ref command);
         _frameStats.Submitted++;
     }
 
@@ -209,6 +216,7 @@ public sealed partial class RenderManager : IRenderManager
     {
         var shapeOpen = false;
         SamplerState? shapeSampler = null;
+        DepthStencilState? shapeStencil = null;
 
         _batcher.Begin(ComputeTransform(), BlendState, (float)GameClient.Timing.TotalTime);
 
@@ -231,10 +239,17 @@ public sealed partial class RenderManager : IRenderManager
                     _frameStats.BreaksBySampler++;
                     shapeOpen = false;
                 }
+                else if (!ReferenceEquals(GetMaskState(command.Mask, command.MaskId), shapeStencil))
+                {
+                    EndShapes();
+                    _frameStats.BreaksByMask++;
+                    shapeOpen = false;
+                }
 
                 if (!shapeOpen)
                 {
-                    BeginShapes(command.Sampler, DepthStencilState.None);
+                    shapeStencil = GetMaskState(command.Mask, command.MaskId);
+                    BeginShapes(command.Sampler, shapeStencil, command.Mask == MaskMode.Write ? MaskWriteBlend : BlendState);
                     _frameStats.ShapeBatches++;
                     shapeOpen = true;
                     shapeSampler = command.Sampler;
@@ -252,7 +267,10 @@ public sealed partial class RenderManager : IRenderManager
             }
 
             _commandSampler = command.Sampler ?? DefaultSampler;
-            _batcher.SetState(command.Shader, _commandSampler);
+
+            var writesMask = command.Mask == MaskMode.Write;
+            _batcher.SetStencil(GetMaskState(command.Mask, command.MaskId), writesMask ? MaskWriteBlend : null);
+            _batcher.SetState(writesMask ? GetMaskShader(command.Shader) : command.Shader, _commandSampler);
             _batcher.Custom0 = command.Custom0;
             _batcher.Custom1 = command.Custom1;
 
@@ -276,13 +294,16 @@ public sealed partial class RenderManager : IRenderManager
     #endregion
 
     public void BeginShapes(SamplerState? samplerState = null, DepthStencilState? depthStencilState = null)
+        => BeginShapes(samplerState, depthStencilState, BlendState);
+
+    private void BeginShapes(SamplerState? samplerState, DepthStencilState? depthStencilState, BlendState blendState)
     {
         var transform = ComputeTransform();
 
         _shapeBatch.Begin(
             view: transform,
             samplerState: samplerState ?? DefaultSampler,
-            blendState: BlendState,
+            blendState: blendState,
             depthStencilState: depthStencilState);
     }
 

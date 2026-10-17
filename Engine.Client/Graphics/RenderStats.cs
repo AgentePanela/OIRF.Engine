@@ -29,6 +29,7 @@ public sealed class RenderStats
     public int BreaksByShader;
     public int BreaksBySampler;
     public int BreaksByBlend;
+    public int BreaksByMask;
     public int BreaksByKind;
 
     /// <summary>
@@ -68,7 +69,7 @@ public sealed class RenderStats
     {
         Submitted = Culled = 0;
         SpriteBatches = ShapeBatches = 0;
-        BreaksByTexture = BreaksByShader = BreaksBySampler = BreaksByBlend = BreaksByKind = 0;
+        BreaksByTexture = BreaksByShader = BreaksBySampler = BreaksByBlend = BreaksByMask = BreaksByKind = 0;
         Quads = SharedShaders = OwnedShaders = 0;
         DrawCalls = Primitives = TextureSwaps = TargetSwitches = 0;
         SubmitMs = SortMs = FlushMs = PresentMs = TotalMs = 0;
@@ -89,6 +90,7 @@ public sealed class RenderStats
         BreaksByShader = other.BreaksByShader;
         BreaksBySampler = other.BreaksBySampler;
         BreaksByBlend = other.BreaksByBlend;
+        BreaksByMask = other.BreaksByMask;
         BreaksByKind = other.BreaksByKind;
         Quads = other.Quads;
         SharedShaders = other.SharedShaders;

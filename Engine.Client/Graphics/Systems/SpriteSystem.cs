@@ -14,7 +14,7 @@ namespace Engine.Client.Graphics;
 /// Resolves and draws <see cref="SpriteComponent"/>s. The component is only data (it replicates), so everything that
 /// exists just to draw it lives in here, per entity.
 /// </summary>
-public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
+public sealed partial class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 {
     [Dependency] private readonly IRenderManager _renderMan = default!;
     [Dependency] private readonly IAssetManager _assetMan = default!;
@@ -39,6 +39,8 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         public Color? DrawShaderColor;
 
         public string? DrawShader;
+
+        public PostShaderData? Post;
     }
 
     /// <summary>
@@ -77,6 +79,13 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     {
         base.Init();
         SubscribeEvent<SpriteComponent, CompRemovedEvent>(OnSpriteRemoved);
+        ((RenderManager)_renderMan).BeforeFrame += DrawPostTextures;
+    }
+
+    public override void OnShutdown()
+    {
+        base.OnShutdown();
+        ((RenderManager)_renderMan).BeforeFrame -= DrawPostTextures;
     }
 
     private void OnSpriteRemoved(EntityUid uid, SpriteComponent comp, CompRemovedEvent args)
@@ -84,6 +93,7 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         if (!_render.Remove(uid, out var data))
             return;
 
+        ReleasePost(uid, data);
         ReleaseShader(data.Base);
         foreach (var target in data.Layers.Values)
             ReleaseShader(target);
@@ -110,6 +120,9 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
                 _renderMan.ReportCulled();
                 continue;
             }
+
+            if (data.Post is { } post && SubmitPost(comp, data, post, transform, pos))
+                continue;
 
             UpdateSpriteFields(comp, transform, ref spr);
             spr.Rotation += data.DrawRotation;
@@ -155,7 +168,9 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     /// Submits the base sprite and its layers. Base sits at Order 0: layers with
     /// a negative Order draw under it, the rest over.
     /// </summary>
-    private void SubmitWithLayers(SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Sprite2D spr, Vector2 pos)
+    /// <param name="local"> Leaves the rotation of the entity out </param>
+    private void SubmitWithLayers(SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Sprite2D spr, Vector2 pos,
+        bool local = false)
     {
         ApplyDrawColor(data.Base, data);
         var shader = ResolveShader(data.Base, data.DrawShader ?? comp.Shader);
@@ -177,7 +192,7 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
                 SubmitBase(data, spr, pos, shader);
                 baseSubmitted = true;
             }
-            DrawLayer(comp, data, transform, layer, pos);
+            DrawLayer(comp, data, transform, layer, pos, local);
         }
 
         if (!baseSubmitted)
@@ -198,7 +213,8 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         comp.LayersDirty = false;
     }
 
-    private void DrawLayer(SpriteComponent comp, SpriteRenderData data, TransformComponent trans, SpriteLayer layer, Vector2 pos)
+    private void DrawLayer(SpriteComponent comp, SpriteRenderData data, TransformComponent trans, SpriteLayer layer, Vector2 pos,
+        bool local = false)
     {
         if (!layer.Visible) return;
 
@@ -209,10 +225,12 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 
         var spr = sprite.Value;
         UpdateLayerFields(layer, trans, comp, ref spr);
-        spr.Rotation += data.DrawRotation;
+        spr.Rotation = local ? 0f : spr.Rotation + data.DrawRotation;
         spr.Depth = data.DrawDepth ?? spr.Depth;
 
-        if (layer.Offset != Vector2.Zero)
+        if (local)
+            pos += layer.Offset;
+        else if (layer.Offset != Vector2.Zero)
             pos += Vector2.Transform(layer.Offset, Matrix.CreateRotationZ(trans.Angle + data.DrawRotation));
 
         ApplyDrawColor(target, data);

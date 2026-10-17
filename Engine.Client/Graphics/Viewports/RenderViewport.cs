@@ -120,7 +120,7 @@ public sealed class RenderViewport : IDisposable
             return target;
 
         Target?.Dispose();
-        Target = new RenderTarget2D(device, TargetSize.X, TargetSize.Y, false, SurfaceFormat.Color, DepthFormat.None);
+        Target = new RenderTarget2D(device, TargetSize.X, TargetSize.Y, false, SurfaceFormat.Color, DepthFormat.Depth24Stencil8);
         return Target;
     }
 
@@ -135,7 +135,7 @@ public sealed class RenderViewport : IDisposable
         if (_scratch is not { IsDisposed: false } scratch || scratch.Width != frame.Width || scratch.Height != frame.Height)
         {
             _scratch?.Dispose();
-            scratch = new RenderTarget2D(device, frame.Width, frame.Height, false, SurfaceFormat.Color, DepthFormat.None);
+            scratch = new RenderTarget2D(device, frame.Width, frame.Height, false, SurfaceFormat.Color, DepthFormat.Depth24Stencil8);
         }
 
         Target = scratch;
@@ -147,7 +147,7 @@ public sealed class RenderViewport : IDisposable
     /// The video memory its targets take.
     /// </summary>
     internal long TargetBytes
-        => TargetSize.X * (long)TargetSize.Y * 4 * ((Target is null ? 0 : 1) + (_scratch is null ? 0 : 1));
+        => TargetSize.X * (long)TargetSize.Y * 8 * ((Target is null ? 0 : 1) + (_scratch is null ? 0 : 1));
 
     public void Dispose()
     {

@@ -35,6 +35,22 @@ public sealed class ShaderManager
     /// </summary>
     public ShaderInstance UnshadedInstance { get; }
 
+    private ShaderInstance? _maskInstance;
+
+    /// <summary>
+    /// What a sprite with no shader of its own is drawn with while it writes a mask.
+    /// </summary>
+    internal ShaderInstance? MaskInstance
+    {
+        get
+        {
+            if (_maskInstance is null && _effects.TryGetValue("EngineSpriteMask", out var effect))
+                _maskInstance = new ShaderInstance(null, effect, lit: false, ShaderBlend.Alpha, null, owned: false, this);
+
+            return _maskInstance;
+        }
+    }
+
     /// <summary>
     /// How many instances made by <see cref="ShaderInstance.Duplicate"/> are alive.
     /// </summary>

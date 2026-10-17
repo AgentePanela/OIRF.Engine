@@ -71,6 +71,9 @@ internal struct DrawCommand
     public SamplerState? Sampler;
     public Vector2 Position;
 
+    public MaskMode Mask;
+    public byte MaskId;
+
     // Sprite
     public Texture2D Texture;
     public Rectangle Source;
