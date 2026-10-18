@@ -113,6 +113,7 @@ public sealed partial class RenderManager
         _frameStats.SharedShaders = _shaders.SharedInstances;
         _frameStats.OwnedShaders = _shaders.OwnedInstances;
         _frameStats.PresentMs = Stopwatch.GetElapsedTime(presentStart).TotalMilliseconds;
+        _frameStats.TargetBytes += _atlas.Bytes;
         _frameStats.TotalMs = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
 
         Stats.CopyFrom(_frameStats);

@@ -63,7 +63,7 @@ struct SpritePixel
     float4 Custom1  : TEXCOORD3;
 
     // Filled by the engine for the lighting: xy is the world position this pixel reads the light at, z how much it
-    // ignores the light. Leave it alone.
+    // ignores the light, w the highest y the light is read at. Leave it alone.
     float4 Light    : TEXCOORD4;
 };
 

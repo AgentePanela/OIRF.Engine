@@ -19,4 +19,9 @@ public enum LightBaseMode : byte
     /// The whole sprite reads the light of the base point.
     /// </summary>
     Point,
+
+    /// <summary>
+    /// Every pixel reads the light under itself, but never above the base line.
+    /// </summary>
+    PixelCapped,
 }

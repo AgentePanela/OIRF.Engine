@@ -41,7 +41,9 @@ float3 SampleLight(float2 world)
 float4 ApplyLighting(float4 color, SpritePixel input)
 {
     float emission = saturate(input.Light.z + LightParams.x);
-    float3 light = SampleLight(input.Light.xy);
+
+    // w is the highest the light is read at (a PixelCapped sprite), far up for everything else
+    float3 light = SampleLight(float2(input.Light.x, max(input.Light.y, input.Light.w)));
 
     color.rgb *= lerp(light, float3(1.0, 1.0, 1.0), emission);
     return color;

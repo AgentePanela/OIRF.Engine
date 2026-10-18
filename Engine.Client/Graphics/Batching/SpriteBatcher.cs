@@ -102,6 +102,9 @@ internal sealed class SpriteBatcher
 
     private static readonly Vector4 NoLightParams = new(1f, 0f, 1f, 0f);
 
+    // so far up nothing is ever above it
+    private const float NoLightCap = -1e30f;
+
     public SamplerState Sampler => _sampler;
 
     public SpriteBatcher(GraphicsDevice device, RenderStats stats)
@@ -319,7 +322,10 @@ internal sealed class SpriteBatcher
             LightBaseMode.Point => Lighting.Base,
             _ => position,
         };
-        vertex.Light = new Vector4(at.X, at.Y, Lighting.Emission, 0f);
+
+        // the highest a pixel reads the light at, only a PixelCapped sprite has one
+        var cap = Lighting.Mode == LightBaseMode.PixelCapped ? Lighting.Base.Y : NoLightCap;
+        vertex.Light = new Vector4(at.X, at.Y, Lighting.Emission, cap);
     }
 
     // makes room for one quad of this texture and returns where its first vertex goes

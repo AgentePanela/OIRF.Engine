@@ -18,6 +18,7 @@ public sealed class LightingSystem : EntitySystem, ILightRenderer
     [Dependency] private readonly IRenderManager _renderMan = default!;
     [Dependency] private readonly LightingManager _lighting = default!;
     [Dependency] private readonly IAssetManager _assets = default!;
+    [Dependency] private readonly OccluderSystem _occluders = default!;
 
     // by texture key, null for a key that does not exist so it is only reported once
     private readonly Dictionary<string, (Texture2D Texture, Rectangle Region)?> _masks = new();
@@ -50,10 +51,8 @@ public sealed class LightingSystem : EntitySystem, ILightRenderer
         return best is null ? _lighting.AmbientLight : best.Color * best.Intensity;
     }
 
-    void ILightRenderer.DrawLights(RenderViewport viewport, RectangleF bounds)
+    void ILightRenderer.CollectLights(RenderViewport viewport, RectangleF bounds, float softnessScale, List<LightDraw> lights)
     {
-        var renderer = (RenderManager)_renderMan;
-
         foreach (var (uid, light, transform) in GetEntitiesWithComp<PointLightComponent, TransformComponent>())
         {
             if (!light.Enabled || light.Radius <= 0f || light.Intensity <= 0f || HasComp<ContainedComponent>(uid))
@@ -73,11 +72,27 @@ public sealed class LightingSystem : EntitySystem, ILightRenderer
             var rotation = light.Rotation + (light.RotatesWithTransform ? transform.Angle : 0f);
             var halfCone = MathHelper.ToRadians(Math.Clamp(light.ConeAngle, 0f, 360f)) * 0.5f;
 
-            renderer.DrawLight(mask, region, center, radius, rotation, light.Color,
-                light.Intensity * _lighting.LightIntensity, halfCone, Math.Clamp(light.ConeSoftness, 0f, 1f),
-                FalloffScalar(light.Falloff), CurveFactor(light.Falloff));
+            lights.Add(new LightDraw
+            {
+                Center = center,
+                Radius = radius,
+                Rotation = rotation,
+                Color = light.Color,
+                Brightness = light.Intensity * _lighting.LightIntensity,
+                HalfCone = halfCone,
+                ConeSoftness = Math.Clamp(light.ConeSoftness, 0f, 1f),
+                Falloff = FalloffScalar(light.Falloff),
+                Curve = CurveFactor(light.Falloff),
+                Mask = mask,
+                MaskRegion = region,
+                CastShadows = light.CastShadows,
+                SourceRadius = MathF.Max(light.Softness, 0f) * softnessScale,
+            });
         }
     }
+
+    void ILightRenderer.CollectShadowSegments(in LightDraw light, List<ShadowSegment> segments)
+        => _occluders.CollectSegments(light.Center, light.Radius, segments);
 
     private (Texture2D Texture, Rectangle Region)? GetMask(string key)
     {

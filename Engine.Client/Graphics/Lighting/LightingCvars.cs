@@ -31,4 +31,10 @@ public static class LightingCvars
 
     public static readonly CVarDef<int> MaxSize =
         CVarDef.Create("light.max-size", 4096);
+
+    public static readonly CVarDef<float> SoftnessScale =
+        CVarDef.Create("light.softness-scale", 8f);
+
+    public static readonly CVarDef<bool> DebugOccluders =
+        CVarDef.Create("light.occluder-overlay", false, CVar.NOSAVE);
 }

@@ -65,6 +65,12 @@ public sealed class RenderStats
     public double LightMs;
 
     /// <summary>
+    /// Occluder edges that threw a shadow, every light added up.
+    /// </summary>
+    public int ShadowSegments;
+    public int LightAtlasPages;
+
+    /// <summary>
     /// Video memory taken by the targets of the viewports drawn.
     /// </summary>
     public long TargetBytes;
@@ -84,7 +90,7 @@ public sealed class RenderStats
         SubmitMs = SortMs = FlushMs = PresentMs = TotalMs = 0;
         PostEffects = 0;
         PostProcessMs = 0;
-        LightsDrawn = LightMapTexels = 0;
+        LightsDrawn = LightMapTexels = ShadowSegments = LightAtlasPages = 0;
         LightMs = 0;
         TargetBytes = 0;
         Viewports.Clear();
@@ -121,6 +127,8 @@ public sealed class RenderStats
         LightsDrawn = other.LightsDrawn;
         LightMapTexels = other.LightMapTexels;
         LightMs = other.LightMs;
+        ShadowSegments = other.ShadowSegments;
+        LightAtlasPages = other.LightAtlasPages;
         TargetBytes = other.TargetBytes;
 
         Viewports.Clear();

@@ -1,6 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Engine.Client.Graphics.Lighting;
+using Engine.Client.Graphics.Shaders;
+using Engine.Shared;
 using Engine.Shared.Common;
 using Engine.Shared.Configuration;
 using Microsoft.Xna.Framework;
@@ -15,7 +19,9 @@ internal interface ILightRenderer
 {
     Color GetAmbientColor();
 
-    void DrawLights(RenderViewport viewport, RectangleF bounds);
+    void CollectLights(RenderViewport viewport, RectangleF bounds, float softnessScale, List<LightDraw> lights);
+
+    void CollectShadowSegments(in LightDraw light, List<ShadowSegment> segments);
 }
 
 public sealed partial class RenderManager
@@ -30,10 +36,38 @@ public sealed partial class RenderManager
     private int _lightMaxSize;
     private float _lightPixelSize;
     private float _lightDither;
+    private float _lightSoftnessScale;
     private float _overbright = 1f;
+
+    private readonly List<LightDraw> _lights = new();
+    private readonly List<ShadowSegment> _segments = new();
+    private readonly LightAtlas _atlas = new();
+    private readonly ShadowBatch _shadowBatch = new();
+    private bool _warnedAtlasFull;
+
+    // a light in its square
+    private static readonly BlendState LightSlotBlend = new()
+    {
+        ColorSourceBlend = Blend.InverseDestinationAlpha,
+        ColorDestinationBlend = Blend.One,
+        AlphaSourceBlend = Blend.Zero,
+        AlphaDestinationBlend = Blend.One,
+        ColorWriteChannels = ColorWriteChannels.Red | ColorWriteChannels.Green | ColorWriteChannels.Blue,
+    };
+
+    // the squares added to the light map
+    private static readonly BlendState AddColorBlend = new()
+    {
+        ColorSourceBlend = Blend.One,
+        ColorDestinationBlend = Blend.One,
+        AlphaSourceBlend = Blend.Zero,
+        AlphaDestinationBlend = Blend.One,
+        ColorWriteChannels = ColorWriteChannels.Red | ColorWriteChannels.Green | ColorWriteChannels.Blue,
+    };
 
     private void InitLighting()
     {
+        _cfg.Subs(LightingCvars.SoftnessScale, v => _lightSoftnessScale = MathF.Max(v, 0f));
         _cfg.Subs(LightingCvars.Resolution, v => _lightResolution = MathF.Max(v, 0.01f));
         _cfg.Subs(LightingCvars.Margin, v => _lightMargin = MathF.Max(v, 0f));
         _cfg.Subs(LightingCvars.MaxSize, v => _lightMaxSize = Math.Max(v, 16));
@@ -81,9 +115,17 @@ public sealed partial class RenderManager
             Math.Clamp((int)MathF.Ceiling((bottom - top) * scale), 1, maxSize));
         var bounds = new RectangleF(left, top, size.X / scale, size.Y / scale);
 
+        _batcher.LightMap = null;
+
+        // each light with its shadows in its own square, before the light map is set
+        _lights.Clear();
+        lights.CollectLights(viewport, bounds, _lightSoftnessScale, _lights);
+        DrawLightSlots(lights, scale);
+
         var target = viewport.EnsureLightTarget(device, size);
 
-        // the last viewport drawn read it, it cannot be drawn into while it is still bound
+        // read by what was drawn before (the squares, the last viewport)
+        device.Textures[0] = null;
         device.Textures[1] = null;
         device.SetRenderTarget(target);
 
@@ -92,10 +134,21 @@ public sealed partial class RenderManager
 
         var lightView = Matrix.CreateTranslation(-left, -top, 0f) * Matrix.CreateScale(scale, scale, 1f);
 
-        _batcher.LightMap = null;
         _batcher.Begin(lightView, BlendState.Additive, (float)GameClient.Timing.TotalTime);
-        lights.DrawLights(viewport, bounds);
+        _batcher.SetStencil(DepthStencilState.None, AddColorBlend);
+        foreach (ref readonly var light in CollectionsMarshal.AsSpan(_lights))
+        {
+            if (light.Page < 0)
+                continue;
+
+            _batcher.SetState(null, SamplerState.LinearClamp);
+            _batcher.Draw(_atlas.GetPage(device, light.Page), light.Center, light.Region, Color.White, 0f,
+                new Vector2(light.Region.Width / 2f, light.Region.Height / 2f), new Vector2(1f / light.SlotScale),
+                SpriteEffects.None);
+        }
+
         _batcher.Flush();
+        _batcher.SetStencil(DepthStencilState.None, null);
 
         // what the content adds to the light, in world space and adding up like the lights
         var blend = BlendState;
@@ -135,28 +188,100 @@ public sealed partial class RenderManager
     }
 
     /// <summary>
-    /// Draws one light into the light map being built. Only from <see cref="ILightRenderer.DrawLights"/>.
+    /// Gives every light of <see cref="_lights"/> a square in the atlas, at <paramref name="scale"/> texels per world
+    /// unit, and draws it there with its shadows
     /// </summary>
-    /// <param name="mask">Its alpha is the shape of the light, null for a round one.</param>
-    /// <param name="halfCone">Half the cone angle in radians, pi or more for no cone.</param>
-    /// <param name="coneSoftness">How much of the cone fades at its edges, 0-1.</param>
-    /// <param name="curve">Between linear (0) and quadratic (1) fading.</param>
-    internal void DrawLight(Texture2D? mask, Rectangle maskRegion, Vector2 center, float radius, float rotation,
-        Color color, float brightness, float halfCone, float coneSoftness, float falloff, float curve)
+    private void DrawLightSlots(ILightRenderer lights, float scale)
     {
-        if (_shaders.LightInstance is not { } shader)
+        var device = GameClient.GraphicsDevice;
+        var span = CollectionsMarshal.AsSpan(_lights);
+
+        for (var i = 0; i < span.Length; i++)
+        {
+            var size = LightAtlas.RegionSize(span[i].Radius, scale, out span[i].SlotScale);
+            span[i].Region = new Rectangle(0, 0, size, size);
+        }
+
+        // the biggest first, they pack better
+        _lights.Sort(static (a, b) => b.Region.Width.CompareTo(a.Region.Width));
+        span = CollectionsMarshal.AsSpan(_lights);
+
+        _atlas.Reset();
+        for (var i = 0; i < span.Length; i++)
+        {
+            if (_atlas.TryPlace(span[i].Region.Width, out span[i].Page, out var at))
+            {
+                span[i].Region.Location = at;
+                continue;
+            }
+
+            if (!_warnedAtlasFull)
+            {
+                Log.Warn($"The light atlas is full ({LightAtlas.MaxPages} pages): lights past it are not drawn");
+                _warnedAtlasFull = true;
+            }
+        }
+
+        if (_shaders.LightInstance is not { } lightShader)
             return;
 
-        var texture = mask ?? _batcher.White;
-        var source = mask is null ? new Rectangle(0, 0, 1, 1) : maskRegion;
+        var shadowEffect = _shaders.GetShader("LightShadow");
+        var time = (float)GameClient.Timing.TotalTime;
+
+        for (var page = 0; page < _atlas.PagesUsed; page++)
+        {
+            // a page can still be bound from adding its squares to the last light map
+            device.Textures[0] = null;
+            device.SetRenderTarget(_atlas.GetPage(device, page));
+            device.Clear(Color.Transparent);
+
+            if (shadowEffect is not null)
+            {
+                foreach (ref readonly var light in span)
+                {
+                    if (light.Page != page || !light.CastShadows)
+                        continue;
+
+                    _segments.Clear();
+                    lights.CollectShadowSegments(light, _segments);
+                    foreach (var segment in _segments)
+                        _shadowBatch.Add(device, shadowEffect, segment, light);
+                }
+
+                _shadowBatch.Flush(device, shadowEffect);
+            }
+
+            // in page pixels
+            _batcher.Begin(Matrix.Identity, BlendState.Additive, time);
+            _batcher.SetStencil(DepthStencilState.None, LightSlotBlend);
+            foreach (ref readonly var light in span)
+            {
+                if (light.Page == page)
+                    DrawLightInSlot(lightShader, light);
+            }
+
+            _batcher.Flush();
+            _batcher.SetStencil(DepthStencilState.None, null);
+        }
+
+        _frameStats.ShadowSegments += _shadowBatch.Count;
+        _shadowBatch.Count = 0;
+        _frameStats.LightAtlasPages = Math.Max(_frameStats.LightAtlasPages, _atlas.PagesUsed);
+    }
+
+    // one light, filling its square: 2 radius wide at the square scale, turned with it
+    private void DrawLightInSlot(ShaderInstance shader, in LightDraw light)
+    {
+        var texture = light.Mask ?? _batcher.White;
+        var source = light.Mask is null ? new Rectangle(0, 0, 1, 1) : light.MaskRegion;
         var size = new Vector2(source.Width, source.Height);
 
         _batcher.SetState(shader, SamplerState.LinearClamp);
-        _batcher.Custom0 = new Vector4(brightness / _overbright, halfCone, coneSoftness, 0f);
-        _batcher.Custom1 = new Vector4(falloff, curve, 0f, 0f);
+        _batcher.Custom0 = new Vector4(light.Brightness / _overbright, light.HalfCone, light.ConeSoftness, 0f);
+        _batcher.Custom1 = new Vector4(light.Falloff, light.Curve, 0f, 0f);
         _batcher.Lighting = default;
-        _batcher.Draw(texture, center, source, color, rotation, size / 2f, new Vector2(radius * 2f) / size,
-            SpriteEffects.None);
+        _batcher.Draw(texture, light.Region.Center.ToVector2(), source, light.Color, light.Rotation, size / 2f,
+            new Vector2(light.Radius * 2f * light.SlotScale) / size, SpriteEffects.None);
 
         _frameStats.LightsDrawn++;
     }
