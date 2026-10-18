@@ -49,6 +49,7 @@ public sealed class ProfilerOverlay : Overlay
     private readonly Label _stateLabel;
 
     private readonly Label _renderStatsLabel;
+    private readonly Label _lightStatsLabel;
 
     private readonly BoxContainer _netPanel;
     private readonly Label _netLabel;
@@ -118,9 +119,23 @@ public sealed class ProfilerOverlay : Overlay
         };
         leftColumn.AddChild(renderPanel);
 
-        renderPanel.AddChild(new Label { Text = "RENDERING", FontSize = 28f, Color = Color.White });
+        renderPanel.AddChild(new Label { Text = "RENDERING", FontSize = 25f, Color = Color.White });
         _renderStatsLabel = CreateLabel();
         renderPanel.AddChild(_renderStatsLabel);
+
+        var lightPanel = new BoxContainer
+        {
+            Orientation = Orientation.Vertical,
+            Separation = 4,
+            Background = PanelBg,
+            Padding = new(8, 6),
+            MinWidth = 260,
+        };
+        leftColumn.AddChild(lightPanel);
+
+        lightPanel.AddChild(new Label { Text = "LIGHTING", FontSize = 25f, Color = Color.White });
+        _lightStatsLabel = CreateLabel();
+        lightPanel.AddChild(_lightStatsLabel);
 
         _netPanel = new BoxContainer
         {
@@ -133,7 +148,7 @@ public sealed class ProfilerOverlay : Overlay
         };
         leftColumn.AddChild(_netPanel);
 
-        _netPanel.AddChild(new Label { Text = "NETWORKING", FontSize = 28f, Color = Color.White });
+        _netPanel.AddChild(new Label { Text = "NETWORKING", FontSize = 25f, Color = Color.White });
         _netLabel = CreateLabel();
         _netPanel.AddChild(_netLabel);
         _bandwidthRow = BuildRow(_netPanel, NetBarColor, "band");
@@ -153,14 +168,15 @@ public sealed class ProfilerOverlay : Overlay
 
         right.AddChild(new Label { Text = "SYSTEMS PROFILER" });
         right.AddChild(new Separator());
-        right.AddChild(new Label { Text = "UPDATE", FontSize = 28f, Color = Color.White });
+        right.AddChild(new Label { Text = "UPDATE", FontSize = 25f, Color = Color.White });
         _updateRows = BuildRows(right, RowsPerSection, UpdateBarColor);
         right.AddChild(new Separator());
-        right.AddChild(new Label { Text = "DRAW", FontSize = 28f, Color = Color.White });
+        right.AddChild(new Label { Text = "DRAW", FontSize = 25f, Color = Color.White });
         _drawRows = BuildRows(right, RowsPerSection, DrawBarColor);
 
         RefreshStats();
         RefreshRendering();
+        RefreshLighting();
         RefreshSystems();
         RefreshNetworking();
     }
@@ -175,6 +191,7 @@ public sealed class ProfilerOverlay : Overlay
         _refreshTimer = 0f;
         RefreshStats();
         RefreshRendering();
+        RefreshLighting();
         RefreshSystems();
         RefreshNetworking();
     }
@@ -214,9 +231,6 @@ public sealed class ProfilerOverlay : Overlay
             $"Submitted: {stats.Submitted} | Culled: {stats.Culled} | Target switches: {stats.TargetSwitches}";
 
         text += $"\nPost effects: {stats.PostEffects} ({FormatMs(stats.PostProcessMs)}) | Targets: {stats.TargetBytes / (1024.0 * 1024.0):0.0}MB";
-        text += $"\nLight: {stats.LightsDrawn} lights | {stats.ShadowSegments} shadow edges | {stats.LightAtlasPages} atlas pages | " +
-                $"{stats.LightMapTexels / 1000.0:0.#}k texels ({FormatMs(stats.LightMs)})";
-
         foreach (var viewport in stats.Viewports)
             text += $"\n{viewport.Name}: {viewport.Width}x{viewport.Height} | {viewport.Items} items | {FormatMs(viewport.Ms)}";
 
@@ -224,6 +238,28 @@ public sealed class ProfilerOverlay : Overlay
             text += $"\n{overlay.Name} ({overlay.Stage}): {FormatMs(overlay.Ms)}";
 
         _renderStatsLabel.Text = text;
+    }
+
+    private void RefreshLighting()
+    {
+        var light = _renderMan.Stats.Light;
+
+        var chunks = !light.CacheEnabled
+            ? "off (light.cache)"
+            : light.ChunksInUse
+                ? $"{light.ChunksResident}/{light.ChunkCapacity} kept | {light.ChunksRebuilt} redrawn"
+                : $"too many for the view ({light.ChunkCapacity} max): static lights added one by one";
+
+        _lightStatsLabel.Text =
+            $"Time: {FormatMs(light.PrepareMs + light.LightMapMs)} (lights {FormatMs(light.PrepareMs)} | " +
+            $"light maps {FormatMs(light.LightMapMs)})\n" +
+            $"Lights: {light.Lights} ({light.StaticLights} static, {light.DynamicLights} dynamic) | " +
+            $"drawn this frame: {light.LightsDrawn}\n" +
+            $"Shadow edges drawn: {light.ShadowSegments}\n" +
+            $"Chunks: {chunks}\n" +
+            $"Atlas pages: {light.StaticAtlasPages} static, {light.DynamicAtlasPages} dynamic | " +
+            $"Memory: {light.CacheBytes / (1024.0 * 1024.0):0.0}MB\n" +
+            $"Light maps: {light.LightMapTexels / 1000.0:0.#}k texels";
     }
 
     private void RefreshSystems()

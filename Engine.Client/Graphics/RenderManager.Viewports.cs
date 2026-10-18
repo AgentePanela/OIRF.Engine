@@ -82,6 +82,9 @@ public sealed partial class RenderManager
         // textures that have to be ready before any viewport draws with them
         BeforeFrame?.Invoke();
 
+        // the lights every viewport needs, drawn once for all of them
+        PrepareLighting();
+
         // What is in the queue by now was submitted outside of a viewport draw (a scene's Draw), it belongs to
         // the main one.
         (_queue, _mainQueue) = (_mainQueue, _queue);
@@ -113,7 +116,7 @@ public sealed partial class RenderManager
         _frameStats.SharedShaders = _shaders.SharedInstances;
         _frameStats.OwnedShaders = _shaders.OwnedInstances;
         _frameStats.PresentMs = Stopwatch.GetElapsedTime(presentStart).TotalMilliseconds;
-        _frameStats.TargetBytes += _atlas.Bytes;
+        _frameStats.TargetBytes += LightRenderer?.Bytes ?? 0;
         _frameStats.TotalMs = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
 
         Stats.CopyFrom(_frameStats);

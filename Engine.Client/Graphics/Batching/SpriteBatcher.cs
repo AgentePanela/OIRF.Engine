@@ -63,6 +63,15 @@ internal sealed class SpriteBatcher
 
     private BlendState? _blendOverride;
 
+    // the only part of the target the quads may touch, the whole target while null
+    private Rectangle? _scissor;
+
+    private static readonly RasterizerState ScissorRasterizer = new()
+    {
+        CullMode = CullMode.None,
+        ScissorTestEnable = true,
+    };
+
     private BlendState _defaultBlend = BlendState.AlphaBlend;
     private Matrix _view;
     private Matrix _projection;
@@ -149,8 +158,21 @@ internal sealed class SpriteBatcher
         _blend = defaultBlend;
         _stencil = DepthStencilState.None;
         _blendOverride = null;
+        _scissor = null;
         Custom0 = Custom1 = default;
         Lighting = default;
+    }
+
+    /// <summary>
+    /// Keeps the next quads inside <paramref name="scissor"/>
+    /// </summary>
+    public void SetScissor(Rectangle? scissor)
+    {
+        if (scissor == _scissor)
+            return;
+
+        Flush();
+        _scissor = scissor;
     }
 
     /// <summary>
@@ -386,8 +408,15 @@ internal sealed class SpriteBatcher
 
         _device.BlendState = _blendOverride ?? _blend;
         _device.DepthStencilState = _stencil;
-        _device.RasterizerState = RasterizerState.CullNone;
 
+        if (_scissor is { } scissor)
+        {
+            _device.ScissorRectangle = scissor;
+            _device.RasterizerState = ScissorRasterizer;
+        }
+        else
+            _device.RasterizerState = RasterizerState.CullNone;
+            
         foreach (var pass in effect.CurrentTechnique.Passes)
         {
             pass.Apply();

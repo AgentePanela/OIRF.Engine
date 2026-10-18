@@ -13,7 +13,7 @@ namespace Engine.Client.Graphics.Lighting;
 /// <summary>
 /// Puts the lights of the world into the light map of every viewport, see <see cref="ILightRenderer"/>.
 /// </summary>
-public sealed class LightingSystem : EntitySystem, ILightRenderer
+public sealed partial class LightingSystem : EntitySystem, ILightRenderer
 {
     [Dependency] private readonly IRenderManager _renderMan = default!;
     [Dependency] private readonly LightingManager _lighting = default!;
@@ -36,6 +36,8 @@ public sealed class LightingSystem : EntitySystem, ILightRenderer
         var renderer = (RenderManager)_renderMan;
         if (renderer.LightRenderer == this)
             renderer.LightRenderer = null;
+
+        DisposeRenderer();
     }
 
     Color ILightRenderer.GetAmbientColor()
@@ -51,7 +53,7 @@ public sealed class LightingSystem : EntitySystem, ILightRenderer
         return best is null ? _lighting.AmbientLight : best.Color * best.Intensity;
     }
 
-    void ILightRenderer.CollectLights(RenderViewport viewport, RectangleF bounds, float softnessScale, List<LightDraw> lights)
+    void ILightRenderer.CollectLights(RectangleF bounds, float softnessScale, List<LightDraw> lights)
     {
         foreach (var (uid, light, transform) in GetEntitiesWithComp<PointLightComponent, TransformComponent>())
         {
@@ -74,6 +76,7 @@ public sealed class LightingSystem : EntitySystem, ILightRenderer
 
             lights.Add(new LightDraw
             {
+                Owner = uid,
                 Center = center,
                 Radius = radius,
                 Rotation = rotation,
@@ -93,6 +96,9 @@ public sealed class LightingSystem : EntitySystem, ILightRenderer
 
     void ILightRenderer.CollectShadowSegments(in LightDraw light, List<ShadowSegment> segments)
         => _occluders.CollectSegments(light.Center, light.Radius, segments);
+
+    void ILightRenderer.TakeOccluderChanges(List<RectangleF> areas)
+        => _occluders.TakeChanges(areas);
 
     private (Texture2D Texture, Rectangle Region)? GetMask(string key)
     {

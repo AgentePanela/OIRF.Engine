@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Engine.Shared.GameObjects;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -10,6 +11,8 @@ namespace Engine.Client.Graphics.Lighting;
 /// </summary>
 internal struct LightDraw
 {
+    public EntityUid Owner;
+
     public Vector2 Center;
     public float Radius;
     public float Rotation;

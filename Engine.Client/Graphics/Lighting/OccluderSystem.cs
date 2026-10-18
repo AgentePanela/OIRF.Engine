@@ -59,6 +59,9 @@ public sealed class OccluderSystem : EntitySystem
     private readonly HashSet<EntityUid> _dirty = new();
     private int _stamp;
 
+    // where an outline appeared, went away or changed since the last TakeChanges
+    private readonly List<RectangleF> _changes = new();
+
     private OccluderDebugOverlay? _debug;
 
     public override void Init()
@@ -112,6 +115,19 @@ public sealed class OccluderSystem : EntitySystem
     /// </summary>
     public void Refresh(EntityUid uid)
         => _dirty.Add(uid);
+
+    /// <summary>
+    /// Moves to <paramref name="areas"/> every area where the shadows changed since the last call
+    /// </summary>
+    internal void TakeChanges(List<RectangleF> areas)
+    {
+        Update();
+        areas.AddRange(_changes);
+        _changes.Clear();
+    }
+
+    private void NoteChange(RectangleF bounds)
+        => _changes.Add(new RectangleF(bounds.X - 1f, bounds.Y - 1f, bounds.Width + 2f, bounds.Height + 2f));
 
     /// <summary>
     /// Adds to <paramref name="segments"/> the edges that throw a shadow from a light at <paramref name="light"/>
@@ -249,17 +265,23 @@ public sealed class OccluderSystem : EntitySystem
 
         foreach (var uid in _dirty)
         {
+            Vector2[]? points = null;
+            if (TryComp<OccluderComponent>(uid, out var comp) && comp.Enabled && !HasComp<ContainedComponent>(uid)
+                && Transform(uid) is { } transform)
+            {
+                points = BuildOutline(uid, comp, transform);
+                if (points.Length < 3)
+                    points = null;
+            }
+
+            // the same outline as before changes no shadow, the lights around it can stay as they are
+            if (points is not null && _entries.TryGetValue(uid, out var old) && old.Points.AsSpan().SequenceEqual(points))
+                continue;
+
             Forget(uid);
 
-            if (!TryComp<OccluderComponent>(uid, out var comp) || !comp.Enabled || HasComp<ContainedComponent>(uid)
-                || Transform(uid) is not { } transform)
-                continue;
-
-            var points = BuildOutline(uid, comp, transform);
-            if (points.Length < 3)
-                continue;
-
-            Add(uid, points);
+            if (points is not null)
+                Add(uid, points);
         }
 
         _dirty.Clear();
@@ -360,12 +382,15 @@ public sealed class OccluderSystem : EntitySystem
         }
 
         _entries[uid] = entry;
+        NoteChange(entry.Bounds);
     }
 
     private void Forget(EntityUid uid)
     {
         if (!_entries.Remove(uid, out var entry))
             return;
+
+        NoteChange(entry.Bounds);
 
         foreach (var coords in entry.Cells)
         {

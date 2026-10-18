@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Engine.Client.Graphics.Lighting;
 
 namespace Engine.Client.Graphics;
 
@@ -55,20 +56,10 @@ public sealed class RenderStats
     public int PostEffects;
     public double PostProcessMs;
 
-
-    public int LightsDrawn;
-
     /// <summary>
-    /// Pixels of light map filled.
+    /// What the lighting did, see the LIGHTING panel of the profiler.
     /// </summary>
-    public int LightMapTexels;
-    public double LightMs;
-
-    /// <summary>
-    /// Occluder edges that threw a shadow, every light added up.
-    /// </summary>
-    public int ShadowSegments;
-    public int LightAtlasPages;
+    public readonly LightStats Light = new();
 
     /// <summary>
     /// Video memory taken by the targets of the viewports drawn.
@@ -90,8 +81,7 @@ public sealed class RenderStats
         SubmitMs = SortMs = FlushMs = PresentMs = TotalMs = 0;
         PostEffects = 0;
         PostProcessMs = 0;
-        LightsDrawn = LightMapTexels = ShadowSegments = LightAtlasPages = 0;
-        LightMs = 0;
+        Light.Reset();
         TargetBytes = 0;
         Viewports.Clear();
         Overlays.Clear();
@@ -124,11 +114,7 @@ public sealed class RenderStats
 
         PostEffects = other.PostEffects;
         PostProcessMs = other.PostProcessMs;
-        LightsDrawn = other.LightsDrawn;
-        LightMapTexels = other.LightMapTexels;
-        LightMs = other.LightMs;
-        ShadowSegments = other.ShadowSegments;
-        LightAtlasPages = other.LightAtlasPages;
+        Light.CopyFrom(other.Light);
         TargetBytes = other.TargetBytes;
 
         Viewports.Clear();

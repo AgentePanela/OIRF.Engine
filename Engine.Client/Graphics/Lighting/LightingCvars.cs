@@ -35,6 +35,18 @@ public static class LightingCvars
     public static readonly CVarDef<float> SoftnessScale =
         CVarDef.Create("light.softness-scale", 8f);
 
+    /// <summary>
+    /// Keeps the light of what does not change instead of drawing every light every frame. False is only to compare.
+    /// </summary>
+    public static readonly CVarDef<bool> Cache =
+        CVarDef.Create("light.cache", true);
+
+    /// <summary>
+    /// Seconds a light has to stay the same (and the occluders it reaches) before it is kept instead of drawn every frame.
+    /// </summary>
+    public static readonly CVarDef<float> StaticDelay =
+        CVarDef.Create("light.static-delay", 0.5f);
+
     public static readonly CVarDef<bool> DebugOccluders =
         CVarDef.Create("light.occluder-overlay", false, CVar.NOSAVE);
 }
