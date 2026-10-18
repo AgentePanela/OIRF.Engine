@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Engine.Client.Graphics.Shaders;
+using Engine.Shared.Common;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -63,11 +65,39 @@ public sealed class RenderViewport : IDisposable
     /// </summary>
     public List<ShaderInstance> PostEffects { get; } = new();
 
+    public bool LightingEnabled { get; set; } = true;
+
     /// <summary>
-    /// The light of this viewport.
+    /// The light of the last frame.
     /// </summary>
-    // todo: light rework
-    public RenderTarget2D? LightTarget { get; internal set; }
+    public RenderTarget2D? LightTarget { get; private set; }
+
+    public RectangleF LightMapBounds { get; internal set; }
+
+    /// <summary>
+    /// The pixels of <see cref="LightTarget"/> that hold <see cref="LightMapBounds"/>.
+    /// </summary>
+    public Point LightMapSize { get; internal set; }
+
+    public Vector4 LightMapTransform { get; internal set; }
+
+    /// <summary>
+    /// Whether the last frame was drawn lit.
+    /// </summary>
+    [MemberNotNullWhen(true, nameof(LightTarget))]
+    public bool WasLit { get; internal set; }
+
+    /// <summary>
+    /// The light of the last frame.
+    /// </summary>
+    public RawTexture? LightFrame => WasLit && LightTarget is { } target
+        ? new RawTexture(target)
+        {
+            Region = new Rectangle(0, 0, LightMapSize.X, LightMapSize.Y),
+            Origin = Vector2.Zero,
+            Scale = new Vector2(LightMapBounds.Width / LightMapSize.X, LightMapBounds.Height / LightMapSize.Y),
+        }
+        : null;
 
     // The other target of the same size: reading the frame while drawing needs one to read and one to draw into.
     private RenderTarget2D? _scratch;
@@ -143,11 +173,30 @@ public sealed class RenderViewport : IDisposable
         return frame;
     }
 
+    // the light target grows in steps of this, so zooming does not make a new one every frame
+    private const int LightTargetStep = 64;
+
+    internal RenderTarget2D EnsureLightTarget(GraphicsDevice device, Point size)
+    {
+        if (LightTarget is { IsDisposed: false } target
+            && target.Width >= size.X && target.Height >= size.Y
+            && target.Width <= size.X * 2 + LightTargetStep && target.Height <= size.Y * 2 + LightTargetStep)
+            return target;
+
+        LightTarget?.Dispose();
+        LightTarget = new RenderTarget2D(device, RoundUp(size.X), RoundUp(size.Y), false, SurfaceFormat.Color,
+            DepthFormat.None);
+        return LightTarget;
+
+        static int RoundUp(int value) => (value + LightTargetStep - 1) / LightTargetStep * LightTargetStep;
+    }
+
     /// <summary>
     /// The video memory its targets take.
     /// </summary>
     internal long TargetBytes
-        => TargetSize.X * (long)TargetSize.Y * 8 * ((Target is null ? 0 : 1) + (_scratch is null ? 0 : 1));
+        => TargetSize.X * (long)TargetSize.Y * 8 * ((Target is null ? 0 : 1) + (_scratch is null ? 0 : 1))
+           + (LightTarget is { } light ? light.Width * (long)light.Height * 4 : 0);
 
     public void Dispose()
     {
@@ -155,5 +204,8 @@ public sealed class RenderViewport : IDisposable
         Target = null;
         _scratch?.Dispose();
         _scratch = null;
+        LightTarget?.Dispose();
+        LightTarget = null;
+        WasLit = false;
     }
 }

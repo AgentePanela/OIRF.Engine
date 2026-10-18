@@ -174,6 +174,7 @@ public sealed partial class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     {
         ApplyDrawColor(data.Base, data);
         var shader = ResolveShader(data.Base, data.DrawShader ?? comp.Shader);
+        spr.Lighting = GetLighting(comp, null, transform);
 
         if (comp.Layers is null || comp.Layers.Count == 0)
         {
@@ -235,7 +236,17 @@ public sealed partial class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 
         ApplyDrawColor(target, data);
         var shader = ResolveShader(target, data.DrawShader ?? layer.Shader);
+        spr.Lighting = GetLighting(comp, layer, trans);
         _renderMan.Submit(spr, pos, shader, target.Custom0, target.Custom1);
+    }
+
+    private static TextureLighting GetLighting(SpriteComponent comp, SpriteLayer? layer, TransformComponent transform)
+    {
+        var offset = layer?.LightOffset ?? comp.LightOffset;
+        return new TextureLighting(
+            layer?.LightBase ?? comp.LightBase,
+            transform.Position + offset,
+            layer?.Emission ?? comp.Emission);
     }
 
     // only the shader set through SetDrawShader gets it, a shader that has no such parameter just ignores it

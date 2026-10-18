@@ -214,6 +214,7 @@ public sealed class ProfilerOverlay : Overlay
             $"Submitted: {stats.Submitted} | Culled: {stats.Culled} | Target switches: {stats.TargetSwitches}";
 
         text += $"\nPost effects: {stats.PostEffects} ({FormatMs(stats.PostProcessMs)}) | Targets: {stats.TargetBytes / (1024.0 * 1024.0):0.0}MB";
+        text += $"\nLight: {stats.LightsDrawn} lights | {stats.LightMapTexels / 1000.0:0.#}k texels ({FormatMs(stats.LightMs)})";
 
         foreach (var viewport in stats.Viewports)
             text += $"\n{viewport.Name}: {viewport.Width}x{viewport.Height} | {viewport.Items} items | {FormatMs(viewport.Ms)}";

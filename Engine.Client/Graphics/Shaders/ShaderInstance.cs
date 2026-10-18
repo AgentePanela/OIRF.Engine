@@ -56,6 +56,11 @@ public sealed class ShaderInstance : IDisposable
     internal readonly EffectParameter? TimeParam;
     internal readonly EffectParameter? ScreenSizeParam;
 
+    // null for a shader that does not read the light (SPRITE_TECHNIQUE_UNLIT, or not built on Sprite.fxh)
+    internal readonly EffectParameter? LightMapParam;
+    internal readonly EffectParameter? LightMapTransformParam;
+    internal readonly EffectParameter? LightParamsParam;
+
     private readonly IReadOnlyDictionary<string, SpriteParamSlot> _spriteSlots;
     private readonly ShaderManager? _owner;
 
@@ -77,7 +82,15 @@ public sealed class ShaderInstance : IDisposable
         TexelSizeParam = effect.Parameters["TexelSize"];
         TimeParam = effect.Parameters["Time"];
         ScreenSizeParam = effect.Parameters["ScreenSize"];
+        LightMapParam = effect.Parameters["LightMap"];
+        LightMapTransformParam = effect.Parameters["LightMapTransform"];
+        LightParamsParam = effect.Parameters["LightParams"];
     }
+
+    /// <summary>
+    /// Whether the compiled shader reads the light map. A lit shader that does not is never darkened.
+    /// </summary>
+    public bool ReadsLight => LightMapParam is not null;
 
     /// <summary>
     /// A copy with its own parameters, starting from the current ones.

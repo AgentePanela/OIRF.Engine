@@ -76,6 +76,9 @@ public sealed partial class RenderManager
 
         SyncMainViewport();
 
+        // null until the shaders are loaded, the plain sprite effect is used until then
+        _batcher.DefaultShader = _shaders.DefaultInstance;
+
         // textures that have to be ready before any viewport draws with them
         BeforeFrame?.Invoke();
 
@@ -121,11 +124,15 @@ public sealed partial class RenderManager
         var device = GameClient.GraphicsDevice;
         var start = Stopwatch.GetTimestamp();
 
+        _current = viewport;
+        viewport.Camera.CacheFrame();
+
+        var lit = BuildLightMap(viewport, dt);
         device.SetRenderTarget(viewport.EnsureTarget(device));
         device.Clear(viewport.ClearColor ?? clearColor);
 
-        _current = viewport;
-        viewport.Camera.CacheFrame();
+        // the world reads the light map while it is drawn
+        UseLightMap(lit ? viewport : null);
 
         DrawOverlays(viewport, RenderStage.BelowWorld, dt);
 
@@ -141,9 +148,7 @@ public sealed partial class RenderManager
         var items = _queue.Count;
         DrawQueue();
 
-        DrawOverlays(viewport, RenderStage.BeforeLighting, dt);
-
-        // todo: light rework
+        UseLightMap(null);
 
         DrawOverlays(viewport, RenderStage.AfterLighting, dt);
 

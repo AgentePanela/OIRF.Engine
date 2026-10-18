@@ -55,6 +55,15 @@ public sealed class RenderStats
     public int PostEffects;
     public double PostProcessMs;
 
+
+    public int LightsDrawn;
+
+    /// <summary>
+    /// Pixels of light map filled.
+    /// </summary>
+    public int LightMapTexels;
+    public double LightMs;
+
     /// <summary>
     /// Video memory taken by the targets of the viewports drawn.
     /// </summary>
@@ -75,6 +84,8 @@ public sealed class RenderStats
         SubmitMs = SortMs = FlushMs = PresentMs = TotalMs = 0;
         PostEffects = 0;
         PostProcessMs = 0;
+        LightsDrawn = LightMapTexels = 0;
+        LightMs = 0;
         TargetBytes = 0;
         Viewports.Clear();
         Overlays.Clear();
@@ -107,6 +118,9 @@ public sealed class RenderStats
 
         PostEffects = other.PostEffects;
         PostProcessMs = other.PostProcessMs;
+        LightsDrawn = other.LightsDrawn;
+        LightMapTexels = other.LightMapTexels;
+        LightMs = other.LightMs;
         TargetBytes = other.TargetBytes;
 
         Viewports.Clear();

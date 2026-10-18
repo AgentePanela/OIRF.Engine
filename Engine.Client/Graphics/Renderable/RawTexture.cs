@@ -25,6 +25,8 @@ public struct RawTexture : IRenderable
 
     public bool Visible = true;
 
+    public TextureLighting Lighting;
+
     /// <summary>
     /// The size it is drawn at: the region times the scale. Setting it changes the scale.
     /// </summary>

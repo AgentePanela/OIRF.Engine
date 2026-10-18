@@ -44,6 +44,11 @@ public struct Sprite2D : IRenderable
 
     public bool Visible = true;
 
+    /// <summary>
+    /// How it takes the light.
+    /// </summary>
+    public TextureLighting Lighting;
+
     // Cache
     internal Texture2D CachedTexture { get; set; }
     internal Rectangle CachedRegion { get; set; }

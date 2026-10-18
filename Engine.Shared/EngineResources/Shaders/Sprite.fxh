@@ -27,7 +27,9 @@ float2 ScreenSize = float2(1280.0, 720.0);
 
 Texture2D SpriteTexture;
 
-sampler2D SpriteTextureSampler = sampler_state
+// The renderer binds the sprite's texture to register s0 and the light map to s1 (TextureLighting.fxh). s2 is kept
+// for the engine too: a texture of your own goes in s3 or above.
+sampler2D SpriteTextureSampler : register(s0) = sampler_state
 {
     Texture = <SpriteTexture>;
 };
@@ -40,6 +42,7 @@ struct SpriteVertex
     float2 LocalUV  : TEXCOORD1;
     float4 Custom0  : TEXCOORD2;
     float4 Custom1  : TEXCOORD3;
+    float4 Light    : TEXCOORD4;
 };
 
 struct SpritePixel
@@ -58,6 +61,10 @@ struct SpritePixel
     // Two free values each sprite carries on its own, see perSprite in the shader prototype.
     float4 Custom0  : TEXCOORD2;
     float4 Custom1  : TEXCOORD3;
+
+    // Filled by the engine for the lighting: xy is the world position this pixel reads the light at, z how much it
+    // ignores the light. Leave it alone.
+    float4 Light    : TEXCOORD4;
 };
 
 SpritePixel SpriteVS(SpriteVertex input)
@@ -69,6 +76,7 @@ SpritePixel SpriteVS(SpriteVertex input)
     output.LocalUV = input.LocalUV;
     output.Custom0 = input.Custom0;
     output.Custom1 = input.Custom1;
+    output.Light = input.Light;
     return output;
 }
 
@@ -78,7 +86,26 @@ float4 SampleSprite(SpritePixel input)
     return tex2D(SpriteTextureSampler, input.UV) * input.Color;
 }
 
+#include "TextureLighting.fxh"
+
+// The technique of a sprite shader: what pixelShader returns is then lit by the engine (ApplyLighting).
 #define SPRITE_TECHNIQUE(pixelShader) \
+    float4 EngineLitPixel(SpritePixel input) : COLOR0 \
+    { \
+        return ApplyLighting(pixelShader(input), input); \
+    } \
+    technique Sprite \
+    { \
+        pass P0 \
+        { \
+            VertexShader = compile VS_SHADERMODEL SpriteVS(); \
+            PixelShader = compile PS_SHADERMODEL EngineLitPixel(); \
+        } \
+    }
+
+// The technique of a shader the light never touches (what pixelShader returns is what is drawn), for masks and
+// screen effects. A sprite drawn with it is never darkened, whatever `lit` its prototype says.
+#define SPRITE_TECHNIQUE_UNLIT(pixelShader) \
     technique Sprite \
     { \
         pass P0 \

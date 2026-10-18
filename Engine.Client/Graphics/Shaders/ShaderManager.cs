@@ -36,20 +36,31 @@ public sealed class ShaderManager
     public ShaderInstance UnshadedInstance { get; }
 
     private ShaderInstance? _maskInstance;
+    private ShaderInstance? _defaultInstance;
+    private ShaderInstance? _lightInstance;
 
     /// <summary>
     /// What a sprite with no shader of its own is drawn with while it writes a mask.
     /// </summary>
     internal ShaderInstance? MaskInstance
-    {
-        get
-        {
-            if (_maskInstance is null && _effects.TryGetValue("EngineSpriteMask", out var effect))
-                _maskInstance = new ShaderInstance(null, effect, lit: false, ShaderBlend.Alpha, null, owned: false, this);
+        => _maskInstance ??= CreateEngineInstance("EngineSpriteMask", lit: false, ShaderBlend.Alpha);
 
-            return _maskInstance;
-        }
-    }
+    /// <summary>
+    /// What a sprite with no shader of its own is drawn with: the sprite as it is, lit.
+    /// </summary>
+    internal ShaderInstance? DefaultInstance
+        => _defaultInstance ??= CreateEngineInstance("DefaultLit", lit: true, ShaderBlend.Alpha);
+
+    /// <summary>
+    /// What one light is drawn into the light map with.
+    /// </summary>
+    internal ShaderInstance? LightInstance
+        => _lightInstance ??= CreateEngineInstance("LightShape", lit: false, ShaderBlend.Additive);
+
+    private ShaderInstance? CreateEngineInstance(string file, bool lit, ShaderBlend blend)
+        => _effects.TryGetValue(file, out var effect)
+            ? new ShaderInstance(null, effect, lit, blend, null, owned: false, this)
+            : null;
 
     /// <summary>
     /// How many instances made by <see cref="ShaderInstance.Duplicate"/> are alive.
@@ -143,6 +154,9 @@ public sealed class ShaderManager
 
         // its own copy of the effect, so two prototypes on the same .fx can start from different values
         var instance = new ShaderInstance(id, source.Clone(), proto.Lit, proto.Blend, slots, owned: false, this);
+
+        if (proto.Lit && !instance.ReadsLight)
+            Log.Warn($"Shader prototype '{id}' is lit, but '{proto.File}.fx' does not read the light (it does not end with SPRITE_TECHNIQUE), so the light never darkens it");
 
         if (proto.Params is not null)
         {

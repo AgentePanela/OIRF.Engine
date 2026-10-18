@@ -20,13 +20,19 @@ internal struct SpriteVertex : IVertexType
     public Vector4 Custom0;
     public Vector4 Custom1;
 
+    /// <summary>
+    /// xy: the world position the light is read at. z: emission. w: unused for now.
+    /// </summary>
+    public Vector4 Light;
+
     public static readonly VertexDeclaration Declaration = new(
         new VertexElement(0, VertexElementFormat.Vector2, VertexElementUsage.Position, 0),
         new VertexElement(8, VertexElementFormat.Color, VertexElementUsage.Color, 0),
         new VertexElement(12, VertexElementFormat.Vector2, VertexElementUsage.TextureCoordinate, 0),
         new VertexElement(20, VertexElementFormat.Vector2, VertexElementUsage.TextureCoordinate, 1),
         new VertexElement(28, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 2),
-        new VertexElement(44, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 3));
+        new VertexElement(44, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 3),
+        new VertexElement(60, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 4));
 
     readonly VertexDeclaration IVertexType.VertexDeclaration => Declaration;
 }
@@ -71,6 +77,31 @@ internal sealed class SpriteBatcher
     /// <inheritdoc cref="Custom0"/>
     public Vector4 Custom1;
 
+    /// <summary>
+    /// How the quads drawn from now on take the light.
+    /// </summary>
+    public TextureLighting Lighting;
+
+    /// <summary>
+    /// The light the quads are drawn with, null while nothing is lit (nothing gets darker then).
+    /// </summary>
+    public Texture2D? LightMap;
+
+    /// <summary>
+    /// Takes a world position to its uv on <see cref="LightMap"/>: uv = position * xy + zw.
+    /// </summary>
+    public Vector4 LightMapTransform;
+    public Vector4 LightParams;
+
+    /// <summary>
+    /// What quads with no shader of their own are drawn with. The plain SpriteEffect, which ignores the light, while
+    /// null (before the shaders are loaded).
+    /// </summary>
+    public ShaderInstance? DefaultShader;
+    public Texture2D White { get; }
+
+    private static readonly Vector4 NoLightParams = new(1f, 0f, 1f, 0f);
+
     public SamplerState Sampler => _sampler;
 
     public SpriteBatcher(GraphicsDevice device, RenderStats stats)
@@ -78,6 +109,9 @@ internal sealed class SpriteBatcher
         _device = device;
         _stats = stats;
         _defaultEffect = new SpriteEffect(device);
+
+        White = new Texture2D(device, 1, 1);
+        White.SetData(new[] { Color.White });
 
         for (var i = 0; i < MaxQuads; i++)
         {
@@ -113,6 +147,7 @@ internal sealed class SpriteBatcher
         _stencil = DepthStencilState.None;
         _blendOverride = null;
         Custom0 = Custom1 = default;
+        Lighting = default;
     }
 
     /// <summary>
@@ -276,6 +311,15 @@ internal sealed class SpriteBatcher
         vertex.LocalUV = localUv;
         vertex.Custom0 = Custom0;
         vertex.Custom1 = Custom1;
+
+        // interpolated over the quad: a pixel of a Line sprite reads at its own x on the base, a Point one at the base
+        var at = Lighting.Mode switch
+        {
+            LightBaseMode.Line => new Vector2(position.X, Lighting.Base.Y),
+            LightBaseMode.Point => Lighting.Base,
+            _ => position,
+        };
+        vertex.Light = new Vector4(at.X, at.Y, Lighting.Emission, 0f);
     }
 
     // makes room for one quad of this texture and returns where its first vertex goes
@@ -310,13 +354,23 @@ internal sealed class SpriteBatcher
             return;
 
         Effect effect;
-        if (_shader?.Effect is { } custom)
+        var shader = _shader ?? DefaultShader;
+        var readsLight = false;
+        if (shader?.Effect is { } custom)
         {
             effect = custom;
-            _shader.MatrixParam?.SetValue(_view * _projection);
-            _shader.TexelSizeParam?.SetValue(new Vector2(1f / _texture.Width, 1f / _texture.Height));
-            _shader.TimeParam?.SetValue(_time);
-            _shader.ScreenSizeParam?.SetValue(_screenSize);
+            shader.MatrixParam?.SetValue(_view * _projection);
+            shader.TexelSizeParam?.SetValue(new Vector2(1f / _texture.Width, 1f / _texture.Height));
+            shader.TimeParam?.SetValue(_time);
+            shader.ScreenSizeParam?.SetValue(_screenSize);
+
+            if (shader.LightMapParam is { } lightMap)
+            {
+                readsLight = true;
+                lightMap.SetValue(LightMap ?? White);
+                shader.LightMapTransformParam?.SetValue(LightMapTransform);
+                shader.LightParamsParam?.SetValue(LightMap is null ? NoLightParams : LightParams);
+            }
         }
         else
         {
@@ -335,6 +389,8 @@ internal sealed class SpriteBatcher
             // whatever the pass set, the texture and the sampler are the ones of this batch
             _device.Textures[0] = _texture;
             _device.SamplerStates[0] = _sampler;
+            if (readsLight)
+                _device.SamplerStates[1] = SamplerState.LinearClamp;
 
             _device.DrawUserIndexedPrimitives(PrimitiveType.TriangleList, _vertices, 0, _quads * 4, _indices, 0,
                 _quads * 2, SpriteVertex.Declaration);

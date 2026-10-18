@@ -10,4 +10,4 @@ float4 MainPS(SpritePixel input) : COLOR
     return color;
 }
 
-SPRITE_TECHNIQUE(MainPS)
+SPRITE_TECHNIQUE_UNLIT(MainPS)
