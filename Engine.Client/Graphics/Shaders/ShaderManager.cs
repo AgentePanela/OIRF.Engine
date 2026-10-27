@@ -38,6 +38,7 @@ public sealed class ShaderManager
     private ShaderInstance? _maskInstance;
     private ShaderInstance? _defaultInstance;
     private ShaderInstance? _lightInstance;
+    private ShaderInstance? _fovInstance;
 
     /// <summary>
     /// What a sprite with no shader of its own is drawn with while it writes a mask.
@@ -56,6 +57,12 @@ public sealed class ShaderManager
     /// </summary>
     internal ShaderInstance? LightInstance
         => _lightInstance ??= CreateEngineInstance("LightShape", lit: false, ShaderBlend.Additive);
+
+    /// <summary>
+    /// What covers what the eye of a viewport does not see.
+    /// </summary>
+    internal ShaderInstance? FovInstance
+        => _fovInstance ??= CreateEngineInstance("Fov", lit: false, ShaderBlend.Alpha);
 
     private ShaderInstance? CreateEngineInstance(string file, bool lit, ShaderBlend blend)
         => _effects.TryGetValue(file, out var effect)

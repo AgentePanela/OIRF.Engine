@@ -250,12 +250,17 @@ public sealed class ProfilerOverlay : Overlay
                 ? $"{light.ChunksResident}/{light.ChunkCapacity} kept | {light.ChunksRebuilt} redrawn"
                 : $"too many for the view ({light.ChunkCapacity} max): static lights added one by one";
 
+        var fov = light.FovViewports == 0
+            ? "off"
+            : $"{FormatMs(light.FovMs)} | {light.FovSegments} edges";
+
         _lightStatsLabel.Text =
             $"Time: {FormatMs(light.PrepareMs + light.LightMapMs)} (lights {FormatMs(light.PrepareMs)} | " +
             $"light maps {FormatMs(light.LightMapMs)})\n" +
             $"Lights: {light.Lights} ({light.StaticLights} static, {light.DynamicLights} dynamic) | " +
             $"drawn this frame: {light.LightsDrawn}\n" +
             $"Shadow edges drawn: {light.ShadowSegments}\n" +
+            $"Field of view: {fov}\n" +
             $"Chunks: {chunks}\n" +
             $"Atlas pages: {light.StaticAtlasPages} static, {light.DynamicAtlasPages} dynamic | " +
             $"Memory: {light.CacheBytes / (1024.0 * 1024.0):0.0}MB\n" +

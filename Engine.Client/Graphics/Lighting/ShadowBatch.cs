@@ -39,6 +39,9 @@ internal sealed class ShadowBatch
     /// </summary>
     public int Count { get; set; }
 
+    // the size of what is drawn into, see SetTarget
+    private Vector2 _targetSize = new(LightAtlas.PageSize);
+
     private static readonly BlendState ShadowBlend = new()
     {
         // only the alpha of the page
@@ -70,40 +73,67 @@ internal sealed class ShadowBatch
     /// </summary>
     public void Add(GraphicsDevice device, Effect effect, ShadowSegment segment, in LightDraw light)
     {
+        var slot = new Vector4(light.Region.Center.ToVector2(), light.SlotScale, light.Region.Width / 2f);
+        Add(device, effect, segment, light.Center, light.Radius, light.SourceRadius, slot);
+    }
+
+    /// <summary>
+    /// Queues the shadow <paramref name="segment"/> throws from a light at <paramref name="center"/>.
+    /// <paramref name="slot"/> is where that center is in the target (xy), target pixels per world unit (z) and how
+    /// far around it, in target pixels, the shadow is kept (w).
+    /// </summary>
+    public void Add(GraphicsDevice device, Effect effect, ShadowSegment segment, Vector2 center, float radius,
+        float source, Vector4 slot)
+    {
         if (_quads == MaxQuads)
-            Flush(device, effect);
+            Draw(device, effect);
 
         var a = segment.A;
         var b = segment.B;
-        var center = light.Center;
-        var source = light.SourceRadius;
 
-        // far enough to leave the light circle from anywhere inside it
-        var reach = light.Radius * 2f;
-        var farA = a + OuterDirection(a, b, center, source) * reach;
-        var farB = b + OuterDirection(b, a, center, source) * reach;
+        var outA = OuterDirection(a, b, center, source);
+        var outB = OuterDirection(b, a, center, source);
+
+        // Far enough to leave the light circle from anywhere inside it. The wider the shadow opens (an edge right next
+        // to the light), the closer the far side of the quad comes back towards it, so the further it has to go.
+        var halfOpening = MathF.Sqrt(MathF.Max((1f + Vector2.Dot(outA, outB)) / 2f, 0f));
+        var reach = radius * 2f / MathF.Max(halfOpening, 0.05f);
+        var farA = a + outA * reach;
+        var farB = b + outB * reach;
 
         var segmentData = new Vector4(a, b.X, b.Y);
         var lightData = new Vector4(center, source, 0f);
-        var slotData = new Vector4(light.Region.Center.ToVector2(), light.SlotScale, light.Region.Width / 2f);
 
         var index = _quads * 4;
         if (index + 4 > _vertices.Length)
             Array.Resize(ref _vertices, Math.Min(_vertices.Length * 2, MaxQuads * 4));
 
-        _vertices[index] = new ShadowVertex { Position = a, Segment = segmentData, Light = lightData, Slot = slotData };
-        _vertices[index + 1] = new ShadowVertex { Position = b, Segment = segmentData, Light = lightData, Slot = slotData };
-        _vertices[index + 2] = new ShadowVertex { Position = farA, Segment = segmentData, Light = lightData, Slot = slotData };
-        _vertices[index + 3] = new ShadowVertex { Position = farB, Segment = segmentData, Light = lightData, Slot = slotData };
+        _vertices[index] = new ShadowVertex { Position = a, Segment = segmentData, Light = lightData, Slot = slot };
+        _vertices[index + 1] = new ShadowVertex { Position = b, Segment = segmentData, Light = lightData, Slot = slot };
+        _vertices[index + 2] = new ShadowVertex { Position = farA, Segment = segmentData, Light = lightData, Slot = slot };
+        _vertices[index + 3] = new ShadowVertex { Position = farB, Segment = segmentData, Light = lightData, Slot = slot };
 
         _quads++;
         Count++;
     }
 
     /// <summary>
-    /// Draws what is queued into the page that is set.
+    /// Makes the shadows queued from now on go to a target <paramref name="size"/> pixels big instead of an atlas
+    /// page, until the next <see cref="Flush"/>.
+    /// </summary>
+    public void SetTarget(Vector2 size)
+        => _targetSize = size;
+
+    /// <summary>
+    /// Draws what is queued into the target that is set.
     /// </summary>
     public void Flush(GraphicsDevice device, Effect effect)
+    {
+        Draw(device, effect);
+        _targetSize = new Vector2(LightAtlas.PageSize);
+    }
+
+    private void Draw(GraphicsDevice device, Effect effect)
     {
         if (_quads == 0)
             return;
@@ -112,7 +142,7 @@ internal sealed class ShadowBatch
         device.DepthStencilState = DepthStencilState.None;
         device.RasterizerState = RasterizerState.CullNone;
 
-        effect.Parameters["PageSize"]?.SetValue(new Vector2(LightAtlas.PageSize));
+        effect.Parameters["PageSize"]?.SetValue(_targetSize);
 
         foreach (var pass in effect.CurrentTechnique.Passes)
         {

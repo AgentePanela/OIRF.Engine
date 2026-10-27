@@ -33,6 +33,14 @@ public sealed partial class OccluderComponent : Component
     /// <see cref="Shape"/> is <see cref="OccluderShape.Rectangle"/>.
     /// </summary>
     [NetField] public partial Vector2 Size { get; set; } = new(64, 64);
+
+    /// <summary>
+    /// For the field of view only: how far above its shape the occluder also hides what is behind it, in world units.
+    /// A wall drawn taller than the ground it stands on (seen from the side) sets how far it is drawn above it, so the
+    /// field of view does not cut its drawing. Lights only use its shape. Only for a <see cref="OccluderShape.Rectangle"/>
+    /// or <see cref="OccluderShape.Sprite"/> that is not turned.
+    /// </summary>
+    [NetField] public partial float FovHeight { get; set; } = 0f;
 }
 
 public enum OccluderShape
