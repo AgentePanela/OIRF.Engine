@@ -43,11 +43,6 @@ public sealed class OccluderSystem : EntitySystem
         public Vector2[] Normals = [];
 
         public RectangleF Bounds;
-
-        /// <summary>
-        /// <see cref="OccluderComponent.FovHeight"/>.
-        /// </summary>
-        public float FovHeight;
         public readonly List<(int X, int Y)> Cells = new();
 
         // the last query that went through it, so an occluder in several cells is looked at once
@@ -62,9 +57,6 @@ public sealed class OccluderSystem : EntitySystem
     private readonly Dictionary<EdgeKey, int> _edgeCounts = new();
 
     private readonly HashSet<EntityUid> _dirty = new();
-
-    // the highest FovHeight seen so far, how far below an area an occluder that hides something in it can stand
-    private float _maxFovHeight;
     private int _stamp;
 
     // where an outline appeared, went away or changed since the last TakeChanges
@@ -198,177 +190,6 @@ public sealed class OccluderSystem : EntitySystem
     }
 
     /// <summary>
-    /// Adds to <paramref name="segments"/> the edges that hide something from an eye at <paramref name="eye"/>. Like
-    /// <see cref="CollectSegments"/>, but an occluder with a <see cref="OccluderComponent.FovHeight"/> also hides that
-    /// much above its shape, so a wall is not cut by the field of view where it is drawn over the ground behind it.
-    /// </summary>
-    internal void CollectFovSegments(Vector2 eye, float radius, List<ShadowSegment> segments)
-    {
-        Update();
-
-        foreach (var line in _fovLines.Values)
-            line.Clear();
-
-        // one standing below the reach can hide something in it
-        var reach = new RectangleF(eye.X - radius, eye.Y - radius, radius * 2f, radius * 2f + _maxFovHeight);
-        _stamp++;
-
-        var (minX, minY) = ToCell(new Vector2(reach.Left, reach.Top));
-        var (maxX, maxY) = ToCell(new Vector2(reach.Right, reach.Bottom));
-
-        for (var cx = minX; cx <= maxX; cx++)
-        for (var cy = minY; cy <= maxY; cy++)
-        {
-            if (!_cells.TryGetValue((cx, cy), out var cell))
-                continue;
-
-            foreach (var uid in cell)
-            {
-                var entry = _entries[uid];
-                if (entry.Stamp == _stamp)
-                    continue;
-
-                entry.Stamp = _stamp;
-
-                // standing against a wall is not being in it: that wall still hides what is past it
-                if (!Intersects(entry.Bounds, reach) || Contains(entry, eye, FovInside))
-                    continue;
-
-                if (!AddFovBox(entry, eye))
-                    AddEdges(entry, eye, radius, segments);
-            }
-        }
-
-        // boxes next to each other become one outline: where two of them touch, nothing is cast
-        foreach (var ((vertical, at), line) in _fovLines)
-        {
-            if (line.Count > 0)
-                AddLineEdges(vertical, at * EdgeQuantum, line, eye, radius, segments);
-        }
-    }
-
-    // A side of a box occluder on the line it lies on: from From to To along it, its outside towards Side (-1 or 1).
-    private readonly record struct LineEdge(float From, float To, int Side);
-
-    // by direction (vertical or not) and where the line is (x or y, in EdgeQuantum)
-    private readonly Dictionary<(bool Vertical, int At), List<LineEdge>> _fovLines = new();
-    private readonly List<float> _breaks = new();
-
-    // An axis aligned box occluder, raised by its FovHeight, split in the lines of its sides. False for any other shape.
-    private bool AddFovBox(Entry entry, Vector2 eye)
-    {
-        if (entry.Points.Length != 4)
-            return false;
-
-        var bounds = entry.Bounds;
-        foreach (var point in entry.Points)
-        {
-            var onX = MathF.Abs(point.X - bounds.Left) < EdgeQuantum || MathF.Abs(point.X - bounds.Right) < EdgeQuantum;
-            var onY = MathF.Abs(point.Y - bounds.Top) < EdgeQuantum || MathF.Abs(point.Y - bounds.Bottom) < EdgeQuantum;
-            if (!onX || !onY)
-                return false;
-        }
-
-        var top = bounds.Top;
-
-        // Raised, unless another occluder stands on its north side (a column of walls is raised from its top one only,
-        // so they still make one outline) or the eye is less than its height north of it: in the corridor behind a
-        // wall, or level with a door in a wall that runs north to south, the ground around the eye is not hidden.
-        var topShared = _edgeCounts.TryGetValue(KeyOf(new Vector2(bounds.Left, top), new Vector2(bounds.Right, top)),
-            out var count) && count > 1;
-        var eyeBehind = eye.Y > top - entry.FovHeight && eye.Y <= top;
-        if (entry.FovHeight > 0f && !topShared && !eyeBehind)
-            top -= entry.FovHeight;
-
-        AddLineEdge(true, bounds.Left, top, bounds.Bottom, -1);
-        AddLineEdge(true, bounds.Right, top, bounds.Bottom, 1);
-        AddLineEdge(false, top, bounds.Left, bounds.Right, -1);
-        AddLineEdge(false, bounds.Bottom, bounds.Left, bounds.Right, 1);
-        return true;
-    }
-
-    private void AddLineEdge(bool vertical, float at, float from, float to, int side)
-    {
-        var key = (vertical, (int)MathF.Round(at / EdgeQuantum));
-        if (!_fovLines.TryGetValue(key, out var line))
-            _fovLines[key] = line = new List<LineEdge>();
-
-        line.Add(new LineEdge(from, to, side));
-    }
-
-    // what is left of the sides on one line once the parts two boxes share (one facing each way) are taken out
-    private void AddLineEdges(bool vertical, float at, List<LineEdge> line, Vector2 eye, float radius,
-        List<ShadowSegment> segments)
-    {
-        _breaks.Clear();
-        foreach (var edge in line)
-        {
-            _breaks.Add(edge.From);
-            _breaks.Add(edge.To);
-        }
-
-        _breaks.Sort();
-
-        var runSide = 0;
-        var runFrom = 0f;
-        for (var i = 0; i + 1 < _breaks.Count; i++)
-        {
-            var from = _breaks[i];
-            var to = _breaks[i + 1];
-
-            // too short to matter: the run it is in goes on
-            if (to - from <= EdgeQuantum)
-                continue;
-
-            var middle = (from + to) / 2f;
-            var outward = false;
-            var inward = false;
-            foreach (var edge in line)
-            {
-                if (middle <= edge.From || middle >= edge.To)
-                    continue;
-
-                if (edge.Side > 0)
-                    outward = true;
-                else
-                    inward = true;
-            }
-
-            var side = outward == inward ? 0 : outward ? 1 : -1;
-            if (side == runSide)
-                continue;
-
-            if (runSide != 0)
-                AddLineSegment(vertical, at, runFrom, from, runSide, eye, radius, segments);
-
-            runSide = side;
-            runFrom = from;
-        }
-
-        if (runSide != 0)
-            AddLineSegment(vertical, at, runFrom, _breaks[^1], runSide, eye, radius, segments);
-    }
-
-    private const float MaxFovSegmentLength = 64f;
-
-    private static void AddLineSegment(bool vertical, float at, float from, float to, int side, Vector2 eye,
-        float radius, List<ShadowSegment> segments)
-    {
-        var a = vertical ? new Vector2(at, from) : new Vector2(from, at);
-        var b = vertical ? new Vector2(at, to) : new Vector2(to, at);
-        var normal = vertical ? new Vector2(side, 0f) : new Vector2(0f, side);
-
-        // facing the eye: its shadow is the one of the far side
-        if (Vector2.Dot(normal, eye - a) >= 0f || DistanceToSegment(eye, a, b) > radius)
-            return;
-
-        // in pieces, like the edges of the lights: one long edge next to the eye opens too wide a shadow
-        var pieces = Math.Max(1, (int)MathF.Ceiling((to - from) / MaxFovSegmentLength));
-        for (var p = 0; p < pieces; p++)
-            segments.Add(new ShadowSegment(Vector2.Lerp(a, b, p / (float)pieces), Vector2.Lerp(a, b, (p + 1) / (float)pieces)));
-    }
-
-    /// <summary>
     /// Every edge in <paramref name="area"/>, and whether it is the inside of a wall (shared with another occluder).
     /// </summary>
     internal IEnumerable<(Vector2 A, Vector2 B, bool Shared)> EdgesIn(RectangleF area)
@@ -445,12 +266,9 @@ public sealed class OccluderSystem : EntitySystem
         foreach (var uid in _dirty)
         {
             Vector2[]? points = null;
-            var fovHeight = 0f;
             if (TryComp<OccluderComponent>(uid, out var comp) && comp.Enabled && !HasComp<ContainedComponent>(uid)
                 && Transform(uid) is { } transform)
             {
-                fovHeight = MathF.Max(comp.FovHeight, 0f);
-                _maxFovHeight = MathF.Max(_maxFovHeight, fovHeight);
                 points = BuildOutline(uid, comp, transform);
                 if (points.Length < 3)
                     points = null;
@@ -458,15 +276,12 @@ public sealed class OccluderSystem : EntitySystem
 
             // the same outline as before changes no shadow, the lights around it can stay as they are
             if (points is not null && _entries.TryGetValue(uid, out var old) && old.Points.AsSpan().SequenceEqual(points))
-            {
-                old.FovHeight = fovHeight;
                 continue;
-            }
 
             Forget(uid);
 
             if (points is not null)
-                Add(uid, points, fovHeight);
+                Add(uid, points);
         }
 
         _dirty.Clear();
@@ -520,9 +335,9 @@ public sealed class OccluderSystem : EntitySystem
         return corners;
     }
 
-    private void Add(EntityUid uid, Vector2[] points, float fovHeight)
+    private void Add(EntityUid uid, Vector2[] points)
     {
-        var entry = new Entry { Points = points, Normals = new Vector2[points.Length], FovHeight = fovHeight };
+        var entry = new Entry { Points = points, Normals = new Vector2[points.Length] };
 
         var middle = Vector2.Zero;
         var min = new Vector2(float.MaxValue);
@@ -613,7 +428,7 @@ public sealed class OccluderSystem : EntitySystem
     }
 
     // the outlines are convex: inside is behind every edge
-    private static bool Contains(Entry entry, Vector2 point, float inside = 0f)
+    private static bool Contains(Entry entry, Vector2 point)
     {
         if (point.X < entry.Bounds.Left || point.X > entry.Bounds.Right
             || point.Y < entry.Bounds.Top || point.Y > entry.Bounds.Bottom)
@@ -621,15 +436,12 @@ public sealed class OccluderSystem : EntitySystem
 
         for (var i = 0; i < entry.Points.Length; i++)
         {
-            if (Vector2.Dot(entry.Normals[i], point - entry.Points[i]) > -inside)
+            if (Vector2.Dot(entry.Normals[i], point - entry.Points[i]) > 0f)
                 return false;
         }
 
         return true;
     }
-
-    // how far inside an occluder an eye has to be for it to see out of it (a mob's feet touch the walls it walks into)
-    private const float FovInside = 2f;
 
     private static bool Intersects(RectangleF a, RectangleF b)
         => a.Left <= b.Right && a.Right >= b.Left && a.Top <= b.Bottom && a.Bottom >= b.Top;

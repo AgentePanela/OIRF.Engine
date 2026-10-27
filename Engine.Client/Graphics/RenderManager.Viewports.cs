@@ -132,7 +132,6 @@ public sealed partial class RenderManager
         viewport.Camera.CacheFrame();
 
         var lit = BuildLightMap(viewport, dt);
-        BuildFovMask(viewport);
         device.SetRenderTarget(viewport.EnsureTarget(device));
         device.Clear(viewport.ClearColor ?? clearColor);
 
@@ -154,9 +153,6 @@ public sealed partial class RenderManager
         DrawQueue();
 
         UseLightMap(null);
-
-        // over the world, under what is drawn after the lighting
-        DrawFov(viewport);
 
         DrawOverlays(viewport, RenderStage.AfterLighting, dt);
 

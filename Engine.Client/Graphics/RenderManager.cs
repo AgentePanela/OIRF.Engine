@@ -76,7 +76,6 @@ public sealed partial class RenderManager : IRenderManager
         _batcher = new SpriteBatcher(GameClient.GraphicsDevice, _frameStats);
         _textRenderer = new TextRenderer(GameClient.GraphicsDevice, _batcher);
         InitLighting();
-        InitFov();
         SyncMainViewport();
     }
 
