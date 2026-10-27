@@ -24,6 +24,14 @@ public sealed class LightStats
     /// </summary>
     public int ShadowSegments;
 
+    public double FovMs;
+    public int ViewportsWithFov;
+
+    /// <summary>
+    /// Occluder edges that hid something from an eye (every viewport add up)
+    /// </summary>
+    public int FovSegments;
+
     /// <summary>
     /// Pieces of the world whose static light is kept.
     /// </summary>
@@ -68,6 +76,8 @@ public sealed class LightStats
     {
         CacheEnabled = ChunksInUse = false;
         Lights = StaticLights = DynamicLights = LightsDrawn = ShadowSegments = 0;
+        ViewportsWithFov = FovSegments = 0;
+        FovMs = 0;
         ChunksResident = ChunkCapacity = ChunksRebuilt = 0;
         StaticAtlasPages = DynamicAtlasPages = LightMapTexels = 0;
         CacheBytes = 0;
@@ -82,6 +92,9 @@ public sealed class LightStats
         DynamicLights = other.DynamicLights;
         LightsDrawn = other.LightsDrawn;
         ShadowSegments = other.ShadowSegments;
+        ViewportsWithFov = other.ViewportsWithFov;
+        FovSegments = other.FovSegments;
+        FovMs = other.FovMs;
         ChunksResident = other.ChunksResident;
         ChunkCapacity = other.ChunkCapacity;
         ChunksRebuilt = other.ChunksRebuilt;

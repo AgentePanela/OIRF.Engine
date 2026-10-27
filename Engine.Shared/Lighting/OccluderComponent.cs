@@ -33,6 +33,11 @@ public sealed partial class OccluderComponent : Component
     /// <see cref="Shape"/> is <see cref="OccluderShape.Rectangle"/>.
     /// </summary>
     [NetField] public partial Vector2 Size { get; set; } = new(64, 64);
+
+    /// <summary>
+    /// For the field of view only!
+    /// </summary>
+    [NetField] public partial float FovHeight { get; set; } = 0f;
 }
 
 public enum OccluderShape

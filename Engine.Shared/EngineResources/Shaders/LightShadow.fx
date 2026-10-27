@@ -58,6 +58,11 @@ float4 ShadowPS(ShadowPixel input) : COLOR0
     clip(input.Page - (input.Slot.xy - input.Slot.w));
     clip((input.Slot.xy + input.Slot.w) - input.Page);
 
+    // a source of size 0 (the eye of the field of view, a hard light): the quad is the shadow itself, stretched
+    // straight away from it, so all of it is in full shadow
+    [branch] if (input.Light.z <= 0.0)
+        return float4(0.0, 0.0, 0.0, 1.0);
+
     float2 p = input.World;
     float2 a = input.Segment.xy;
     float2 b = input.Segment.zw;

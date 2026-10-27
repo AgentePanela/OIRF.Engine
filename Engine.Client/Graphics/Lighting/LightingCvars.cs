@@ -49,4 +49,7 @@ public static class LightingCvars
 
     public static readonly CVarDef<bool> DebugOccluders =
         CVarDef.Create("light.occluder-overlay", false, CVar.NOSAVE);
+    
+    public static readonly CVarDef<string> FovColor =
+        CVarDef.Create("fov.color", "#000000FF");
 }
