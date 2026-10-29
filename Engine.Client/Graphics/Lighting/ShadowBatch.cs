@@ -18,12 +18,20 @@ internal struct ShadowVertex : IVertexType
     /// </summary>
     public Vector4 Transmit;
 
+    /// <summary>
+    /// The rect the shadow leaves out, and the only one it covers: left, top, right, bottom
+    /// </summary>
+    public Vector4 Exclude;
+    public Vector4 Only;
+
     public static readonly VertexDeclaration Declaration = new(
         new VertexElement(0, VertexElementFormat.Vector2, VertexElementUsage.Position, 0),
         new VertexElement(8, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 0),
         new VertexElement(24, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 1),
         new VertexElement(40, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 2),
-        new VertexElement(56, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 3));
+        new VertexElement(56, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 3),
+        new VertexElement(72, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 4),
+        new VertexElement(88, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 5));
 
     readonly VertexDeclaration IVertexType.VertexDeclaration => Declaration;
 }
@@ -44,6 +52,9 @@ internal sealed class ShadowBatch
     /// Edges sent since the stats were last read.
     /// </summary>
     public int Count { get; set; }
+
+    private static readonly Vector4 NoRect = new(1e7f, 1e7f, -1e7f, -1e7f);
+    private static readonly Vector4 Everywhere = new(-1e7f, -1e7f, 1e7f, 1e7f);
 
     // the size of what is drawn into, see SetTarget
     private Vector2 _targetSize = new(LightAtlas.PageSize);
@@ -114,18 +125,26 @@ internal sealed class ShadowBatch
         var farA = a + outA * reach;
         var farB = b + outB * reach;
 
-        var segmentData = new Vector4(a, b.X, b.Y);
-        var lightData = new Vector4(center, source, 0f);
-        var transmit = new Vector4(segment.Transmit, 0f);
+        var vertex = new ShadowVertex
+        {
+            Segment = new Vector4(a, b.X, b.Y),
+            Light = new Vector4(center, source, 0f),
+            Slot = slot,
+            Transmit = new Vector4(segment.Transmit, 0f),
+
+            // an empty rect is none: nothing left out, nowhere it is kept to
+            Exclude = segment.Exclude.Z > segment.Exclude.X ? segment.Exclude : NoRect,
+            Only = segment.Only.Z > segment.Only.X ? segment.Only : Everywhere,
+        };
 
         var index = _quads * 4;
         if (index + 4 > _vertices.Length)
             Array.Resize(ref _vertices, Math.Min(_vertices.Length * 2, MaxQuads * 4));
 
-        _vertices[index] = new ShadowVertex { Position = a, Segment = segmentData, Light = lightData, Slot = slot, Transmit = transmit };
-        _vertices[index + 1] = new ShadowVertex { Position = b, Segment = segmentData, Light = lightData, Slot = slot, Transmit = transmit };
-        _vertices[index + 2] = new ShadowVertex { Position = farA, Segment = segmentData, Light = lightData, Slot = slot, Transmit = transmit };
-        _vertices[index + 3] = new ShadowVertex { Position = farB, Segment = segmentData, Light = lightData, Slot = slot, Transmit = transmit };
+        _vertices[index] = vertex with { Position = a };
+        _vertices[index + 1] = vertex with { Position = b };
+        _vertices[index + 2] = vertex with { Position = farA };
+        _vertices[index + 3] = vertex with { Position = farB };
 
         _quads++;
         Count++;

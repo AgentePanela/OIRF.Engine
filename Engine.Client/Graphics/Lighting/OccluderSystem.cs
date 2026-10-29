@@ -11,7 +11,8 @@ using Microsoft.Xna.Framework;
 
 namespace Engine.Client.Graphics.Lighting;
 
-internal readonly record struct ShadowSegment(Vector2 A, Vector2 B, Vector3 Transmit = default);
+internal readonly record struct ShadowSegment(Vector2 A, Vector2 B, Vector3 Transmit = default,
+    Vector4 Exclude = default, Vector4 Only = default);
 
 /// <summary>
 /// Controls where shadows can cast.
@@ -60,9 +61,8 @@ public sealed class OccluderSystem : EntitySystem
         /// </summary>
         public bool IsAxisBox;
 
-        // whether another occluder stands on its north side
-        public bool TopShared;
-        public int TopSharedVersion = -1;
+        public bool InRow;
+        public int InRowVersion = -1;
         public readonly List<(int X, int Y)> Cells = new();
 
         // the last query that went through it, so an occluder in several cells is looked at once
@@ -229,7 +229,19 @@ public sealed class OccluderSystem : EntitySystem
     internal void CollectFovSegments(Vector2 eye, float radius, List<ShadowSegment> segments)
     {
         Update();
+
+        // the same eye, as far, among the same outlines: the same edges as last time
+        if (eye == _fovCacheEye && radius == _fovCacheRadius && _outlinesVersion == _fovCacheVersion)
+        {
+            segments.AddRange(_fovCache);
+            return;
+        }
+
         _lineEndCount = 0;
+        _fovEnds.Clear();
+        _fovDrawings.Clear();
+        _fovRaised.Clear();
+        var first = segments.Count;
 
         // one standing below the reach can hide something in it
         var reach = new RectangleF(eye.X - radius, eye.Y - radius, radius * 2f, radius * 2f + _highFovHeight);
@@ -255,31 +267,56 @@ public sealed class OccluderSystem : EntitySystem
                 if (entry.SeeThrough || !Intersects(entry.Bounds, reach) || Contains(entry, eye, FovInside))
                     continue;
 
-                if (!AddFovBox(entry, eye))
+                if (entry.IsAxisBox)
+                    AddFovBox(entry, eye);
+                else
                     AddEdges(entry, eye, radius, segments);
             }
         }
 
-        // boxes next to each other become one outline: where two of them touch, nothing is cast
         Array.Sort(_lineKeys, _lineEnds, 0, _lineEndCount);
         AddLineEdges(eye, radius, segments);
+        LeaveDrawingsInFront(segments, first);
+        AddEndsSeen(eye, segments);
+
+        _fovCache.Clear();
+        for (var i = first; i < segments.Count; i++)
+            _fovCache.Add(segments[i]);
+
+        _fovCacheEye = eye;
+        _fovCacheRadius = radius;
+        _fovCacheVersion = _outlinesVersion;
     }
 
-    // Where a side of a box occluder starts (+1) or ends (-1) on the line it lies on.
-    private readonly record struct LineEnd(int Outward, int Inward);
+    // the edges of the last CollectFovSegments, and what they were found for
+    private readonly List<ShadowSegment> _fovCache = new();
+    private Vector2 _fovCacheEye = new(float.NaN);
+    private float _fovCacheRadius;
+    private int _fovCacheVersion = -1;
+
+    // The lines the sides of box occluders lie on are kept apart by group, and only sides of the same group merge
+    private const int ColumnGroup = 0;
+    private const int RowTopGroup = 1;
+    private const int RowBottomGroup = 2;
+
+    // along y, how wide the box is.
+    private readonly record struct LineEnd(int Outward, int Inward, float Raise, float Size);
 
     // The ends of the sides, sorted by their keys
     private long[] _lineKeys = new long[256];
     private LineEnd[] _lineEnds = new LineEnd[256];
     private int _lineEndCount;
 
-    private const int AtBits = 31;
+    private const int AtBits = 29;
     private const int LineBits = 30;
+    private const int GroupBits = 2;
     private const long AtMask = (1L << AtBits) - 1;
     private const long LineMask = (1L << LineBits) - 1;
+    private const long GroupMask = (1L << GroupBits) - 1;
 
-    private static long LineKey(bool vertical, int line, int at)
-        => ((vertical ? 1L : 0L) << (LineBits + AtBits))
+    private static long LineKey(bool vertical, int group, int line, int at)
+        => ((vertical ? 1L : 0L) << (GroupBits + LineBits + AtBits))
+           | ((group & GroupMask) << (LineBits + AtBits))
            | (((line + (1L << (LineBits - 1))) & LineMask) << AtBits)
            | ((at + (1L << (AtBits - 1))) & AtMask);
 
@@ -290,46 +327,50 @@ public sealed class OccluderSystem : EntitySystem
     private static int AtOf(long key)
         => (int)((key & AtMask) - (1L << (AtBits - 1)));
 
-    /// <summary>
-    /// An axis aligned box occluder, raised by its FovHeight, split in the lines of its sides. False for any other shape.
-    /// </summary>
-    /// <param name="entry"></param>
-    /// <param name="eye"></param>
-    /// <returns></returns>
-    private bool AddFovBox(Entry entry, Vector2 eye)
+    // A side along y of a box, facing the eye
+    private readonly record struct FovEnd(float At, float From, float To, int Side, float Width);
+
+    // What a row draws above its top, which is at Y
+    private readonly record struct FovDrawing(float From, float To, float Y, float Raise, float Depth);
+
+    private readonly List<FovEnd> _fovEnds = new();
+    private readonly List<FovDrawing> _fovDrawings = new();
+
+    // what every wall seen from the front draws above its top, rows and columns
+    private readonly List<Vector4> _fovRaised = new();
+
+    private void AddFovBox(Entry entry, Vector2 eye)
     {
-        if (!entry.IsAxisBox)
-            return false;
-
         var bounds = entry.Bounds;
-        var top = bounds.Top;
 
-        // Raised, unless another occluder stands on its north side
-        var eyeBehind = eye.Y > top - entry.FovHeight && eye.Y <= top;
-        if (entry.FovHeight > 0f && !eyeBehind && !IsTopShared(entry))
-            top -= entry.FovHeight;
+        // nothing is drawn above it from where the eye is less than its height north of it
+        var behind = eye.Y > bounds.Top - entry.FovHeight && eye.Y <= bounds.Top;
+        var raise = behind ? 0f : entry.FovHeight;
+        var inRow = IsInRow(entry);
 
-        AddLineEdge(true, bounds.Left, top, bounds.Bottom, -1);
-        AddLineEdge(true, bounds.Right, top, bounds.Bottom, 1);
-        AddLineEdge(false, top, bounds.Left, bounds.Right, -1);
-        AddLineEdge(false, bounds.Bottom, bounds.Left, bounds.Right, 1);
-        return true;
+        AddLineEdge(true, ColumnGroup, bounds.Left, bounds.Top, bounds.Bottom, -1, 0f, bounds.Width);
+        AddLineEdge(true, ColumnGroup, bounds.Right, bounds.Top, bounds.Bottom, 1, 0f, bounds.Width);
+        AddLineEdge(false, inRow ? RowTopGroup : ColumnGroup, bounds.Top, bounds.Left, bounds.Right, -1, raise,
+            bounds.Height);
+        AddLineEdge(false, inRow ? RowBottomGroup : ColumnGroup, bounds.Bottom, bounds.Left, bounds.Right, 1, 0f, 0f);
     }
 
-    private bool IsTopShared(Entry entry)
+    private bool IsInRow(Entry entry)
     {
-        if (entry.TopSharedVersion != _outlinesVersion)
+        if (entry.InRowVersion != _outlinesVersion)
         {
-            var bounds = entry.Bounds;
-            var key = KeyOf(new Vector2(bounds.Left, bounds.Top), new Vector2(bounds.Right, bounds.Top));
-            entry.TopShared = _edgeCounts.TryGetValue(key, out var count) && count > 1;
-            entry.TopSharedVersion = _outlinesVersion;
+            var b = entry.Bounds;
+            var left = KeyOf(new Vector2(b.Left, b.Top), new Vector2(b.Left, b.Bottom));
+            var right = KeyOf(new Vector2(b.Right, b.Top), new Vector2(b.Right, b.Bottom));
+            entry.InRow = _edgeCounts.GetValueOrDefault(left) > 1 || _edgeCounts.GetValueOrDefault(right) > 1;
+            entry.InRowVersion = _outlinesVersion;
         }
 
-        return entry.TopShared;
+        return entry.InRow;
     }
 
-    private void AddLineEdge(bool vertical, float at, float from, float to, int side)
+    private void AddLineEdge(bool vertical, int group, float at, float from, float to, int side, float raise,
+        float size)
     {
         if (_lineEndCount + 2 > _lineKeys.Length)
         {
@@ -341,10 +382,10 @@ public sealed class OccluderSystem : EntitySystem
         var outward = side > 0 ? 1 : 0;
         var inward = side > 0 ? 0 : 1;
 
-        _lineKeys[_lineEndCount] = LineKey(vertical, line, (int)MathF.Round(from / EdgeQuantum));
-        _lineEnds[_lineEndCount++] = new LineEnd(outward, inward);
-        _lineKeys[_lineEndCount] = LineKey(vertical, line, (int)MathF.Round(to / EdgeQuantum));
-        _lineEnds[_lineEndCount++] = new LineEnd(-outward, -inward);
+        _lineKeys[_lineEndCount] = LineKey(vertical, group, line, (int)MathF.Round(from / EdgeQuantum));
+        _lineEnds[_lineEndCount++] = new LineEnd(outward, inward, raise, size);
+        _lineKeys[_lineEndCount] = LineKey(vertical, group, line, (int)MathF.Round(to / EdgeQuantum));
+        _lineEnds[_lineEndCount++] = new LineEnd(-outward, -inward, -raise, -size);
     }
 
     private void AddLineEdges(Vector2 eye, float radius, List<ShadowSegment> segments)
@@ -353,55 +394,288 @@ public sealed class OccluderSystem : EntitySystem
         while (i < _lineEndCount)
         {
             var line = LineOf(_lineKeys[i]);
-            var vertical = line >> LineBits != 0;
+            var vertical = (line >> (GroupBits + LineBits)) != 0;
+            var group = (int)((line >> LineBits) & GroupMask);
             var at = ((line & LineMask) - (1L << (LineBits - 1))) * EdgeQuantum;
 
-            var outward = 0;
-            var inward = 0;
-            var runSide = 0;
-            var runFrom = 0f;
+            int outward = 0, inward = 0, runSide = 0;
+            float raise = 0f, size = 0f, runFrom = 0f, runRaise = 0f, runSize = 0f;
 
             while (i < _lineEndCount && LineOf(_lineKeys[i]) == line)
             {
+                // ends one quantum apart are the same point
                 var position = AtOf(_lineKeys[i]);
                 while (i < _lineEndCount && LineOf(_lineKeys[i]) == line && AtOf(_lineKeys[i]) - position <= 1)
                 {
                     ref readonly var end = ref _lineEnds[i];
                     outward += end.Outward;
                     inward += end.Inward;
+                    raise += end.Raise;
+                    size += end.Size;
                     i++;
                 }
 
                 var side = (outward > 0) == (inward > 0) ? 0 : outward > 0 ? 1 : -1;
-                if (side == runSide)
+                var nowRaise = side == 0 ? 0f : raise;
+                var nowSize = side == 0 ? 0f : size;
+                if (side == runSide && MathF.Abs(nowRaise - runRaise) < 0.01f && MathF.Abs(nowSize - runSize) < 0.01f)
                     continue;
 
                 var along = position * EdgeQuantum;
                 if (runSide != 0)
-                    AddLineSegment(vertical, at, runFrom, along, runSide, eye, radius, segments);
+                    AddFovLine(vertical, group, at, runFrom, along, runSide, runRaise, runSize, eye, radius, segments);
 
                 runSide = side;
                 runFrom = along;
+                runRaise = nowRaise;
+                runSize = nowSize;
             }
         }
     }
 
     private const float MaxFovSegmentLength = 64f;
 
-    private static void AddLineSegment(bool vertical, float at, float from, float to, int side, Vector2 eye,
-        float radius, List<ShadowSegment> segments)
+    // the length an edge along x is looked at in, to leave out the wall right behind it
+    private const float WallProbeLength = 32f;
+
+    private void AddFovLine(bool vertical, int group, float at, float from, float to, int side, float raise, float size,
+        Vector2 eye, float radius, List<ShadowSegment> segments)
     {
         var a = vertical ? new Vector2(at, from) : new Vector2(from, at);
         var b = vertical ? new Vector2(at, to) : new Vector2(to, at);
         var normal = vertical ? new Vector2(side, 0f) : new Vector2(0f, side);
 
-        if (Vector2.Dot(normal, eye - a) >= 0f || DistanceToSegment(eye, a, b) > radius)
+        if (DistanceToSegment(eye, a, b) > radius)
             return;
 
-        // in pieces, like the edges of the lights
-        var pieces = Math.Max(1, (int)MathF.Ceiling((to - from) / MaxFovSegmentLength));
+        // facing the eye, its shadow is the one of the far side, but the end of a row seen from beside it may hide
+        // the drawing of the row (AddEndsSeen)
+        if (Vector2.Dot(normal, eye - a) >= 0f)
+        {
+            if (vertical)
+                _fovEnds.Add(new FovEnd(at, from, to, side, size));
+            return;
+        }
+
+        if (!vertical && side < 0 && raise > 0f)
+        {
+            // the top of a wall drawn taller than it is: its shadow leaves the drawing out
+            var drawing = new Vector4(from, at - raise, to, at);
+            AddPieces(a, b, drawing, default, segments);
+            _fovRaised.Add(drawing);
+            if (group == RowTopGroup)
+                _fovDrawings.Add(new FovDrawing(from, to, at, raise, size));
+            return;
+        }
+
+        if (vertical)
+            AddPieces(a, b, default, default, segments);
+        else
+            AddAgainstWalls(from, to, at, side, segments);
+    }
+
+    private void AddAgainstWalls(float from, float to, float at, int side, List<ShadowSegment> segments)
+    {
+        var runFrom = from;
+        var runWall = default(RectangleF?);
+
+        for (var x = from; x < to - EdgeQuantum; x += WallProbeLength)
+        {
+            var end = MathF.Min(x + WallProbeLength, to);
+            var wall = FindWall(new Vector2((x + end) / 2f, at + side));
+            if (wall is { } w && (w.Left > x + EdgeQuantum || w.Right < end - EdgeQuantum))
+                wall = null;
+
+            var same = wall is null ? runWall is null : runWall is { } r && r.Top == wall.Value.Top && r.Bottom == wall.Value.Bottom;
+            if (x > from && (!same || end - runFrom > MaxFovSegmentLength))
+            {
+                AddAgainst(runFrom, x, at, runWall, segments);
+                runFrom = x;
+            }
+
+            runWall = wall;
+        }
+
+        AddAgainst(runFrom, to, at, runWall, segments);
+    }
+
+    private static void AddAgainst(float from, float to, float at, RectangleF? wall, List<ShadowSegment> segments)
+    {
+        var exclude = wall is { } w ? new Vector4(from, w.Top, to, w.Bottom) : default;
+        AddPieces(new Vector2(from, at), new Vector2(to, at), exclude, default, segments);
+    }
+
+    // the opaque box occluder at a point
+    private RectangleF? FindWall(Vector2 point)
+    {
+        if (!_cells.TryGetValue(ToCell(point), out var cell))
+            return null;
+
+        foreach (var entry in cell)
+        {
+            var b = entry.Bounds;
+            if (entry.IsAxisBox && !entry.SeeThrough && point.X > b.Left && point.X < b.Right && point.Y > b.Top
+                && point.Y < b.Bottom)
+                return b;
+        }
+
+        return null;
+    }
+
+    // in pieces, like the edges of the lights
+    private static void AddPieces(Vector2 a, Vector2 b, Vector4 exclude, Vector4 only, List<ShadowSegment> segments)
+    {
+        var pieces = Math.Max(1, (int)MathF.Ceiling(Vector2.Distance(a, b) / MaxFovSegmentLength));
         for (var p = 0; p < pieces; p++)
-            segments.Add(new ShadowSegment(Vector2.Lerp(a, b, p / (float)pieces), Vector2.Lerp(a, b, (p + 1) / (float)pieces)));
+        {
+            segments.Add(new ShadowSegment(Vector2.Lerp(a, b, p / (float)pieces),
+                Vector2.Lerp(a, b, (p + 1) / (float)pieces), default, exclude, only));
+        }
+    }
+
+    // An edge inside the drawing of a wall seen from the front belongs to something behind that wall
+    private void LeaveDrawingsInFront(List<ShadowSegment> segments, int first)
+    {
+        if (_fovRaised.Count == 0)
+            return;
+
+        for (var i = first; i < segments.Count; i++)
+        {
+            var s = segments[i];
+            if (s.Exclude.Z > s.Exclude.X)
+                continue;
+
+            var middle = (s.A + s.B) / 2f;
+            foreach (var drawing in _fovRaised)
+            {
+                if (middle.X > drawing.X && middle.X < drawing.Z && middle.Y > drawing.Y && middle.Y < drawing.W)
+                {
+                    segments[i] = s with { Exclude = drawing };
+                    break;
+                }
+            }
+        }
+    }
+
+    // how far apart the floor in front of a row is looked at, before the edges between seen and hidden are refined
+    private const float FrontStep = 8f;
+
+    private void AddEndsSeen(Vector2 eye, List<ShadowSegment> segments)
+    {
+        if (_fovEnds.Count == 0 || _fovDrawings.Count == 0)
+            return;
+
+        var shadows = segments.Count;
+
+        foreach (var end in _fovEnds)
+        {
+            // an end behind another wall shows nothing of its row
+            var middle = new Vector2(end.At + end.Side, (end.From + end.To) / 2f);
+            if (FloorHidden(eye, middle, segments, shadows))
+                continue;
+
+            foreach (var drawing in _fovDrawings)
+            {
+                var atEnd = end.Side > 0 ? MathF.Abs(drawing.To - end.At) < 0.01f : MathF.Abs(drawing.From - end.At) < 0.01f;
+                if (!atEnd || drawing.Y < end.From - 0.01f || drawing.Y >= end.To - 0.01f)
+                    continue;
+
+                // past the end cell
+                var from = end.Side > 0 ? drawing.From : drawing.From + end.Width;
+                var to = end.Side > 0 ? drawing.To - end.Width : drawing.To;
+                if (to - from > EdgeQuantum)
+                    HideBehindEnd(eye, end, drawing, from, to, segments, shadows);
+            }
+        }
+    }
+
+    private static void HideBehindEnd(Vector2 eye, FovEnd end, FovDrawing drawing, float from, float to,
+        List<ShadowSegment> segments, int shadows)
+    {
+        var front = drawing.Y + drawing.Depth + 1f;
+        var hiddenFrom = from;
+        var wasHidden = FloorHidden(eye, new Vector2(from, front), segments, shadows);
+
+        for (var x = MathF.Min(from + FrontStep, to); ; x = MathF.Min(x + FrontStep, to))
+        {
+            var hidden = FloorHidden(eye, new Vector2(x, front), segments, shadows);
+            if (hidden != wasHidden)
+            {
+                var change = FindChange(eye, front, x - FrontStep, x, wasHidden, segments, shadows);
+                if (hidden)
+                    hiddenFrom = change;
+                else
+                    AddBehindEnd(end, drawing, hiddenFrom, change, segments);
+
+                wasHidden = hidden;
+            }
+
+            if (x >= to)
+                break;
+        }
+
+        if (wasHidden)
+            AddBehindEnd(end, drawing, hiddenFrom, to, segments);
+    }
+
+    private static void AddBehindEnd(FovEnd end, FovDrawing drawing, float from, float to,
+        List<ShadowSegment> segments)
+    {
+        if (to - from <= EdgeQuantum)
+            return;
+
+        // the drawing above the row and the row itself, which is drawn over too
+        var only = new Vector4(from, drawing.Y - drawing.Raise, to, drawing.Y + drawing.Depth);
+        segments.Add(new ShadowSegment(new Vector2(end.At, end.From), new Vector2(end.At, end.To), default, default,
+            only));
+    }
+
+    private static float FindChange(Vector2 eye, float front, float from, float to, bool fromHidden,
+        List<ShadowSegment> segments, int count)
+    {
+        while (to - from > 1f)
+        {
+            var middle = (from + to) / 2f;
+            if (FloorHidden(eye, new Vector2(middle, front), segments, count) == fromHidden)
+                from = middle;
+            else
+                to = middle;
+        }
+
+        return (from + to) / 2f;
+    }
+
+    // whether one of the first count shadows covers point
+    private static bool FloorHidden(Vector2 eye, Vector2 point, List<ShadowSegment> segments, int count)
+    {
+        var minX = MathF.Min(eye.X, point.X);
+        var maxX = MathF.Max(eye.X, point.X);
+        var minY = MathF.Min(eye.Y, point.Y);
+        var maxY = MathF.Max(eye.Y, point.Y);
+
+        for (var i = 0; i < count; i++)
+        {
+            var s = segments[i];
+            if (MathF.Max(s.A.X, s.B.X) < minX || MathF.Min(s.A.X, s.B.X) > maxX
+                || MathF.Max(s.A.Y, s.B.Y) < minY || MathF.Min(s.A.Y, s.B.Y) > maxY)
+                continue;
+
+            var ex = s.Exclude;
+            if (ex.Z > ex.X && point.X > ex.X && point.X < ex.Z && point.Y > ex.Y && point.Y < ex.W)
+                continue;
+
+            if (Crosses(eye, point, s.A, s.B))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool Crosses(Vector2 p, Vector2 q, Vector2 a, Vector2 b)
+    {
+        return Cross(a, b, p) * Cross(a, b, q) < 0f && Cross(p, q, a) * Cross(p, q, b) < 0f;
+
+        static float Cross(Vector2 o, Vector2 u, Vector2 v) => (u.X - o.X) * (v.Y - o.Y) - (u.Y - o.Y) * (v.X - o.X);
     }
 
     /// <summary>
@@ -497,7 +771,12 @@ public sealed class OccluderSystem : EntitySystem
             if (points is not null && _entries.TryGetValue(uid, out var old) && old.Transmit == transmit
                 && old.Points.AsSpan().SequenceEqual(points))
             {
-                old.FovHeight = fovHeight;
+                if (old.FovHeight != fovHeight)
+                {
+                    old.FovHeight = fovHeight;
+                    _outlinesVersion++;
+                }
+
                 continue;
             }
 

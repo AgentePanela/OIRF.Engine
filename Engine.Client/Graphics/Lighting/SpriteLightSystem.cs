@@ -29,10 +29,6 @@ internal struct SpriteLightDraw
     public float Intensity;
 }
 
-/// <summary>
-/// Works out where the layers of <see cref="SpriteLightComponent"/>s are and what they show, for the lighting to
-/// draw their light. It follows the animation and the visibility of each layer.
-/// </summary>
 public sealed class SpriteLightSystem : EntitySystem
 {
     [Dependency] private readonly SpriteSystem _sprites = default!;

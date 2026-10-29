@@ -21,6 +21,8 @@ struct ShadowVertex
     float4 Light    : TEXCOORD1; // center.xy, source size
     float4 Slot     : TEXCOORD2; // the light's center in the page .xy, page pixels per world unit, half its square
     float4 Transmit : TEXCOORD3; // the light that goes through the edge, rgb
+    float4 Exclude  : TEXCOORD4; // the rect the shadow leaves out: left, top, right, bottom, in the world
+    float4 Only     : TEXCOORD5; // the only rect the shadow covers
 };
 
 struct ShadowPixel
@@ -32,6 +34,8 @@ struct ShadowPixel
     float4 Slot     : TEXCOORD3;
     float2 Page     : TEXCOORD4;
     float4 Transmit : TEXCOORD5;
+    float4 Exclude  : TEXCOORD6;
+    float4 Only     : TEXCOORD7;
 };
 
 ShadowPixel ShadowVS(ShadowVertex input)
@@ -46,7 +50,15 @@ ShadowPixel ShadowVS(ShadowVertex input)
     output.Slot = input.Slot;
     output.Page = page;
     output.Transmit = input.Transmit;
+    output.Exclude = input.Exclude;
+    output.Only = input.Only;
     return output;
+}
+
+// 1 when p is inside the rect r (left, top, right, bottom), 0 outside.
+float Inside(float2 p, float4 r)
+{
+    return step(r.x, p.x) * step(p.x, r.z) * step(r.y, p.y) * step(p.y, r.w);
 }
 
 // The angle of v around p, from the direction to the light d.
@@ -60,6 +72,10 @@ float Coverage(ShadowPixel input)
     // only inside the square of its own light
     clip(input.Page - (input.Slot.xy - input.Slot.w));
     clip((input.Slot.xy + input.Slot.w) - input.Page);
+
+    // what the shadow leaves out (the drawing of its own wall) and the only part it covers
+    clip(0.5 - Inside(input.World, input.Exclude));
+    clip(Inside(input.World, input.Only) - 0.5);
 
     // a source of size 0 (the eye of the field of view, a hard light): the quad is the shadow itself, stretched
     // straight away from it, so all of it is in full shadow
