@@ -39,6 +39,7 @@ public sealed class ShaderManager
     private ShaderInstance? _defaultInstance;
     private ShaderInstance? _lightInstance;
     private ShaderInstance? _fovInstance;
+    private ShaderInstance? _glowInstance;
 
     /// <summary>
     /// What a sprite with no shader of its own is drawn with while it writes a mask.
@@ -60,6 +61,9 @@ public sealed class ShaderManager
 
     internal ShaderInstance? FovInstance
         => _fovInstance ??= CreateEngineInstance("Fov", lit: false, ShaderBlend.Alpha);
+
+    internal ShaderInstance? GlowInstance
+        => _glowInstance ??= CreateEngineInstance("SpriteGlow", lit: false, ShaderBlend.Additive);
 
     private ShaderInstance? CreateEngineInstance(string file, bool lit, ShaderBlend blend)
         => _effects.TryGetValue(file, out var effect)

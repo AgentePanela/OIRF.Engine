@@ -38,6 +38,16 @@ public sealed partial class OccluderComponent : Component
     /// For the field of view only!
     /// </summary>
     [NetField] public partial float FovHeight { get; set; } = 0f;
+
+    /// <summary>
+    /// How much of light it stops, 0 to 1.
+    /// </summary>
+    [NetField] public partial float Opacity { get; set; } = 1f;
+
+    /// <summary>
+    /// The color of the light that goes through it.
+    /// </summary>
+    [NetField] public partial Color Tint { get; set; } = Color.White;
 }
 
 public enum OccluderShape

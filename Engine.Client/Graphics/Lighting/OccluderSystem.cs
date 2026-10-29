@@ -11,7 +11,7 @@ using Microsoft.Xna.Framework;
 
 namespace Engine.Client.Graphics.Lighting;
 
-internal readonly record struct ShadowSegment(Vector2 A, Vector2 B);
+internal readonly record struct ShadowSegment(Vector2 A, Vector2 B, Vector3 Transmit = default);
 
 /// <summary>
 /// Controls where shadows can cast.
@@ -46,6 +46,16 @@ public sealed class OccluderSystem : EntitySystem
         public float FovHeight;
 
         /// <summary>
+        /// The light that goes through it. Zero for an opaque one.
+        /// </summary>
+        public Vector3 Transmit;
+
+        /// <summary>
+        /// Light goes through
+        /// </summary>
+        public bool SeeThrough => Transmit != Vector3.Zero;
+
+        /// <summary>
         /// Its outline is a box along the axes, which the field of view raises by <see cref="FovHeight"/>.
         /// </summary>
         public bool IsAxisBox;
@@ -65,6 +75,8 @@ public sealed class OccluderSystem : EntitySystem
     private readonly Dictionary<(int X, int Y), List<Entry>> _cells = new();
 
     private readonly Dictionary<EdgeKey, int> _edgeCounts = new();
+
+    private readonly Dictionary<(EdgeKey Edge, Vector3 Transmit), int> _seeThroughEdgeCounts = new();
 
     // goes up whenever an outline is added or taken away, which changes which edges are shared
     private int _outlinesVersion;
@@ -148,6 +160,16 @@ public sealed class OccluderSystem : EntitySystem
     /// Adds to <paramref name="segments"/> the edges that throw a shadow from a light at <paramref name="light"/>
     /// </summary>
     internal void CollectSegments(Vector2 light, float radius, List<ShadowSegment> segments)
+        => Collect(light, radius, segments, seeThrough: false);
+
+    /// <summary>
+    /// Adds to <paramref name="segments"/> the edges of the see-through occluders that tint the light at
+    /// <paramref name="light"/>.
+    /// </summary>
+    internal void CollectSeeThroughSegments(Vector2 light, float radius, List<ShadowSegment> segments)
+        => Collect(light, radius, segments, seeThrough: true);
+
+    private void Collect(Vector2 light, float radius, List<ShadowSegment> segments, bool seeThrough)
     {
         Update();
 
@@ -170,7 +192,7 @@ public sealed class OccluderSystem : EntitySystem
 
                 entry.Stamp = _stamp;
 
-                if (!Intersects(entry.Bounds, reach) || Contains(entry, light))
+                if (entry.SeeThrough != seeThrough || !Intersects(entry.Bounds, reach) || Contains(entry, light))
                     continue;
 
                 AddEdges(entry, light, radius, segments);
@@ -190,7 +212,7 @@ public sealed class OccluderSystem : EntitySystem
             if (Vector2.Dot(entry.Normals[i], light - a) >= 0f)
                 continue;
 
-            if (_edgeCounts.TryGetValue(KeyOf(a, b), out var count) && count > 1)
+            if (IsShared(entry, a, b))
                 continue;
 
             if (DistanceToSegment(light, a, b) > radius)
@@ -199,7 +221,8 @@ public sealed class OccluderSystem : EntitySystem
             var length = Vector2.Distance(a, b);
             var pieces = Math.Max(1, (int)MathF.Ceiling(length / MaxSegmentLength));
             for (var p = 0; p < pieces; p++)
-                segments.Add(new ShadowSegment(Vector2.Lerp(a, b, p / (float)pieces), Vector2.Lerp(a, b, (p + 1) / (float)pieces)));
+                segments.Add(new ShadowSegment(Vector2.Lerp(a, b, p / (float)pieces),
+                    Vector2.Lerp(a, b, (p + 1) / (float)pieces), entry.Transmit));
         }
     }
 
@@ -229,7 +252,7 @@ public sealed class OccluderSystem : EntitySystem
                 entry.Stamp = _stamp;
 
                 // standing against a wall is not being in it: that wall still hides what is past it
-                if (!Intersects(entry.Bounds, reach) || Contains(entry, eye, FovInside))
+                if (entry.SeeThrough || !Intersects(entry.Bounds, reach) || Contains(entry, eye, FovInside))
                     continue;
 
                 if (!AddFovBox(entry, eye))
@@ -408,7 +431,7 @@ public sealed class OccluderSystem : EntitySystem
                 {
                     var a = entry.Points[i];
                     var b = entry.Points[(i + 1) % entry.Points.Length];
-                    yield return (a, b, _edgeCounts.TryGetValue(KeyOf(a, b), out var count) && count > 1);
+                    yield return (a, b, IsShared(entry, a, b));
                 }
             }
         }
@@ -458,10 +481,12 @@ public sealed class OccluderSystem : EntitySystem
         {
             Vector2[]? points = null;
             var fovHeight = 0f;
+            var transmit = Vector3.Zero;
             if (TryComp<OccluderComponent>(uid, out var comp) && comp.Enabled && !HasComp<ContainedComponent>(uid)
                 && Transform(uid) is { } transform)
             {
                 fovHeight = MathF.Max(comp.FovHeight, 0f);
+                transmit = comp.Tint.ToVector3() * (1f - Math.Clamp(comp.Opacity, 0f, 1f));
                 _highFovHeight = MathF.Max(_highFovHeight, fovHeight);
                 points = BuildOutline(uid, comp, transform);
                 if (points.Length < 3)
@@ -469,7 +494,8 @@ public sealed class OccluderSystem : EntitySystem
             }
 
             // the same outline as before changes no shadow, the lights around it can stay as they are
-            if (points is not null && _entries.TryGetValue(uid, out var old) && old.Points.AsSpan().SequenceEqual(points))
+            if (points is not null && _entries.TryGetValue(uid, out var old) && old.Transmit == transmit
+                && old.Points.AsSpan().SequenceEqual(points))
             {
                 old.FovHeight = fovHeight;
                 continue;
@@ -478,7 +504,7 @@ public sealed class OccluderSystem : EntitySystem
             Forget(uid);
 
             if (points is not null)
-                Add(uid, points, fovHeight);
+                Add(uid, points, fovHeight, transmit);
         }
 
         _dirty.Clear();
@@ -532,9 +558,15 @@ public sealed class OccluderSystem : EntitySystem
         return corners;
     }
 
-    private void Add(EntityUid uid, Vector2[] points, float fovHeight)
+    private void Add(EntityUid uid, Vector2[] points, float fovHeight, Vector3 transmit)
     {
-        var entry = new Entry { Points = points, Normals = new Vector2[points.Length], FovHeight = fovHeight };
+        var entry = new Entry
+        {
+            Points = points,
+            Normals = new Vector2[points.Length],
+            FovHeight = fovHeight,
+            Transmit = transmit,
+        };
 
         var middle = Vector2.Zero;
         var min = new Vector2(float.MaxValue);
@@ -562,9 +594,7 @@ public sealed class OccluderSystem : EntitySystem
                 normal = -normal;
 
             entry.Normals[i] = normal;
-
-            var key = KeyOf(a, b);
-            _edgeCounts[key] = _edgeCounts.GetValueOrDefault(key) + 1;
+            CountEdge(entry, a, b, 1);
         }
 
         var (minX, minY) = ToCell(min);
@@ -603,16 +633,35 @@ public sealed class OccluderSystem : EntitySystem
         }
 
         for (var i = 0; i < entry.Points.Length; i++)
-        {
-            var key = KeyOf(entry.Points[i], entry.Points[(i + 1) % entry.Points.Length]);
-            if (!_edgeCounts.TryGetValue(key, out var count))
-                continue;
+            CountEdge(entry, entry.Points[i], entry.Points[(i + 1) % entry.Points.Length], -1);
+    }
 
-            if (count <= 1)
-                _edgeCounts.Remove(key);
-            else
-                _edgeCounts[key] = count - 1;
-        }
+    private bool IsShared(Entry entry, Vector2 a, Vector2 b)
+    {
+        var key = KeyOf(a, b);
+        var count = entry.SeeThrough
+            ? _seeThroughEdgeCounts.GetValueOrDefault((key, entry.Transmit))
+            : _edgeCounts.GetValueOrDefault(key);
+
+        return count > 1;
+    }
+
+    private void CountEdge(Entry entry, Vector2 a, Vector2 b, int by)
+    {
+        var key = KeyOf(a, b);
+        if (entry.SeeThrough)
+            Count(_seeThroughEdgeCounts, (key, entry.Transmit), by);
+        else
+            Count(_edgeCounts, key, by);
+    }
+
+    private static void Count<TKey>(Dictionary<TKey, int> counts, TKey key, int by) where TKey : notnull
+    {
+        var count = counts.GetValueOrDefault(key) + by;
+        if (count <= 0)
+            counts.Remove(key);
+        else
+            counts[key] = count;
     }
 
     private static bool IsAxisBox(Vector2[] points, RectangleF bounds)

@@ -22,6 +22,11 @@ internal interface ILightRenderer
     void CollectShadowSegments(in LightDraw light, List<ShadowSegment> segments);
 
     /// <summary>
+    /// The edges of the see-through occluders that is tinted
+    /// </summary>
+    void CollectSeeThroughSegments(in LightDraw light, List<ShadowSegment> segments);
+
+    /// <summary>
     /// Moves to <paramref name="areas"/> where the occluders changed since the last call.
     /// </summary>
     void TakeOccluderChanges(List<RectangleF> areas);

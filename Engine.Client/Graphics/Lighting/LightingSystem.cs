@@ -97,6 +97,9 @@ public sealed partial class LightingSystem : EntitySystem, ILightRenderer
     void ILightRenderer.CollectShadowSegments(in LightDraw light, List<ShadowSegment> segments)
         => _occluders.CollectSegments(light.Center, light.Radius, segments);
 
+    void ILightRenderer.CollectSeeThroughSegments(in LightDraw light, List<ShadowSegment> segments)
+        => _occluders.CollectSeeThroughSegments(light.Center, light.Radius, segments);
+
     void ILightRenderer.TakeOccluderChanges(List<RectangleF> areas)
         => _occluders.TakeChanges(areas);
 

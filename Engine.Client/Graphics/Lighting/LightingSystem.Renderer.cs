@@ -11,6 +11,10 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace Engine.Client.Graphics.Lighting;
 
+/*
+    God help whorever want to read this code.
+*/
+
 /// <summary>
 /// What a light map covers this frame
 /// </summary>
@@ -23,6 +27,7 @@ internal readonly record struct LightSettings(float Scale, float Overbright, flo
 public sealed partial class LightingSystem
 {
     [Dependency] private readonly ShaderManager _shaders = default!;
+    [Dependency] private readonly SpriteLightSystem _spriteLights = default!;
 
     // the one of the render manager, taken at every Prepare
     private SpriteBatcher _batcher = default!;
@@ -66,6 +71,8 @@ public sealed partial class LightingSystem
     private readonly List<RectangleF> _changes = new();
     private readonly List<RectangleF> _areas = new();
     private readonly List<EntityUid> _gone = new();
+
+    private readonly List<SpriteLightDraw> _spriteLightDraws = new();
 
     private int _frame;
     private bool _hasCache;
@@ -113,6 +120,9 @@ public sealed partial class LightingSystem
 
         // the lights of every piece that is kept, see LightChunkCache.Update
         var tracked = Grow(Union(_areas), LightChunkCache.ChunkSize * 2f);
+
+        _spriteLightDraws.Clear();
+        _spriteLights.CollectLights(Union(_areas), _spriteLightDraws);
 
         // an occluder that changed changes the shadows of the lights that reach it
         _changes.Clear();
@@ -247,8 +257,38 @@ public sealed partial class LightingSystem
                 DrawSquare(_dynamicAtlas.GetPage(device, light.Page), light);
         }
 
+        DrawSpriteLights(bounds);
+
         _batcher.Flush();
         _batcher.SetStencil(DepthStencilState.None, null);
+    }
+
+    private void DrawSpriteLights(RectangleF bounds)
+    {
+        if (_spriteLightDraws.Count == 0 || _shaders.GlowInstance is not { } glow)
+            return;
+
+        foreach (ref readonly var light in CollectionsMarshal.AsSpan(_spriteLightDraws))
+        {
+            if (!SpriteLightSystem.Reaches(light, bounds))
+                continue;
+
+            var texture = light.Texture;
+            var region = light.TexRegion;
+            var frame = new Vector2(region.Width, region.Height);
+
+            _batcher.SetState(glow, SamplerState.PointClamp);
+            _batcher.Custom0 = new Vector4((float)region.X / texture.Width, (float)region.Y / texture.Height,
+                (float)region.Width / texture.Width, (float)region.Height / texture.Height);
+            _batcher.Custom1 = new Vector4(light.Spread / light.Size.X, light.Spread / light.Size.Y,
+                light.Intensity * _lighting.LightIntensity / _overbright, 0f);
+            _batcher.Lighting = default;
+            _batcher.Draw(texture, light.Center, region, light.Color, light.Rotation, frame / 2f, light.Size / frame,
+                SpriteEffects.None);
+        }
+
+        _batcher.Custom0 = default;
+        _batcher.Custom1 = default;
     }
 
     // a light's square, over the world where the light is
@@ -358,6 +398,18 @@ public sealed partial class LightingSystem
 
             _batcher.Flush();
             _batcher.SetStencil(DepthStencilState.None, null);
+
+            if (shadowEffect is not null)
+            {
+                _shadowBatch.SetSeeThrough();
+                foreach (var state in _toDraw)
+                {
+                    if (state.HasSquare && state.Light.Page == page && state.Light.CastShadows)
+                        AddSeeThrough(source, device, shadowEffect, state.Light);
+                }
+
+                _shadowBatch.Flush(device, shadowEffect);
+            }
         }
     }
 
@@ -509,6 +561,18 @@ public sealed partial class LightingSystem
 
             _batcher.Flush();
             _batcher.SetStencil(DepthStencilState.None, null);
+
+            if (shadowEffect is not null)
+            {
+                _shadowBatch.SetSeeThrough();
+                foreach (ref readonly var light in span)
+                {
+                    if (light.Page == page && light.CastShadows)
+                        AddSeeThrough(source, device, shadowEffect, light);
+                }
+
+                _shadowBatch.Flush(device, shadowEffect);
+            }
         }
     }
 
@@ -516,6 +580,14 @@ public sealed partial class LightingSystem
     {
         _segments.Clear();
         source.CollectShadowSegments(light, _segments);
+        foreach (var segment in _segments)
+            _shadowBatch.Add(device, shadowEffect, segment, light);
+    }
+
+    private void AddSeeThrough(ILightRenderer source, GraphicsDevice device, Effect shadowEffect, in LightDraw light)
+    {
+        _segments.Clear();
+        source.CollectSeeThroughSegments(light, _segments);
         foreach (var segment in _segments)
             _shadowBatch.Add(device, shadowEffect, segment, light);
     }

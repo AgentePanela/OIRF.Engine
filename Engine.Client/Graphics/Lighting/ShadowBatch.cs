@@ -13,11 +13,17 @@ internal struct ShadowVertex : IVertexType
     public Vector4 Light;
     public Vector4 Slot;
 
+    /// <summary>
+    /// The light that goes through the edge (rgb)
+    /// </summary>
+    public Vector4 Transmit;
+
     public static readonly VertexDeclaration Declaration = new(
         new VertexElement(0, VertexElementFormat.Vector2, VertexElementUsage.Position, 0),
         new VertexElement(8, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 0),
         new VertexElement(24, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 1),
-        new VertexElement(40, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 2));
+        new VertexElement(40, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 2),
+        new VertexElement(56, VertexElementFormat.Vector4, VertexElementUsage.TextureCoordinate, 3));
 
     readonly VertexDeclaration IVertexType.VertexDeclaration => Declaration;
 }
@@ -41,6 +47,16 @@ internal sealed class ShadowBatch
 
     // the size of what is drawn into, see SetTarget
     private Vector2 _targetSize = new(LightAtlas.PageSize);
+    private bool _seeThrough;
+
+    // the light drawn in the page times what goes through the edge, only where its shadow is
+    private static readonly BlendState SeeThroughBlend = new()
+    {
+        ColorWriteChannels = ColorWriteChannels.Red | ColorWriteChannels.Green | ColorWriteChannels.Blue,
+        ColorBlendFunction = BlendFunction.Add,
+        ColorSourceBlend = Blend.DestinationColor,
+        ColorDestinationBlend = Blend.Zero,
+    };
 
     private static readonly BlendState ShadowBlend = new()
     {
@@ -100,15 +116,16 @@ internal sealed class ShadowBatch
 
         var segmentData = new Vector4(a, b.X, b.Y);
         var lightData = new Vector4(center, source, 0f);
+        var transmit = new Vector4(segment.Transmit, 0f);
 
         var index = _quads * 4;
         if (index + 4 > _vertices.Length)
             Array.Resize(ref _vertices, Math.Min(_vertices.Length * 2, MaxQuads * 4));
 
-        _vertices[index] = new ShadowVertex { Position = a, Segment = segmentData, Light = lightData, Slot = slot };
-        _vertices[index + 1] = new ShadowVertex { Position = b, Segment = segmentData, Light = lightData, Slot = slot };
-        _vertices[index + 2] = new ShadowVertex { Position = farA, Segment = segmentData, Light = lightData, Slot = slot };
-        _vertices[index + 3] = new ShadowVertex { Position = farB, Segment = segmentData, Light = lightData, Slot = slot };
+        _vertices[index] = new ShadowVertex { Position = a, Segment = segmentData, Light = lightData, Slot = slot, Transmit = transmit };
+        _vertices[index + 1] = new ShadowVertex { Position = b, Segment = segmentData, Light = lightData, Slot = slot, Transmit = transmit };
+        _vertices[index + 2] = new ShadowVertex { Position = farA, Segment = segmentData, Light = lightData, Slot = slot, Transmit = transmit };
+        _vertices[index + 3] = new ShadowVertex { Position = farB, Segment = segmentData, Light = lightData, Slot = slot, Transmit = transmit };
 
         _quads++;
         Count++;
@@ -122,12 +139,19 @@ internal sealed class ShadowBatch
         => _targetSize = size;
 
     /// <summary>
+    /// Makes the edges queued from now on, of see-through occluders, tint the light already drawn in the page.
+    /// </summary>
+    public void SetSeeThrough()
+        => _seeThrough = true;
+
+    /// <summary>
     /// Draws what is queued into the page that is set.
     /// </summary>
     public void Flush(GraphicsDevice device, Effect effect)
     {
         Draw(device, effect);
         _targetSize = new Vector2(LightAtlas.PageSize);
+        _seeThrough = false;
     }
 
     private void Draw(GraphicsDevice device, Effect effect)
@@ -135,10 +159,11 @@ internal sealed class ShadowBatch
         if (_quads == 0)
             return;
 
-        device.BlendState = ShadowBlend;
+        device.BlendState = _seeThrough ? SeeThroughBlend : ShadowBlend;
         device.DepthStencilState = DepthStencilState.None;
         device.RasterizerState = RasterizerState.CullNone;
 
+        effect.CurrentTechnique = effect.Techniques[_seeThrough ? "SeeThrough" : "Shadow"];
         effect.Parameters["PageSize"]?.SetValue(_targetSize);
 
         foreach (var pass in effect.CurrentTechnique.Passes)

@@ -20,6 +20,7 @@ struct ShadowVertex
     float4 Segment  : TEXCOORD0; // the edge: a.xy, b.xy
     float4 Light    : TEXCOORD1; // center.xy, source size
     float4 Slot     : TEXCOORD2; // the light's center in the page .xy, page pixels per world unit, half its square
+    float4 Transmit : TEXCOORD3; // the light that goes through the edge, rgb
 };
 
 struct ShadowPixel
@@ -30,6 +31,7 @@ struct ShadowPixel
     float4 Light    : TEXCOORD2;
     float4 Slot     : TEXCOORD3;
     float2 Page     : TEXCOORD4;
+    float4 Transmit : TEXCOORD5;
 };
 
 ShadowPixel ShadowVS(ShadowVertex input)
@@ -43,6 +45,7 @@ ShadowPixel ShadowVS(ShadowVertex input)
     output.Light = input.Light;
     output.Slot = input.Slot;
     output.Page = page;
+    output.Transmit = input.Transmit;
     return output;
 }
 
@@ -52,7 +55,7 @@ float AngleFrom(float2 d, float2 v)
     return atan2(d.x * v.y - d.y * v.x, dot(d, v));
 }
 
-float4 ShadowPS(ShadowPixel input) : COLOR0
+float Coverage(ShadowPixel input)
 {
     // only inside the square of its own light
     clip(input.Page - (input.Slot.xy - input.Slot.w));
@@ -61,7 +64,7 @@ float4 ShadowPS(ShadowPixel input) : COLOR0
     // a source of size 0 (the eye of the field of view, a hard light): the quad is the shadow itself, stretched
     // straight away from it, so all of it is in full shadow
     [branch] if (input.Light.z <= 0.0)
-        return float4(0.0, 0.0, 0.0, 1.0);
+        return 1.0;
 
     float2 p = input.World;
     float2 a = input.Segment.xy;
@@ -89,7 +92,20 @@ float4 ShadowPS(ShadowPixel input) : COLOR0
     float soft = saturate((min(high, halfSource) - max(low, -halfSource)) / max(halfSource * 2.0, 0.0001));
     float hard = low <= 0.0 && high >= 0.0 ? 1.0 : 0.0;
 
-    return float4(0.0, 0.0, 0.0, halfSource > 0.0005 ? soft : hard);
+    return halfSource > 0.0005 ? soft : hard;
+}
+
+float4 ShadowPS(ShadowPixel input) : COLOR0
+{
+    return float4(0.0, 0.0, 0.0, Coverage(input));
+}
+
+// A power, not a mix: the pieces of an edge (and the two edges of a box) each cover part of the source near where
+// they meet, and transmit^a * transmit^b is transmit^(a + b), the same as one edge covering it all.
+float4 SeeThroughPS(ShadowPixel input) : COLOR0
+{
+    float3 transmit = max(input.Transmit.rgb, 1.0 / 255.0);
+    return float4(pow(transmit, Coverage(input)), 1.0);
 }
 
 technique Shadow
@@ -98,5 +114,14 @@ technique Shadow
     {
         VertexShader = compile VS_SHADERMODEL ShadowVS();
         PixelShader = compile PS_SHADERMODEL ShadowPS();
+    }
+}
+
+technique SeeThrough
+{
+    pass P0
+    {
+        VertexShader = compile VS_SHADERMODEL ShadowVS();
+        PixelShader = compile PS_SHADERMODEL SeeThroughPS();
     }
 }
