@@ -1,4 +1,5 @@
 using Engine.Shared.GameObjects;
+using Microsoft.Xna.Framework;
 
 namespace Engine.Shared.Lighting;
 
@@ -8,6 +9,8 @@ namespace Engine.Shared.Lighting;
 [RegisterComponent("Occluder"), NetworkedComponent, AutoDirty]
 public sealed partial class OccluderComponent : Component
 {
+    [NetField] public partial bool Enabled { get; set; } = true;
+
     /// <summary>
     /// Shape of the occluder used for shadow casting.
     /// </summary>
@@ -15,10 +18,9 @@ public sealed partial class OccluderComponent : Component
 
     /// <summary>
     /// Local offset relative to the entity transform. Lets the mask sit off
-    /// center, e.g. a thin strip along the top of a tall sprite instead of
-    /// the sprite's full footprint.
+    /// center.
     /// </summary>
-    [NetField] public partial Microsoft.Xna.Framework.Vector2 Offset { get; set; } = Microsoft.Xna.Framework.Vector2.Zero;
+    [NetField] public partial Vector2 Offset { get; set; } = Microsoft.Xna.Framework.Vector2.Zero;
 
     /// <summary>
     /// Radius (in world units) of the occluder. Used when
@@ -30,23 +32,32 @@ public sealed partial class OccluderComponent : Component
     /// Width/height (in world units) of the occluder. Used when
     /// <see cref="Shape"/> is <see cref="OccluderShape.Rectangle"/>.
     /// </summary>
-    [NetField] public partial Microsoft.Xna.Framework.Vector2 Size { get; set; } = new(64, 64);
+    [NetField] public partial Vector2 Size { get; set; } = new(64, 64);
+
+    /// <summary>
+    /// For the field of view only!
+    /// </summary>
+    [NetField] public partial float FovHeight { get; set; } = 0f;
+
+    /// <summary>
+    /// How much of light it stops, 0 to 1.
+    /// </summary>
+    [NetField] public partial float Opacity { get; set; } = 1f;
+
+    /// <summary>
+    /// The color of the light that goes through it.
+    /// </summary>
+    [NetField] public partial Color Tint { get; set; } = Color.White;
 }
 
 public enum OccluderShape
 {
     /// <summary>
-    /// Use the entity's sprite bounding box as the occluder silhouette.
+    /// Use the entity sprite bounding box as the occluder silhouette.
     /// </summary>
     Sprite,
 
-    /// <summary>
-    /// Use a circular footprint centered at the transform.
-    /// </summary>
     Circle,
 
-    /// <summary>
-    /// Use an axis-aligned rectangle centered at the transform.
-    /// </summary>
     Rectangle,
 }

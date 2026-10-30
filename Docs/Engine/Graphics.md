@@ -15,15 +15,21 @@ SceneManager.Draw() ───────────────► the current
 RenderManager.RenderFrame() ───────► SyncMainViewport(): fit the main viewport to the window
                                             │
                                             ▼
+  BeforeFrame ───────────────────────► textures drawn ahead (post shaders of entities)
+  PrepareLighting() ─────────────────► the lights of every lit viewport, once (section 5)
+                                            │
+                                            ▼
   for each enabled viewport, main last (DrawViewport):
-    SetRenderTarget + Clear
     Camera.CacheFrame()
+    BuildLightMap() ─────────────────► its light map, overlays: LightMap
+    BuildFovMask() ──────────────────► what its eye does not see
+    SetRenderTarget + Clear
     overlays: BelowWorld
     EntityManager.DrawSystems(ctx) ──► systems Submit() what that viewport sees
     overlays: World ─────────────────► into the same queue
-    DrawQueue() ─────────────────────► sort, then batch by texture, shader, sampler and blend
-    overlays: BeforeLighting
-    (light rework: the light target is multiplied over the world here)
+    DrawQueue() ─────────────────────► sort, then batch; every sprite reads the light map
+    DrawFov() ───────────────────────► fov.color over what is out of sight
+    ApplyBloom()
     overlays: AfterLighting
     overlays: Screen ────────────────► identity transform, pixels of the target
     ApplyPostEffects()
@@ -52,7 +58,7 @@ Each viewport has two targets of the same size, `Target` and a scratch one creat
 
 Nothing is copied back: `Target` is simply whichever target ended up holding the frame, which is why it can change from one frame to the next.
 
-`RenderViewport.LightTarget` and the `BeforeLighting` / `AfterLighting` stages are the hooks the lighting rework plugs into; nothing fills or reads the light target yet.
+The light map and the field of view mask are built before the world target is set: switching away from it would throw away what was drawn in it.
 
 ---
 
@@ -70,11 +76,11 @@ A queue entry is a `DrawCommand` struct in an array, not an object. There are th
 Sorting moves `DrawSortEntry` values (16 bytes), not the commands. The key is one 64 bit number, layer in the high half and depth in the low one, both made to sort right as unsigned; ties keep submit order through the entry's index.
 
 ### 3. `SpriteBatcher`
-Sprites, text and tile quads all go through the engine's own batcher (`Graphics/Batching/SpriteBatcher.cs`), not MonoGame's `SpriteBatch`. Each vertex carries position, color, the atlas UV, a `LocalUV` (0..1 over the quad) and two free `Vector4` (`Custom0`, `Custom1`).
+Sprites, text and tile quads all go through the engine's own batcher (`Graphics/Batching/SpriteBatcher.cs`), not MonoGame's `SpriteBatch`. Each vertex carries position, color, the atlas UV, a `LocalUV` (0..1 over the quad), two free `Vector4` (`Custom0`, `Custom1`) and the `Light` `Vector4` (section 5).
 
 Quads pile up in one array and are sent with a single `DrawUserIndexedPrimitives` when something they all have to share changes: the texture, the shader instance, the sampler or the blend state. Per sprite shader values are in the vertices, so they never split a batch. That is what lets any number of sprites, each with its own values for the same shader, be one draw call.
 
-At each flush the batcher fills the shader's engine parameters (`MatrixTransform`, `TexelSize`, `Time`, `ScreenSize`), through `EffectParameter`s the `ShaderInstance` looked up once. With no shader it uses MonoGame's `SpriteEffect`.
+At each flush the batcher fills the shader's engine parameters (`MatrixTransform`, `TexelSize`, `Time`, `ScreenSize`, and the light map ones), through `EffectParameter`s the `ShaderInstance` looked up once. With no shader it uses MonoGame's `SpriteEffect`.
 
 Text goes in through a small `IFontStashRenderer2` (`RenderManager.Strings.cs`): FontStashSharp works the glyph quads out and they are appended like any other. `DrawString` asks for the font at the size it ends up on the target (font size x render scale x zoom, in steps of 2 px) and scales it back down, so glyphs are not stretched.
 
@@ -127,3 +133,38 @@ The content facing side is in `Docs/Content/Shaders.md`. Underneath:
 * `ShaderManager` loads the compiled effects by file name and creates one `ShaderInstance` per `shader` prototype the first time it is asked for: a clone of the effect with the prototype's `params` applied, its `lit` and `blend`, and the `perSprite` map parsed into slots. Starting values of per sprite parameters are kept on the instance (`DefaultCustom0/1`) instead of being set on the effect.
 * `SpriteSystem` keeps, per sprite and per layer, the shader instance, the parameters set through `SetShaderParam` (by name) and the two custom values built from them. They are rebuilt only when the shader or a parameter changes. A parameter with no slot makes the target `Duplicate()` its instance, which is disposed when the shader changes or the sprite is removed.
 * Batches are compared by instance, so two prototypes on the same `.fx` do not batch together, and neither does a duplicated instance with anything else.
+
+---
+
+## 5. Lighting (`Graphics/Lighting`)
+
+The content facing side is in `Docs/Content/Lighting.md`. `RenderManager.Lighting.cs` only reads the CVars, works out what each viewport's light map covers and builds the light maps; the work is done by `LightingSystem` (an entity system, plugged in as the internal `ILightRenderer`), split in partials: collecting the lights (`LightingSystem.cs`), drawing them (`.Renderer.cs`) and the field of view (`.Fov.cs`).
+
+### The light map
+
+One `RenderTarget2D` per viewport (`LightTarget`), world aligned: it covers the view plus `light.margin`, at `light.resolution` texels per world unit, its origin snapped to the texel grid so the light does not shimmer when the camera moves. It holds `light / light.overbright`, so lights can go over 1 in 8 bits.
+
+Sprites read it themselves. Every vertex carries a `Light` `Vector4` (`SpriteVertex`, `TEXCOORD4`): xy the world position the light is read at, z the emission, w the highest y it is read at. `SpriteSystem` fills it from the sprite's `lightBase`/`lightOffset`/`emission` (`TextureLighting`). `SPRITE_TECHNIQUE` wraps the content's pixel shader with `ApplyLighting` (`TextureLighting.fxh`), which samples the light map on `s1` at that position, through `LightMapTransform`, and multiplies. So lighting costs no pass of its own and does not break batches; the light map is bound once per viewport (`SpriteBatcher.LightMap`).
+
+### Drawing the lights
+
+`Prepare` runs once per frame for all viewports:
+
+1. **Collect.** Every `PointLight` reaching a light map, after `LightDrawingEvent` (one reused instance). Occluders are indexed by `OccluderSystem` in cells of 256 world units, with their outlines merged (shared edges between opaque boxes cancel) and only the edges facing away from a light returned.
+2. **Classify.** A light whose values did not change for `light.static-delay` seconds (nor the occluders in its reach, `OccluderSystem.TakeChanges`) is static; the rest, and anything `Animated`, is dynamic.
+3. **Squares.** Each light is drawn into a square of an atlas page (`LightAtlas`, 2048² pages, rows of squares in steps of 32): the shadows first, into the alpha (`ShadowBatch` + `LightShadow.fx`: each edge a quad stretched away from the light, the penumbra worked out per pixel from the angle the edge covers of the source), then the light (`LightShape.fx`: falloff, cone, mask) with `InverseDestinationAlpha`, then glass multiplies it (`SeeThrough` technique, `pow(transmit, coverage)` so the pieces of an edge leave no seam). Every light of a page is one batch of each, whatever their number. Static squares stay in their own atlas until the light changes; dynamic ones go to a page that is redrawn every frame.
+4. **Chunks.** Static squares are added into chunks of 512 world units (`LightChunkCache`) kept while near a viewport. A chunk is redrawn only when a static light in it changes. When the view needs more chunks than fit, the static squares are added one by one instead.
+
+`Composite`, per viewport, clears the light map to the ambient, adds the chunks and the dynamic squares, then the sprite lights (`SpriteLightSystem` collects them once per frame; `SpriteGlow.fx` averages the frame of the layer into a soft rectangle), then the `LightMap` overlays.
+
+### Field of view
+
+`BuildFovMask` draws, at screen density, the shadows of the viewport's eye into a mask of its own (`FovTarget`), with the same `ShadowBatch` and a source of size 0 (hard edges). Glass is left out, and the `fovHeight` of an occluder raises its box for this mask only. After `DrawQueue`, `Fov.fx` paints `fov.color` over the view where the mask says hidden, and the radius on top.
+
+### Bloom
+
+`ApplyBloom` (`RenderManager.Bloom.cs`): the bright part of the frame at half size (`BloomExtract.fx`), shrunk to a quarter and an eighth, each blurred both ways (`BloomBlur.fx`, 9 taps in 5 samples), then the frame is swapped (`SwapTargets`) and the three levels are added over it (`BloomAdd.fx`). The six targets live on the viewport.
+
+### Stats and debugging
+
+`RenderStats.Light` (`LightStats`) is filled while the frame is drawn and shown in the profiler's LIGHTING panel. The debug window's Lighting tab lists the pages (`LightingSystem.CollectPages`). `light.debug-base` replaces the light map by stripes (`DrawBaseStripes`), which shows where each sprite reads it without touching any shader; the bases of the sprites that are not `Pixel` are gathered while the world queue is drawn and marked with dots after the bloom.

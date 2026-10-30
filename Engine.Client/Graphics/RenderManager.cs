@@ -4,6 +4,7 @@ using Engine.Client.Assets.Atlas;
 using Engine.Client.Graphics.Batching;
 using Engine.Client.Graphics.Fonts;
 using Engine.Client.Graphics.Shaders;
+using Engine.Shared.Graphics;
 using Engine.Shared.IoC;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
@@ -75,6 +76,9 @@ public sealed partial class RenderManager : IRenderManager
         _shapeBatch = shapeBatch;
         _batcher = new SpriteBatcher(GameClient.GraphicsDevice, _frameStats);
         _textRenderer = new TextRenderer(GameClient.GraphicsDevice, _batcher);
+        InitLighting();
+        InitFov();
+        InitBloom();
         SyncMainViewport();
     }
 
@@ -106,6 +110,7 @@ public sealed partial class RenderManager : IRenderManager
         command.Effects = sprite.Effects;
         command.Custom0 = custom0;
         command.Custom1 = custom1;
+        command.Lighting = sprite.Lighting;
         StampMask(ref command);
         _frameStats.Submitted++;
     }
@@ -129,6 +134,7 @@ public sealed partial class RenderManager : IRenderManager
         command.Scale = texture.Scale;
         command.Custom0 = custom0;
         command.Custom1 = custom1;
+        command.Lighting = texture.Lighting;
         StampMask(ref command);
         _frameStats.Submitted++;
     }
@@ -273,6 +279,12 @@ public sealed partial class RenderManager : IRenderManager
             _batcher.SetState(writesMask ? GetMaskShader(command.Shader) : command.Shader, _commandSampler);
             _batcher.Custom0 = command.Custom0;
             _batcher.Custom1 = command.Custom1;
+            _batcher.Lighting = command.Lighting;
+            if (!command.Lit)
+                _batcher.Lighting.Emission = 1f;
+
+            if (_collectLightBases && _batcher.Lighting is { Mode: not LightBaseMode.Pixel, Emission: < 1f })
+                _lightBases.Add(_batcher.Lighting.Base);
 
             if (command.Kind == DrawCommandType.Sprite)
             {

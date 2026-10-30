@@ -1,0 +1,143 @@
+// The shadows of the lights of an atlas page (see ShadowBatch). Every quad is one edge of an occluder stretched away
+// from its light; this works out, per pixel, how much of the light source the edge hides, and writes it to the alpha
+// of the page. Not a sprite shader.
+
+#if OPENGL
+    #define SV_POSITION POSITION
+    #define VS_SHADERMODEL vs_3_0
+    #define PS_SHADERMODEL ps_3_0
+#else
+    #define VS_SHADERMODEL vs_4_0_level_9_1
+    #define PS_SHADERMODEL ps_4_0_level_9_1
+#endif
+
+// The page being drawn into, in pixels. Set by the renderer.
+float2 PageSize = float2(2048.0, 2048.0);
+
+struct ShadowVertex
+{
+    float4 Position : POSITION0; // world
+    float4 Segment  : TEXCOORD0; // the edge: a.xy, b.xy
+    float4 Light    : TEXCOORD1; // center.xy, source size
+    float4 Slot     : TEXCOORD2; // the light's center in the page .xy, page pixels per world unit, half its square
+    float4 Transmit : TEXCOORD3; // the light that goes through the edge, rgb
+    float4 Exclude  : TEXCOORD4; // the rect the shadow leaves out: left, top, right, bottom, in the world
+    float4 Only     : TEXCOORD5; // the only rect the shadow covers
+};
+
+struct ShadowPixel
+{
+    float4 Position : SV_POSITION;
+    float2 World    : TEXCOORD0;
+    float4 Segment  : TEXCOORD1;
+    float4 Light    : TEXCOORD2;
+    float4 Slot     : TEXCOORD3;
+    float2 Page     : TEXCOORD4;
+    float4 Transmit : TEXCOORD5;
+    float4 Exclude  : TEXCOORD6;
+    float4 Only     : TEXCOORD7;
+};
+
+ShadowPixel ShadowVS(ShadowVertex input)
+{
+    ShadowPixel output;
+
+    float2 page = input.Slot.xy + (input.Position.xy - input.Light.xy) * input.Slot.z;
+    output.Position = float4(page.x / PageSize.x * 2.0 - 1.0, 1.0 - page.y / PageSize.y * 2.0, 0.0, 1.0);
+    output.World = input.Position.xy;
+    output.Segment = input.Segment;
+    output.Light = input.Light;
+    output.Slot = input.Slot;
+    output.Page = page;
+    output.Transmit = input.Transmit;
+    output.Exclude = input.Exclude;
+    output.Only = input.Only;
+    return output;
+}
+
+// 1 when p is inside the rect r (left, top, right, bottom), 0 outside.
+float Inside(float2 p, float4 r)
+{
+    return step(r.x, p.x) * step(p.x, r.z) * step(r.y, p.y) * step(p.y, r.w);
+}
+
+// The angle of v around p, from the direction to the light d.
+float AngleFrom(float2 d, float2 v)
+{
+    return atan2(d.x * v.y - d.y * v.x, dot(d, v));
+}
+
+float Coverage(ShadowPixel input)
+{
+    // only inside the square of its own light
+    clip(input.Page - (input.Slot.xy - input.Slot.w));
+    clip((input.Slot.xy + input.Slot.w) - input.Page);
+
+    // what the shadow leaves out (the drawing of its own wall) and the only part it covers
+    clip(0.5 - Inside(input.World, input.Exclude));
+    clip(Inside(input.World, input.Only) - 0.5);
+
+    // a source of size 0 (the eye of the field of view, a hard light): the quad is the shadow itself, stretched
+    // straight away from it, so all of it is in full shadow
+    [branch] if (input.Light.z <= 0.0)
+        return 1.0;
+
+    float2 p = input.World;
+    float2 a = input.Segment.xy;
+    float2 b = input.Segment.zw;
+    float2 light = input.Light.xy;
+
+    // only behind the edge: the light and the pixel on opposite sides of its line
+    float2 edge = b - a;
+    float lightSide = edge.x * (light.y - a.y) - edge.y * (light.x - a.x);
+    float pixelSide = edge.x * (p.y - a.y) - edge.y * (p.x - a.x);
+    clip(-lightSide * pixelSide);
+
+    // seen from the pixel, the source is a range of angles around the direction to its center, and the edge another
+    float2 toLight = light - p;
+    float distance = max(length(toLight), 0.0001);
+    float2 d = toLight / distance;
+
+    float angleA = AngleFrom(d, a - p);
+    float angleB = AngleFrom(d, b - p);
+    float low = min(angleA, angleB);
+    float high = max(angleA, angleB);
+
+    // the part of the source the edge covers: all of it is the full shadow, some of it the soft edge
+    float halfSource = atan(input.Light.z / distance);
+    float soft = saturate((min(high, halfSource) - max(low, -halfSource)) / max(halfSource * 2.0, 0.0001));
+    float hard = low <= 0.0 && high >= 0.0 ? 1.0 : 0.0;
+
+    return halfSource > 0.0005 ? soft : hard;
+}
+
+float4 ShadowPS(ShadowPixel input) : COLOR0
+{
+    return float4(0.0, 0.0, 0.0, Coverage(input));
+}
+
+// A power, not a mix: the pieces of an edge (and the two edges of a box) each cover part of the source near where
+// they meet, and transmit^a * transmit^b is transmit^(a + b), the same as one edge covering it all.
+float4 SeeThroughPS(ShadowPixel input) : COLOR0
+{
+    float3 transmit = max(input.Transmit.rgb, 1.0 / 255.0);
+    return float4(pow(transmit, Coverage(input)), 1.0);
+}
+
+technique Shadow
+{
+    pass P0
+    {
+        VertexShader = compile VS_SHADERMODEL ShadowVS();
+        PixelShader = compile PS_SHADERMODEL ShadowPS();
+    }
+}
+
+technique SeeThrough
+{
+    pass P0
+    {
+        VertexShader = compile VS_SHADERMODEL ShadowVS();
+        PixelShader = compile PS_SHADERMODEL SeeThroughPS();
+    }
+}

@@ -180,11 +180,11 @@ In the order they happen for each viewport:
 |---|---|---|
 | `BelowWorld` | world | On the cleared target, before anything of the world |
 | `World` | world | Together with what the draw systems submit, sorted with it by layer and depth |
-| `BeforeLighting` | world | Over the finished world, before the lighting is put on it |
-| `AfterLighting` | world | Over the lit world: not darkened by it |
+| `LightMap` | world | **Into** the light map, after the lights and before the world reads it, adding up. See [Lighting](Lighting.md#drawing-into-the-light-map) |
+| `AfterLighting` | world | Over the lit world, after the field of view and bloom: not darkened by the light |
 | `Screen` | pixels of the target, `(0, 0)` top left | Over everything. The viewport's post effects run right after |
 
-Lighting is being reworked: until it is back, `BeforeLighting` and `AfterLighting` simply draw one after the other.
+`BelowWorld` and `World` are lit like the rest of the world. `LightMap` happens first of all, before the world target is set, and cannot ask for the screen texture.
 
 Text submitted in the `Screen` stage is in pixels too, so a `Label2D` there has the size its font says.
 
@@ -432,7 +432,7 @@ It is local (nothing replicates) and it has a cost: a texture per entity and one
 
 ## Shapes
 
-Beyond sprites and text, `RenderManager` can draw vector shapes directly: circles, rectangles, lines, polygons, and more, without needing a texture. These are backed by [Apos.Shapes](https://github.com/Apos-Games/Apos.Shapes) and queued through the same submit pipeline as everything else, so they respect `Layer`/`Depth` and participate in lighting like any other renderable.
+Beyond sprites and text, `RenderManager` can draw vector shapes directly: circles, rectangles, lines, polygons, and more, without needing a texture. These are backed by [Apos.Shapes](https://github.com/Apos-Games/Apos.Shapes) and queued through the same submit pipeline as everything else, so they respect `Layer`/`Depth` like any other renderable. They are never lit: Apos.Shapes draws them with its own effect, which does not read the light map.
 
 ```csharp
 _renderer.DrawCircle(center: new Vector2(400, 300), radius: 32, fillColor: Color.Orange);
@@ -467,7 +467,7 @@ Every shape struct implements `IShapeRenderable` (which extends `IRenderable`) a
 _renderer.DrawCircle(center, radius, fillColor: Color.Yellow, unshaded: true);
 ```
 
-This is a separate concept from the `Unshaded` **shader** used by sprites (see [Unshaded Sprites in Lighting.md](Lighting.md#unshaded-sprites)). Shapes can't hold a shader, so `Unshaded` is just a bool that marks the shape as exempt from lighting. As with unshaded sprites, `Layer`/`Depth` are still respected normally against everything else in the scene.
+Since shapes are never lit, the flag changes nothing for now; it is kept for when they are.
 
 For immediate-mode drawing outside the queue (rare, prefer the `Draw*` methods above), `GameClient.ShapeBatch` exposes the underlying `Apos.Shapes` batch directly, e.g. `_renderer.FillRectImmediate(rect, color)`.
 

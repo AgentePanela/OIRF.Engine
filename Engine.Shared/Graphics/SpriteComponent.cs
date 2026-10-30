@@ -42,6 +42,32 @@ public class SpriteComponent : Component
     [ShaderKey]
     public string? Shader { get; set { field = value; DirtyBase(); } }
 
+    /// <summary>
+    /// How much the sprite ignores the light: 0 is lit like anything else, 1 is unshaded.
+    /// </summary>
+    public float Emission { get; set { field = value; DirtyBase(); } } = 0f;
+
+    /// <summary>
+    /// If the sprites ignore totally lightning
+    /// </summary>
+    [Ignore]
+    public bool Unshaded
+    {
+        get => Emission >= 1f;
+        set => Emission = value ? 1f : 0f;
+    }
+
+    /// <summary>
+    /// Where the sprite reads the light, see <see cref="LightBaseMode"/>. Layers use it unless they set their own.
+    /// </summary>
+    public LightBaseMode LightBase { get; set { field = value; DirtyBase(); } } = LightBaseMode.Pixel;
+
+    /// <summary>
+    /// The base for <see cref="LightBaseMode.Line"/> and <see cref="LightBaseMode.Point"/>, from the entity position.
+    /// It is not rotated with the entity!!
+    /// </summary>
+    public Vector2 LightOffset { get; set { field = value; DirtyBase(); } } = Vector2.Zero;
+
     public List<SpriteLayer> Layers
     {
         get;
@@ -149,6 +175,9 @@ public class SpriteComponent : Component
         Sampler = SamplerPresets.IndexOf(SamplerState),
         Effects = (byte)Effects,
         Shader = Shader,
+        Emission = Emission,
+        LightBase = (byte)LightBase,
+        LightOffset = LightOffset,
         Layers = layers,
     };
 
@@ -166,6 +195,9 @@ public class SpriteComponent : Component
         SamplerState = SamplerPresets.Get(s.Sampler);
         Effects = (SpriteEffects)s.Effects;
         Shader = s.Shader;
+        Emission = s.Emission;
+        LightBase = (LightBaseMode)s.LightBase;
+        LightOffset = s.LightOffset;
 
         ApplyLayers(s.Layers);
     }
@@ -257,6 +289,23 @@ public sealed class SpriteLayer
     [ShaderKey]
     public string? Shader { get; set { field = value; Dirty(); } }
 
+    /// <inheritdoc cref="SpriteComponent.Emission"/>
+    public float? Emission { get; set { field = value; Dirty(); } }
+
+    /// <inheritdoc cref="SpriteComponent.Unshaded"/>
+    [Ignore]
+    public bool Unshaded
+    {
+        get => Emission >= 1f;
+        set => Emission = value ? 1f : 0f;
+    }
+
+    /// <inheritdoc cref="SpriteComponent.LightBase"/>
+    public LightBaseMode? LightBase { get; set { field = value; Dirty(); } }
+
+    /// <inheritdoc cref="SpriteComponent.LightOffset"/>
+    public Vector2? LightOffset { get; set { field = value; Dirty(); } }
+
     private void Dirty(bool reordered = false)
     {
         LastModifiedTick = EntityManager.Instance?.CurTick ?? GameTick.Zero;
@@ -286,6 +335,9 @@ public sealed class SpriteLayer
                 SamplerState = layer.SamplerState,
                 Offset = layer.Offset,
                 Shader = layer.Shader,
+                Emission = layer.Emission,
+                LightBase = layer.LightBase,
+                LightOffset = layer.LightOffset,
             });
         }
 
@@ -306,6 +358,9 @@ public sealed class SpriteComponentState : IComponentState
     public byte Sampler;
     public byte Effects;
     public string? Shader;
+    public float Emission;
+    public byte LightBase;
+    public Vector2 LightOffset;
     public SpriteLayerState[] Layers = [];
 
     public SpriteComponentState WithLayers(SpriteLayerState[] layers) => new()
@@ -320,6 +375,9 @@ public sealed class SpriteComponentState : IComponentState
         Sampler = Sampler,
         Effects = Effects,
         Shader = Shader,
+        Emission = Emission,
+        LightBase = LightBase,
+        LightOffset = LightOffset,
         Layers = layers,
     };
 }
@@ -372,6 +430,15 @@ public sealed class SpriteLayerState
     public Vector2 Offset;
     public byte Sampler;
     public string? Shader;
+    public bool HasEmission;
+    public float Emission;
+
+    // NoLightBase when the layer uses the sprite's own
+    public byte LightBase = NoLightBase;
+    public bool HasLightOffset;
+    public Vector2 LightOffset;
+
+    private const byte NoLightBase = byte.MaxValue;
 
     public static SpriteLayerState From(SpriteLayer layer) => new()
     {
@@ -385,6 +452,11 @@ public sealed class SpriteLayerState
         Offset = layer.Offset,
         Sampler = SamplerPresets.IndexOf(layer.SamplerState),
         Shader = layer.Shader,
+        HasEmission = layer.Emission is not null,
+        Emission = layer.Emission ?? 0f,
+        LightBase = layer.LightBase is { } mode ? (byte)mode : NoLightBase,
+        HasLightOffset = layer.LightOffset is not null,
+        LightOffset = layer.LightOffset ?? Vector2.Zero,
     };
 
     public void ApplyTo(SpriteLayer layer)
@@ -398,5 +470,8 @@ public sealed class SpriteLayerState
         layer.Offset = Offset;
         layer.SamplerState = SamplerPresets.Get(Sampler);
         layer.Shader = Shader;
+        layer.Emission = HasEmission ? Emission : null;
+        layer.LightBase = LightBase == NoLightBase ? null : (LightBaseMode)LightBase;
+        layer.LightOffset = HasLightOffset ? LightOffset : null;
     }
 }

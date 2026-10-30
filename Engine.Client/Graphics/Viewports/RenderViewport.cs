@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using Engine.Client.Graphics.Shaders;
+using Engine.Shared.Common;
+using Engine.Shared.GameObjects;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -63,14 +66,106 @@ public sealed class RenderViewport : IDisposable
     /// </summary>
     public List<ShaderInstance> PostEffects { get; } = new();
 
+    public bool LightingEnabled { get; set; } = true;
+
     /// <summary>
-    /// The light of this viewport.
+    /// Off keeps this viewport out of the bloom (light.bloom)
     /// </summary>
-    // todo: light rework
-    public RenderTarget2D? LightTarget { get; internal set; }
+    public bool BloomEnabled { get; set; } = true;
+
+    // half, quarter and eighth of the target, two of each to blur from one into the other
+    private readonly RenderTarget2D?[] _bloomTargets = new RenderTarget2D?[6];
+
+    /// <summary>
+    /// The light of the last frame.
+    /// </summary>
+    public RenderTarget2D? LightTarget { get; private set; }
+
+    public RectangleF LightMapBounds { get; internal set; }
+
+    /// <summary>
+    /// The pixels of <see cref="LightTarget"/> that hold <see cref="LightMapBounds"/>.
+    /// </summary>
+    public Point LightMapSize { get; internal set; }
+
+    public Vector4 LightMapTransform { get; internal set; }
+
+    /// <summary>
+    /// Whether the last frame was drawn lit.
+    /// </summary>
+    [MemberNotNullWhen(true, nameof(LightTarget))]
+    public bool WasLit { get; internal set; }
+
+    /// <summary>
+    /// The light of the last frame.
+    /// </summary>
+    public RawTexture? LightFrame => WasLit && LightTarget is { } target
+        ? new RawTexture(target)
+        {
+            Region = new Rectangle(0, 0, LightMapSize.X, LightMapSize.Y),
+            Origin = Vector2.Zero,
+            Scale = new Vector2(LightMapBounds.Width / LightMapSize.X, LightMapBounds.Height / LightMapSize.Y),
+        }
+        : null;
 
     // The other target of the same size: reading the frame while drawing needs one to read and one to draw into.
     private RenderTarget2D? _scratch;
+
+    /// <summary>
+    /// The entity the viewport sees from
+    /// </summary>
+    public EntityUid? Eye { get; set; }
+
+    /// <summary>
+    /// Where the eye sits, from the position of <see cref="Eye"/>.
+    /// </summary>
+    public Vector2 EyeOffset { get; set; }
+
+    public bool FovEnabled { get; set; } = true;
+
+    /// <summary>
+    /// How far the eye sees, 0 no limit.
+    /// </summary>
+    public float FovRadius { get; set; }
+
+    /// <summary>
+    /// How wide the edge of <see cref="FovRadius"/> fades.
+    /// </summary>
+    public float FovRadiusSoftness { get; set; } = 32f;
+
+    /// <summary>
+    /// What the eye did not see last frame, in the alpha (1 is hidden). Null until there is an eye. 
+    /// </summary>
+    public RenderTarget2D? FovTarget { get; private set; }
+
+    public RectangleF FovMaskBounds { get; internal set; }
+
+    /// <summary>
+    /// The pixels of <see cref="FovTarget"/> that hold <see cref="FovMaskBounds"/>.
+    /// </summary>
+    public Point FovMaskSize { get; internal set; }
+
+    public Vector4 FovMaskTransform { get; internal set; }
+
+    /// <summary>
+    /// Whether the last frame was drawn with a field of view.
+    /// </summary>
+    [MemberNotNullWhen(true, nameof(FovTarget))]
+    public bool HadFov { get; internal set; }
+
+    internal Vector2 FovEyePosition;
+
+    /// <summary>
+    /// What the eye did not see last frame (alpha 1 is hidden), ready to be submitted over the world where it was.
+    /// </summary>
+    public RawTexture? FovMask => HadFov && FovTarget is { } target
+        ? new RawTexture(target)
+        {
+            Region = new Rectangle(0, 0, FovMaskSize.X, FovMaskSize.Y),
+            Origin = Vector2.Zero,
+            Scale = new Vector2(FovMaskBounds.Width / FovMaskSize.X, FovMaskBounds.Height / FovMaskSize.Y),
+        }
+        : null;
 
     // todo: multi z
     // public int Z { get; set; }
@@ -143,11 +238,77 @@ public sealed class RenderViewport : IDisposable
         return frame;
     }
 
+    // the light target grows in steps of this, so zooming does not make a new one every frame
+    private const int LightTargetStep = 64;
+
+    internal RenderTarget2D EnsureLightTarget(GraphicsDevice device, Point size)
+    {
+        if (LightTarget is { IsDisposed: false } target
+            && target.Width >= size.X && target.Height >= size.Y
+            && target.Width <= size.X * 2 + LightTargetStep && target.Height <= size.Y * 2 + LightTargetStep)
+            return target;
+
+        LightTarget?.Dispose();
+        LightTarget = new RenderTarget2D(device, RoundUp(size.X), RoundUp(size.Y), false, SurfaceFormat.Color,
+            DepthFormat.None);
+        return LightTarget;
+
+        static int RoundUp(int value) => (value + LightTargetStep - 1) / LightTargetStep * LightTargetStep;
+    }
+
     /// <summary>
     /// The video memory its targets take.
     /// </summary>
+    internal RenderTarget2D EnsureFovTarget(GraphicsDevice device, Point size)
+    {
+        if (FovTarget is { IsDisposed: false } target
+            && target.Width >= size.X && target.Height >= size.Y
+            && target.Width <= size.X * 2 + LightTargetStep && target.Height <= size.Y * 2 + LightTargetStep)
+            return target;
+
+        FovTarget?.Dispose();
+        FovTarget = new RenderTarget2D(device, RoundUp(size.X), RoundUp(size.Y), false, SurfaceFormat.Color,
+            DepthFormat.None);
+        return FovTarget;
+
+        static int RoundUp(int value) => (value + LightTargetStep - 1) / LightTargetStep * LightTargetStep;
+    }
+
+    internal RenderTarget2D?[] EnsureBloomTargets(GraphicsDevice device)
+    {
+        for (var i = 0; i < _bloomTargets.Length; i++)
+        {
+            var divisor = 2 << (i / 2);
+            var width = Math.Max(1, TargetSize.X / divisor);
+            var height = Math.Max(1, TargetSize.Y / divisor);
+
+            if (_bloomTargets[i] is { IsDisposed: false } target && target.Width == width && target.Height == height)
+                continue;
+
+            _bloomTargets[i]?.Dispose();
+            _bloomTargets[i] = new RenderTarget2D(device, width, height, false, SurfaceFormat.Color, DepthFormat.None);
+        }
+
+        return _bloomTargets;
+    }
+
     internal long TargetBytes
-        => TargetSize.X * (long)TargetSize.Y * 8 * ((Target is null ? 0 : 1) + (_scratch is null ? 0 : 1));
+        => TargetSize.X * (long)TargetSize.Y * 8 * ((Target is null ? 0 : 1) + (_scratch is null ? 0 : 1))
+           + (LightTarget is { } light ? light.Width * (long)light.Height * 4 : 0)
+           + (FovTarget is { } fov ? fov.Width * (long)fov.Height * 4 : 0)
+           + BloomBytes;
+
+    private long BloomBytes
+    {
+        get
+        {
+            var bytes = 0L;
+            foreach (var target in _bloomTargets)
+                bytes += target is null ? 0 : target.Width * (long)target.Height * 4;
+
+            return bytes;
+        }
+    }
 
     public void Dispose()
     {
@@ -155,5 +316,17 @@ public sealed class RenderViewport : IDisposable
         Target = null;
         _scratch?.Dispose();
         _scratch = null;
+        LightTarget?.Dispose();
+        LightTarget = null;
+        WasLit = false;
+        FovTarget?.Dispose();
+        FovTarget = null;
+        HadFov = false;
+
+        for (var i = 0; i < _bloomTargets.Length; i++)
+        {
+            _bloomTargets[i]?.Dispose();
+            _bloomTargets[i] = null;
+        }
     }
 }

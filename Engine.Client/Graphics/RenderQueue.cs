@@ -64,8 +64,9 @@ internal struct DrawCommand
     /// <summary>
     /// False for what ignores the lighting.
     /// </summary>
-    // todo: light rework
     public bool Lit;
+
+    public TextureLighting Lighting;
 
     public ShaderInstance? Shader;
     public SamplerState? Sampler;

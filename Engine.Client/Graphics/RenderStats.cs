@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Engine.Client.Graphics.Lighting;
 
 namespace Engine.Client.Graphics;
 
@@ -56,6 +57,11 @@ public sealed class RenderStats
     public double PostProcessMs;
 
     /// <summary>
+    /// What the lighting did, see the LIGHTING panel of the profiler.
+    /// </summary>
+    public readonly LightStats Light = new();
+
+    /// <summary>
     /// Video memory taken by the targets of the viewports drawn.
     /// </summary>
     public long TargetBytes;
@@ -75,6 +81,7 @@ public sealed class RenderStats
         SubmitMs = SortMs = FlushMs = PresentMs = TotalMs = 0;
         PostEffects = 0;
         PostProcessMs = 0;
+        Light.Reset();
         TargetBytes = 0;
         Viewports.Clear();
         Overlays.Clear();
@@ -107,6 +114,7 @@ public sealed class RenderStats
 
         PostEffects = other.PostEffects;
         PostProcessMs = other.PostProcessMs;
+        Light.CopyFrom(other.Light);
         TargetBytes = other.TargetBytes;
 
         Viewports.Clear();

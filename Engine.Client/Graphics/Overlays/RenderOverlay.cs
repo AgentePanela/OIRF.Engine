@@ -10,7 +10,7 @@ namespace Engine.Client.Graphics;
 public enum RenderStage
 {
     /// <summary>
-    /// Before anything in the world.
+    /// Before anything in the world. Lit with the world.
     /// </summary>
     BelowWorld,
 
@@ -20,12 +20,12 @@ public enum RenderStage
     World,
 
     /// <summary>
-    /// World space after the world is rendered. 
+    /// World space, drawn INTO the light map of the viewport, after the lights and before the world reads it.
     /// </summary>
-    BeforeLighting,
+    LightMap,
 
     /// <summary>
-    /// World space, after the lightnigng, everything here will not be affected by the light.
+    /// World space, over the lit world: nothing here is darkened by the light.
     /// </summary>
     AfterLighting,
 

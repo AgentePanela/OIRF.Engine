@@ -31,10 +31,12 @@ public sealed class DebugWindow : Window
         AddChild(tabs);
 
         var atlasTab = new AtlasDebugTab(_asset);
+        var lightingTab = new LightingDebugTab(_entManager, _cfg);
         _debugToolsTab = new DebugToolsTab(_cfg);
         _entityTab = new EntityDebugTab(_sceneManager, _entManager);
 
         tabs.AddTab("Atlases", atlasTab.Root);
+        tabs.AddTab("Lighting", lightingTab.Root);
         tabs.AddTab("Entities", _entityTab.Root);
         tabs.AddTab("Debug Tools", _debugToolsTab.Root);
     }

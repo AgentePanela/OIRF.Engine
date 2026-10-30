@@ -54,7 +54,7 @@ public sealed partial class RenderManager
             }
 
             RawTexture? screen = null;
-            if (ownQueue && overlay.RequestScreenTexture)
+            if (ownQueue && overlay.RequestScreenTexture && stage != RenderStage.LightMap)
             {
                 // what the overlays before it submitted has to be in the frame it gets
                 DrawQueue();

@@ -282,6 +282,9 @@ public sealed partial class SpriteSystem
         {
             Layer = comp.Layer,
             SamplerState = comp.SamplerState,
+
+            // the layers were drawn into the image unlit, the whole image takes the light the sprite would
+            Lighting = GetLighting(comp, null, transform),
         };
 
         _renderMan.Submit(image, pos, shader, last.Target.Custom0, last.Target.Custom1);

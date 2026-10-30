@@ -76,8 +76,14 @@ public sealed partial class RenderManager
 
         SyncMainViewport();
 
+        // null until the shaders are loaded, the plain sprite effect is used until then
+        _batcher.DefaultShader = _shaders.DefaultInstance;
+
         // textures that have to be ready before any viewport draws with them
         BeforeFrame?.Invoke();
+
+        // the lights every viewport needs, drawn once for all of them
+        PrepareLighting();
 
         // What is in the queue by now was submitted outside of a viewport draw (a scene's Draw), it belongs to
         // the main one.
@@ -110,6 +116,7 @@ public sealed partial class RenderManager
         _frameStats.SharedShaders = _shaders.SharedInstances;
         _frameStats.OwnedShaders = _shaders.OwnedInstances;
         _frameStats.PresentMs = Stopwatch.GetElapsedTime(presentStart).TotalMilliseconds;
+        _frameStats.TargetBytes += LightRenderer?.Bytes ?? 0;
         _frameStats.TotalMs = Stopwatch.GetElapsedTime(start).TotalMilliseconds;
 
         Stats.CopyFrom(_frameStats);
@@ -121,11 +128,16 @@ public sealed partial class RenderManager
         var device = GameClient.GraphicsDevice;
         var start = Stopwatch.GetTimestamp();
 
+        _current = viewport;
+        viewport.Camera.CacheFrame();
+
+        var lit = BuildLightMap(viewport, dt);
+        BuildFovMask(viewport);
         device.SetRenderTarget(viewport.EnsureTarget(device));
         device.Clear(viewport.ClearColor ?? clearColor);
 
-        _current = viewport;
-        viewport.Camera.CacheFrame();
+        // the world reads the light map while it is drawn
+        UseLightMap(lit ? viewport : null);
 
         DrawOverlays(viewport, RenderStage.BelowWorld, dt);
 
@@ -139,11 +151,18 @@ public sealed partial class RenderManager
         DrawOverlays(viewport, RenderStage.World, dt);
 
         var items = _queue.Count;
+        _collectLightBases = lit && _lightDebugBase;
         DrawQueue();
+        _collectLightBases = false;
 
-        DrawOverlays(viewport, RenderStage.BeforeLighting, dt);
+        UseLightMap(null);
 
-        // todo: light rework
+        // over the world and light
+        DrawFov(viewport);
+
+        ApplyBloom(viewport);
+
+        DrawLightBases();
 
         DrawOverlays(viewport, RenderStage.AfterLighting, dt);
 

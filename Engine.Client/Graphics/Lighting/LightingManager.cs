@@ -6,12 +6,8 @@ namespace Engine.Client.Graphics.Lighting;
 /// <summary>
 /// Runtime configuration for the lighting pipeline.
 /// </summary>
-// todo: light rework - nothing reads these yet, the backend is being rewritten
 public sealed class LightingManager
 {
-    /// <summary>
-    /// Master toggle.
-    /// </summary>
     public bool Enabled { get; private set; } = false;
 
     /// <summary>
