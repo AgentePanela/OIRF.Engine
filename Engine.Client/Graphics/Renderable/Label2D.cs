@@ -36,6 +36,11 @@ public struct Label2D : IRenderable
 
     public bool Visible = true;
 
+    /// <summary>
+    /// Text is drawn sharp. Optimized for pixelated fonts.
+    /// </summary>
+    public bool Pixelated;
+
     public bool ShadowEnabled;
     public Color ShadowColor = Color.Black;
     public Vector2 ShadowOffset = new Vector2(1f, 1f);
@@ -212,7 +217,7 @@ public struct Label2D : IRenderable
         return string.Empty;
     }
 
-    public void Draw(RenderManager renderer, Vector2 pos)
+    public void Draw(IRenderManager renderer, Vector2 pos)
     {
         renderer.DrawString(this, pos);
     }

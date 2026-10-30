@@ -20,7 +20,7 @@ public sealed class PvsChunkDrawSystem : EntityDrawSystem
     private static readonly Color RangeRingColor = new(120, 255, 120, 180);
     private static readonly Color MarginRingColor = new(255, 220, 120, 180);
 
-    [Dependency] private readonly RenderManager _renderer = default!;
+    [Dependency] private readonly IRenderManager _renderer = default!;
     [Dependency] private readonly Camera2D _camera = default!;
     [Dependency] private readonly IFontManager _fonts = default!;
     [Dependency] private readonly ShaderManager _shaderMan = default!;
@@ -29,7 +29,7 @@ public sealed class PvsChunkDrawSystem : EntityDrawSystem
 
     public bool Enabled { get; set; }
 
-    private Effect? _unshaded;
+    private ShaderInstance? _unshaded;
     private bool _gridTooBigLogged;
 
     private int _chunkSize;
@@ -40,16 +40,16 @@ public sealed class PvsChunkDrawSystem : EntityDrawSystem
     {
         base.Init();
 
-        _unshaded = _shaderMan.GetShader("Unshaded");
+        _unshaded = _shaderMan.UnshadedInstance;
 
         _cfg.Subs(NetworkingCvars.NetPvsChunkSize, value => _chunkSize = value);
         _cfg.Subs(NetworkingCvars.NetPvsRange, value => _range = value);
         _cfg.Subs(NetworkingCvars.NetPvsLeaveMargin, value => _margin = value);
     }
 
-    public override void Draw(float dt)
+    public override void Draw(in DrawContext ctx)
     {
-        base.Draw(dt);
+        base.Draw(ctx);
 
         if (!Enabled || _chunkSize <= 0)
             return;
@@ -57,7 +57,7 @@ public sealed class PvsChunkDrawSystem : EntityDrawSystem
         var eye = _camera.WorldCenter;
         var leaveRange = _range + _margin;
 
-        DrawGrid(eye, leaveRange);
+        DrawGrid(ctx.Camera, eye, leaveRange);
 
         _renderer.DrawCircle(eye, _range, borderColor: RangeRingColor, thickness: 2f, unshaded: true);
         _renderer.DrawCircle(eye, leaveRange, borderColor: MarginRingColor, thickness: 2f, unshaded: true);
@@ -67,15 +67,15 @@ public sealed class PvsChunkDrawSystem : EntityDrawSystem
             eye, shader: _unshaded));
     }
 
-    private void DrawGrid(Vector2 eye, float leaveRange)
+    private void DrawGrid(Camera2D view, Vector2 eye, float leaveRange)
     {
         var min = PvsChunks.ToChunk(new Vector2(
-            MathF.Min(_camera.ViewportLeft, eye.X - leaveRange),
-            MathF.Min(_camera.ViewportTop, eye.Y - leaveRange)), _chunkSize);
+            MathF.Min(view.ViewportLeft, eye.X - leaveRange),
+            MathF.Min(view.ViewportTop, eye.Y - leaveRange)), _chunkSize);
 
         var max = PvsChunks.ToChunk(new Vector2(
-            MathF.Max(_camera.ViewportRight, eye.X + leaveRange),
-            MathF.Max(_camera.ViewportBottom, eye.Y + leaveRange)), _chunkSize);
+            MathF.Max(view.ViewportRight, eye.X + leaveRange),
+            MathF.Max(view.ViewportBottom, eye.Y + leaveRange)), _chunkSize);
 
         // a small chunk size with a big range would be tens of thousands of rects a frame
         if ((long)(max.X - min.X + 1) * (max.Y - min.Y + 1) > MaxChunksDrawn)

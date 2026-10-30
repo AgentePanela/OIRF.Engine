@@ -38,7 +38,7 @@ internal sealed class Boxed<T> : IRenderable, IPooledRenderable where T : struct
 
     public SamplerState? SamplerState => Value.SamplerState;
 
-    public void Draw(RenderManager renderer, Microsoft.Xna.Framework.Vector2 pos)
+    public void Draw(IRenderManager renderer, Microsoft.Xna.Framework.Vector2 pos)
         => Value.Draw(renderer, pos);
 
     public void ReturnToPool()
@@ -91,7 +91,7 @@ internal sealed class ShapeBoxed<T> : IShapeRenderable, IPooledRenderable where 
         set => Value.Unshaded = value;
     }
 
-    public void Draw(RenderManager renderer, Microsoft.Xna.Framework.Vector2 pos)
+    public void Draw(IRenderManager renderer, Microsoft.Xna.Framework.Vector2 pos)
         => Value.Draw(renderer, pos);
 
     public void ReturnToPool()

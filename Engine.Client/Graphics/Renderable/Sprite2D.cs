@@ -44,6 +44,11 @@ public struct Sprite2D : IRenderable
 
     public bool Visible = true;
 
+    /// <summary>
+    /// How it takes the light.
+    /// </summary>
+    public TextureLighting Lighting;
+
     // Cache
     internal Texture2D CachedTexture { get; set; }
     internal Rectangle CachedRegion { get; set; }
@@ -83,7 +88,7 @@ public struct Sprite2D : IRenderable
         Visible = visible;
     }
 
-    public void Draw(RenderManager renderer, Vector2 pos)
+    public void Draw(IRenderManager renderer, Vector2 pos)
     {
         renderer.DrawSprite(this, pos);
     }

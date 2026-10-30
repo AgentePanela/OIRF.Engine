@@ -1,70 +1,430 @@
 # Shaders
 
-Custom shaders (`.fx` files) are compiled at runtime by `Engine.ResourcesBuilder`, a small project that wraps MonoGame's content pipeline. There is no `Content.mgcb`, no symlink setup, and no separate content project to maintain: you write the `.fx` file, wire up one method call, and the engine takes care of the rest.
+A shader has two halves:
 
----
+1. A **`.fx` file** under `Resources/Shaders/`: the HLSL code.
+2. A **`shader` prototype** in YAML: the id sprites refer to, how it is drawn, and the values it starts with.
 
-## Setup
+Sprites and tilemaps never name a `.fx` file, they name a shader prototype.
 
-In `Program.cs` (or anywere before shader loading), you can call `ShaderBuilder.Build()` before starting the game.
-
-```csharp
-Engine.ResourcesBuilder.ShaderBuilder.Build();
-
-using var game = new MyGame(options);
-game.Run();
-```
-
-`ShaderBuilder.Build()` compiles every `.fx` file under `Resources/Shaders/` in your project, plus the engine's own shaders under `Engine/Engine.Shared/EngineResources/Shaders/`, targeting `DesktopGL`/`Reach` by default. The compiled shaders are picked up automatically at runtime by `ShaderManager`, keyed by file name (without extension). You can also pass the location of every resources folder it should compile shaders.
-
----
-
-## Writing a Shader
-
-Place your `.fx` file under `Resources/Shaders/`:
+The engine ships no shaders for you to use, only the header every shader includes (`Sprite.fxh`); the ones it draws its own things with (lights, field of view, bloom) are internal. Every shader named in this document (`Grayscale`, `Tint`, `Outline`, `Dissolve`...) is an example of one you would write.
 
 ```
 Resources/
   Shaders/
-    Grayscale.fx
-    MetallicFloor.fx
+    Grayscale.fx              <- the code
+  Prototypes/
+    shaders.yml               <- - type: shader, id: Grayscale
 ```
-
-Assign it to a sprite from a prototype:
 
 ```yaml
 components:
   - type: Sprite
     key: player/idle
-    shader: Grayscale
+    shader: Grayscale         # the prototype id
 ```
 
-Or to a tilemap (see [Tilemaps](Tilemaps.md)):
+---
 
-```csharp
-tilemap.Shader = "MetallicFloor";
+## Quick start
+
+`Resources/Shaders/Tint.fx`:
+
+```hlsl
+#include "Sprite.fxh"
+
+float3 TintColor = float3(1.0, 0.5, 0.5);
+
+float4 MainPS(SpritePixel input) : COLOR
+{
+    float4 color = SampleSprite(input);
+    color.rgb *= TintColor;
+    return color;
+}
+
+SPRITE_TECHNIQUE(MainPS)
 ```
 
-To fetch an `Effect` instance directly:
+`Resources/Prototypes/shaders.yml`:
+
+```yaml
+- type: shader
+  id: Tint
+```
+
+That is a complete shader. Three rules:
+
+- **Always start with `#include "Sprite.fxh"`.** It is the engine's header: it declares the texture, the vertex shader and everything below. Do not declare `SpriteTexture`, a sampler, a vertex shader or the `#if OPENGL` block yourself.
+- **The pixel shader takes a `SpritePixel`** and returns the color.
+- **Always end with `SPRITE_TECHNIQUE(YourPixelShader)`** (or `SPRITE_TECHNIQUE_UNLIT`, see [Lighting](#lighting)). Do not write a `technique` block by hand: the sprite would be drawn without the engine's vertex shader and its lighting, and `LocalUV` and the custom values would be garbage.
+
+Shaders are compiled when the game loads (see [Building](#building)). When one does not compile, the log says so and everything using it is drawn with no shader.
+
+---
+
+## What the header gives you
+
+### `SpritePixel`
+
+| Field | What it is |
+|---|---|
+| `Color` | The tint of the sprite (`SpriteComponent.Color`, a layer's color...) |
+| `UV` | Where to sample the texture. Sprites share atlas pages, so this is **not** 0..1 over the sprite |
+| `LocalUV` | 0..1 over the sprite itself: `(0, 0)` is its top left, `(1, 1)` its bottom right. Use this for anything positioned on the sprite (a line across it, a gradient, a cut) |
+| `Custom0`, `Custom1` | Two `float4` each sprite carries on its own. See [per sprite parameters](#3-per-sprite-the-cheap-way) |
+| `Light` | Filled by the engine for the lighting. Leave it alone |
+
+A flipped sprite has its `LocalUV` flipped too: it follows the texture.
+
+### Functions and textures
+
+| Name | What it is |
+|---|---|
+| `SampleSprite(input)` | The sprite as it would be drawn with no shader: texture times tint |
+| `SpriteTextureSampler` | The texture being drawn, for sampling somewhere else than `input.UV` (`tex2D(SpriteTextureSampler, uv)`) |
+
+The engine binds the sprite's texture to sampler register `s0` and the light map to `s1`; `s2` is kept for the engine too. A texture of your own goes in `s3` or above:
+
+```hlsl
+Texture2D NoiseTexture;
+sampler2D NoiseSampler : register(s3) = sampler_state { Texture = <NoiseTexture>; };
+```
+
+### Values the engine fills in
+
+Declared by the header, set by the renderer. Just use them; never set them from a prototype or from code.
+
+| Name | Type | What it is |
+|---|---|---|
+| `TexelSize` | `float2` | The size of one texel of the texture being drawn. `uv + float2(TexelSize.x, 0)` is the pixel to the right |
+| `Time` | `float` | Seconds since the game started |
+| `ScreenSize` | `float2` | The size in pixels of the target being drawn into |
+| `MatrixTransform` | `float4x4` | Used by the vertex shader |
+
+---
+
+## The shader prototype
+
+```yaml
+- type: shader
+  id: Dissolve            # what sprites put in `shader:`
+  path: Dissolve          # the .fx file name, without extension. Defaults to the id
+  lit: true               # false: ignores the lighting (screens, glows, debug)
+  blend: Alpha            # Alpha | Additive | Multiply | Opaque
+  params:                 # starting values
+    EdgeWidth: 0.05
+  perSprite:              # parameters that travel with each sprite
+    Amount: custom0.x
+    EdgeColor: custom1
+```
+
+| Field | Default | Description |
+|---|---|---|
+| `id` | required | The name sprites and tilemaps refer to |
+| `path` | the id | `.fx` file name under `Shaders/`, without extension |
+| `lit` | `true` | `false` draws at full brightness, untouched by the lighting |
+| `blend` | `Alpha` | `Alpha` (regular transparency), `Additive` (adds, for glows), `Multiply` (darkens), `Opaque` (replaces) |
+| `params` | none | Starting value for each parameter: a number, or a list of up to 4 numbers for a vector or color |
+| `perSprite` | none | Which parameters travel with the sprite, and where. See below |
+
+Several prototypes can point at the same `.fx`, each with its own `lit`, `blend` and starting values:
+
+```yaml
+- type: shader
+  id: GlowRed
+  path: Glow
+  blend: Additive
+  lit: false
+  params:
+    GlowColor: [1, 0.2, 0.2, 1]
+
+- type: shader
+  id: GlowBlue
+  path: Glow
+  blend: Additive
+  lit: false
+  params:
+    GlowColor: [0.2, 0.4, 1, 1]
+```
+
+---
+
+## Parameters
+
+There are three places a parameter value can come from. Which one to use depends on **who the value is different for**.
+
+### 1. The same for everything using the shader: `params`
+
+Declare it in the `.fx` and give it a value in the prototype. The default written in the `.fx` is used when the prototype says nothing.
+
+```hlsl
+float LineCount = 64.0;
+```
+
+```yaml
+- type: shader
+  id: ScanLines
+  params:
+    LineCount: 32
+```
+
+This costs nothing: every sprite with this shader is drawn together.
+
+### 2. Changed at runtime for everything: the shared instance
 
 ```csharp
 [Dependency] private readonly ShaderManager _shaders = default!;
 
-Effect? effect = _shaders.GetShader("Grayscale");
+_shaders.GetSharedInstance("ScanLines")?.SetParameter("LineCount", 128f);
 ```
 
-`ShaderManager.GetShader` returns the shared instance loaded for that name. If you're going to change its parameters per-draw, clone it first with `effect.Clone()` so you don't mutate the shared copy other draws are using.
+`GetSharedInstance` returns the one `ShaderInstance` every sprite with that shader shares, so this changes all of them. Still drawn together. `GetUniqueInstance` gives a copy with parameters of its own instead (dispose it when done); what is drawn with a copy is drawn apart from the rest.
+
+### 3. Per sprite, the cheap way
+
+For a value that is different on each sprite (how far it has dissolved, the color of its outline), **do not** declare a parameter in the `.fx`. List it under `perSprite` in the prototype and read it from `Custom0` / `Custom1` in the shader:
+
+```yaml
+- type: shader
+  id: Outline
+  perSprite:
+    DrawColor: custom0          # all four components
+  params:
+    DrawColor: [1, 1, 1, 1]     # what a sprite gets when nobody set it
+```
+
+```hlsl
+float4 MainPS(SpritePixel input) : COLOR
+{
+    float4 drawColor = input.Custom0;
+    ...
+}
+```
+
+```csharp
+[Dependency] private readonly SpriteSystem _sprite = default!;
+
+_sprite.SetShaderParam(uid, null, "DrawColor", Color.Red);       // the base sprite
+_sprite.SetShaderParam(uid, "face", "Amount", 0.4f);             // one layer
+```
+
+The value is written into the vertices of that sprite. Sprites with different values are **still drawn in the same draw call**, which is the whole point: a hundred sprites each at a different point of a dissolve are one draw call, not a hundred.
+
+Where a parameter goes:
+
+| `perSprite` value | Takes | Read in the shader as |
+|---|---|---|
+| `custom0` | 4 floats | `input.Custom0` |
+| `custom1` | 4 floats | `input.Custom1` |
+| `custom0.x`, `custom1.w`... | 1 float | `input.Custom0.x`... |
+| `custom0.xy`, `custom1.zw`... | 2 floats | `input.Custom0.xy`... |
+| `custom0.xyz` | 3 floats | `input.Custom0.xyz` |
+
+Components have to follow each other (`xy`, `yzw`; not `xz`), and it is up to you not to put two parameters on the same components.
+
+**The limit is 8 floats per sprite** (two `float4`). A shader that needs more per sprite has to send the rest the expensive way.
+
+### 4. Per sprite, the expensive way
+
+`SetShaderParam` with a name that is **not** under `perSprite` but is a parameter of the `.fx` still works: the sprite gets its own copy of the shader with that value. A sprite with its own copy cannot be drawn together with the others, so it costs a draw call of its own. Fine for one or two things on screen (the player under an effect), wrong for something a whole room of sprites does.
+
+The profiler's RENDERING panel shows how many copies exist (`Shaders: N shared | N owned`) and how many batches were split by a shader change (`Breaks: ... shader`).
+
+### How `SetShaderParam` behaves
+
+- The value is kept **by name**, per sprite (or per layer). It applies to whatever shader the sprite is drawn with that knows the name, and is ignored by one that does not.
+- It survives the shader being swapped and swapped back (`SetDrawShader`), and can be set before the shader is.
+- Layers are separate: setting it on the base sprite (`layerId: null`) does not set it on its layers.
+
+### Summary
+
+| The value is... | Put it in | Cost |
+|---|---|---|
+| Fixed for the shader | `params` | none |
+| Changing, same for every sprite | `GetSharedInstance(id).SetParameter` | none |
+| Different per sprite, up to 8 floats | `perSprite` + `SetShaderParam` | none |
+| Different per sprite, beyond that | `SetShaderParam` on a `.fx` parameter | one draw call per sprite |
 
 ---
 
-## Automatic Lighting Support
+## Full example: a dissolve, per sprite
 
-Ordinary sprite shaders don't need to know anything about the lighting system: `ShaderLightingInjector` rewrites a copy of your `.fx` source in memory before compiling it (your file on disk is never touched), renaming your pixel shader entry point and wrapping it so its output gets multiplied by the scene's lightmap. This is the same idea as RobustToolbox's own shader wrapping: write a plain shader, get lighting for free.
+Eats a sprite away from the top down, with a colored line where it is being eaten. How far along it is and the color of the line are different for each sprite, so both travel with it.
 
-A shader is left alone (not wrapped) if any of these are true:
+`Shaders/Dissolve.fx`:
 
-- It declares `technique Unshaded`. Use this when you want the shader to always draw at full brightness, ignoring lighting entirely.
-- It already declares `Texture2D LightMap`, meaning it was hand-written with lighting support already (like the engine's own `DefaultLit.fx`).
-- It doesn't use `VertexShaderOutput` at all, meaning it's not a sprite shader (the internal lighting shaders such as `LightSoft.fx`, `ShadowDepth.fx`, `LightBlur.fx`, and `WallMerge.fx` fall in this category).
+```hlsl
+#include "Sprite.fxh"
 
-To opt a custom shader out of lighting, just declare an (unused) `technique Unshaded` block in it, following the same pattern as the engine's built-in `Unshaded.fx`.
+// How tall the line is, 0..1 of the sprite. The same for every sprite: a plain parameter.
+float EdgeWidth = 0.05;
+
+float4 MainPS(SpritePixel input) : COLOR
+{
+    float4 color = SampleSprite(input);
+
+    float amount = input.Custom0.x;      // Amount: 0 leaves the sprite whole, 1 removes all of it
+    float4 edgeColor = input.Custom1;    // EdgeColor
+
+    // LocalUV.y is 0 at the top of the sprite and 1 at its bottom, wherever it sits in its atlas page
+    float gone = step(input.LocalUV.y, amount);
+    float edge = (1 - gone) * step(input.LocalUV.y, amount + EdgeWidth) * step(0.001, amount);
+
+    color.rgb = lerp(color.rgb, edgeColor.rgb * color.a, edge);
+    return color * (1 - gone);
+}
+
+SPRITE_TECHNIQUE(MainPS)
+```
+
+The prototype:
+
+```yaml
+- type: shader
+  id: Dissolve
+  perSprite:
+    Amount: custom0.x
+    EdgeColor: custom1
+  params:
+    EdgeColor: [1, 0.5, 0, 1]     # what a sprite gets until it sets its own
+```
+
+And from code:
+
+```csharp
+_sprite.SetDrawShader(uid, "Dissolve");
+_sprite.SetShaderParam(uid, null, "Amount", progress);
+_sprite.SetShaderParam(uid, null, "EdgeColor", Color.Cyan);
+```
+
+Every dissolving sprite on screen, whatever its `Amount` and `EdgeColor`, is drawn in the same draw call.
+
+---
+
+## Using a shader
+
+On a sprite, from a prototype (each layer can have its own `shader` too):
+
+```yaml
+components:
+  - type: Sprite
+    key: props/monitor
+    shader: ScanLines
+```
+
+Over whatever shaders a sprite and its layers have, from code (nothing replicates):
+
+```csharp
+_sprite.SetDrawShader(uid, "Outline", Color.Yellow);   // the color goes to the DrawColor parameter
+_sprite.SetDrawShader(uid, null);                       // back to its own
+```
+
+On a tilemap (see [Tilemaps](Tilemaps.md)):
+
+```csharp
+tilemap.Shader = "Grayscale";
+```
+
+When submitting to the renderer yourself:
+
+```csharp
+var shader = _shaders.GetSharedInstance("Grayscale");
+_renderer.Submit(sprite, position, shader);
+
+// with per sprite values
+_renderer.Submit(sprite, position, shader, custom0: new Vector4(1, 0, 0, 1));
+```
+
+`ShaderManager.UnshadedInstance` is a built in instance with no `.fx` at all: it draws like no shader, but ignores the lighting. Use it for debug drawing.
+
+---
+
+## On a whole entity (post shader)
+
+`SpriteSystem.SetPostShader(uid, shader, padding)` draws an entity's sprite and layers into one image and puts that image on screen through the shader, so the shader sees the entity whole and can draw around it. It is any shader prototype, written like the others; see [Graphics](Graphics.md#a-shader-over-the-whole-entity) for when to use it and what it costs.
+
+An outline that grows past the edge of the sprite, for an entity drawn with `padding: 2`:
+
+```hlsl
+#include "Sprite.fxh"
+
+float4 MainPS(SpritePixel input) : COLOR
+{
+    float4 color = SampleSprite(input);
+
+    // is there anything of the entity within 2 pixels of this one?
+    float near = 0;
+    for (int x = -2; x <= 2; x++)
+        for (int y = -2; y <= 2; y++)
+            near = max(near, tex2D(SpriteTextureSampler, input.UV + float2(x, y) * TexelSize).a);
+
+    float4 edgeColor = input.Custom0;   // per sprite, see the prototype's perSprite
+    return lerp(edgeColor * step(0.5, near), color, step(0.5, color.a));
+}
+
+SPRITE_TECHNIQUE(MainPS)
+```
+
+---
+
+## On the whole screen (post effects)
+
+There is no separate kind of shader for the screen. A post effect draws the finished frame of a viewport as one sprite as big as the target, through any shader prototype:
+
+- `SampleSprite(input)` is the pixel of the frame.
+- `input.LocalUV` (and `input.UV`, they are the same here) runs 0..1 over the screen.
+- `TexelSize` is one pixel of the frame, `ScreenSize` its size in pixels, `Time` works as always.
+
+So `Grayscale` above already works as a post effect, unchanged:
+
+```csharp
+[Dependency] private readonly IRenderManager _renderer = default!;
+[Dependency] private readonly ShaderManager _shaders = default!;
+
+var gray = _shaders.GetUniqueInstance("Grayscale")!;
+gray.SetParameter("Saturation", 0f);
+
+_renderer.MainViewport.PostEffects.Add(gray);      // on
+_renderer.MainViewport.PostEffects.Remove(gray);   // off
+gray.Dispose();
+```
+
+`PostEffects` is a list on each `RenderViewport`, applied in order after everything else of that viewport; the engine UI is drawn after and is not affected. Each entry costs one full screen draw. Per sprite parameters get the prototype's starting values (there is only one "sprite"), so prefer plain parameters for a screen shader.
+
+For anything more than "run the frame through a shader" (only part of the screen, a mask, several textures), write a [render overlay](Graphics.md#render-overlays) that asks for the screen texture.
+
+---
+
+## Lighting
+
+`SPRITE_TECHNIQUE` lights whatever your pixel shader returns: it is multiplied by the light map where the sprite reads it (see [Lighting](Lighting.md#how-sprites-take-the-light)). Your shader works on the unlit color and never deals with the light.
+
+A shader ignores the lighting when its prototype says `lit: false`, or the sprite is `unshaded`. The simplest unlit shader is a `.fx` that only returns `SampleSprite(input)`, with a prototype like this:
+
+```yaml
+- type: shader
+  id: Unshaded
+  lit: false
+```
+
+A shader that must never be lit, whatever its prototype says (a mask, a screen effect), ends with `SPRITE_TECHNIQUE_UNLIT(YourPixelShader)` instead: what it returns is what is drawn.
+
+---
+
+## Building
+
+`Engine.ResourcesBuilder` compiles every `.fx` under the `Shaders/` folder of each resources folder when the game loads, and caches the result: a shader is only compiled again when it, or any header (`.fxh`), changed. The engine's `Sprite.fxh` lives in `Engine/Engine.Shared/EngineResources/Shaders/` and is made available to every shader, so `#include "Sprite.fxh"` just works. You can add headers of your own next to your `.fx` files and include them the same way.
+
+To compile ahead of time instead (or from a tool):
+
+```csharp
+Engine.ResourcesBuilder.ShaderBuilder.Build();
+```
+
+It targets `DesktopGL` by default.
+
+When the build itself breaks, loading logs `Building the shaders failed` and no shader at all is loaded. A shader that is missing afterwards is logged the first time something asks for it (`uses 'X.fx', which is not a compiled shader`). Common causes:
+
+- A `technique` block written by hand, or no `SPRITE_TECHNIQUE` at the end.
+- Declaring something the header already declares (`SpriteTexture`, `TexelSize`, `Time`, `LightMap`...), or a sampler on `s0`, `s1` or `s2`.
+- A parameter listed under `params` that the `.fx` does not have: this one is a warning (`sets 'X', which 'Y.fx' does not have`), usually a typo or a per sprite parameter missing from `perSprite`.

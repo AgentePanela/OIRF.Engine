@@ -31,7 +31,7 @@ public abstract class Scene : IEntityScene, IDisposable
     [Dependency] protected SceneManager _scene;
     [Dependency] protected IAssetManager _asset;
     [Dependency] protected IAudioManager _audio;
-    [Dependency] protected RenderManager _renderer;
+    [Dependency] protected IRenderManager _renderer;
     [Dependency] protected EntityManager _entManager;
     public Color? BackgroundColor;
     public bool IsDisposed { get; private set; }

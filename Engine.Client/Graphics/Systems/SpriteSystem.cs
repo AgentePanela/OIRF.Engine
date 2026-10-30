@@ -14,11 +14,11 @@ namespace Engine.Client.Graphics;
 /// Resolves and draws <see cref="SpriteComponent"/>s. The component is only data (it replicates), so everything that
 /// exists just to draw it lives in here, per entity.
 /// </summary>
-public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
+public sealed partial class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 {
-    [Dependency] private readonly RenderManager _renderMan = default!;
+    [Dependency] private readonly IRenderManager _renderMan = default!;
     [Dependency] private readonly IAssetManager _assetMan = default!;
-    [Dependency] private readonly Camera2D _camera = default!;
+    [Dependency] private readonly ShaderManager _shaderMan = default!;
 
     private const string PlaceholderKey = "EngineInternal/Placeholders/Null";
 
@@ -39,6 +39,8 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         public Color? DrawShaderColor;
 
         public string? DrawShader;
+
+        public PostShaderData? Post;
     }
 
     /// <summary>
@@ -59,20 +61,47 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         public string? DrawKey;
 
         public string? ShaderName;
-        public ShaderPath Shader;
+
+        public ShaderInstance? Shader;
+
+        /// <summary>
+        /// What was set through <see cref="SetShaderParam(EntityUid, string?, string, Vector4)"/>, by name.
+        /// </summary>
+        public Dictionary<string, Vector4>? Params;
+        public bool ParamsDirty;
+
+        // the per sprite parameters of Params, where the shader wants them
+        public Vector4 Custom0;
+        public Vector4 Custom1;
     }
 
     public override void Init()
     {
         base.Init();
         SubscribeEvent<SpriteComponent, CompRemovedEvent>(OnSpriteRemoved);
+        ((RenderManager)_renderMan).BeforeFrame += DrawPostTextures;
+    }
+
+    public override void OnShutdown()
+    {
+        base.OnShutdown();
+        ((RenderManager)_renderMan).BeforeFrame -= DrawPostTextures;
     }
 
     private void OnSpriteRemoved(EntityUid uid, SpriteComponent comp, CompRemovedEvent args)
-        => _render.Remove(uid);
-
-    public void Draw(float dt)
     {
+        if (!_render.Remove(uid, out var data))
+            return;
+
+        ReleasePost(uid, data);
+        ReleaseShader(data.Base);
+        foreach (var target in data.Layers.Values)
+            ReleaseShader(target);
+    }
+
+    public void Draw(in DrawContext ctx)
+    {
+        var camera = ctx.Camera;
         var query = GetEntitiesWithComp<SpriteComponent, TransformComponent>();
         foreach ((var uid, var comp, var transform) in query)
         {
@@ -86,7 +115,13 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 
             var spr = sprite.Value;
             var pos = transform.Position + comp.Offset;
-            if (!_camera.IsOnScreen(spr, pos) && !LayersOnScreen(comp, data, transform, pos))
+            if (!camera.IsOnScreen(spr, pos) && !LayersOnScreen(camera, comp, data, transform, pos))
+            {
+                _renderMan.ReportCulled();
+                continue;
+            }
+
+            if (data.Post is { } post && SubmitPost(comp, data, post, transform, pos))
                 continue;
 
             UpdateSpriteFields(comp, transform, ref spr);
@@ -100,7 +135,7 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     /// Layers can draw away from the base sprite (an offset, or a bigger texture), so one of them may be on screen
     /// while the base is not.
     /// </summary>
-    private bool LayersOnScreen(SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Vector2 pos)
+    private bool LayersOnScreen(Camera2D camera, SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Vector2 pos)
     {
         if (comp.Layers is null || comp.Layers.Count == 0)
             return false;
@@ -110,7 +145,7 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 
         var scale = transform.Scale ?? Vector2.One;
         var reach = new Vector2(comp.LayerReach * MathF.Max(MathF.Abs(scale.X), MathF.Abs(scale.Y)));
-        return _camera.IsOnScreen(pos - reach, reach * 2f);
+        return camera.IsOnScreen(pos - reach, reach * 2f);
     }
 
     // the furthest a layer could get in any direction: its offset plus its whole size, wherever its origin is
@@ -133,10 +168,13 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     /// Submits the base sprite and its layers. Base sits at Order 0: layers with
     /// a negative Order draw under it, the rest over.
     /// </summary>
-    private void SubmitWithLayers(SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Sprite2D spr, Vector2 pos)
+    /// <param name="local"> Leaves the rotation of the entity out </param>
+    private void SubmitWithLayers(SpriteComponent comp, SpriteRenderData data, TransformComponent transform, Sprite2D spr, Vector2 pos,
+        bool local = false)
     {
-        var shader = ResolveShader(data.Base, data.DrawShader ?? comp.Shader).Effect;
-        ApplyDrawColor(shader, data);
+        ApplyDrawColor(data.Base, data);
+        var shader = ResolveShader(data.Base, data.DrawShader ?? comp.Shader);
+        spr.Lighting = GetLighting(comp, null, transform);
 
         if (comp.Layers is null || comp.Layers.Count == 0)
         {
@@ -155,17 +193,17 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
                 SubmitBase(data, spr, pos, shader);
                 baseSubmitted = true;
             }
-            DrawLayer(comp, data, transform, layer, pos);
+            DrawLayer(comp, data, transform, layer, pos, local);
         }
 
         if (!baseSubmitted)
             SubmitBase(data, spr, pos, shader);
     }
 
-    private void SubmitBase(SpriteRenderData data, Sprite2D spr, Vector2 pos, Effect? shader)
+    private void SubmitBase(SpriteRenderData data, Sprite2D spr, Vector2 pos, ShaderInstance? shader)
     {
         if (!data.HideBaseSprite)
-            _renderMan.Submit(spr, pos, shader);
+            _renderMan.Submit(spr, pos, shader, data.Base.Custom0, data.Base.Custom1);
     }
 
     private static void SortLayers(SpriteComponent comp)
@@ -176,7 +214,8 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         comp.LayersDirty = false;
     }
 
-    private void DrawLayer(SpriteComponent comp, SpriteRenderData data, TransformComponent trans, SpriteLayer layer, Vector2 pos)
+    private void DrawLayer(SpriteComponent comp, SpriteRenderData data, TransformComponent trans, SpriteLayer layer, Vector2 pos,
+        bool local = false)
     {
         if (!layer.Visible) return;
 
@@ -187,24 +226,36 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
 
         var spr = sprite.Value;
         UpdateLayerFields(layer, trans, comp, ref spr);
-        spr.Rotation += data.DrawRotation;
+        spr.Rotation = local ? 0f : spr.Rotation + data.DrawRotation;
         spr.Depth = data.DrawDepth ?? spr.Depth;
 
-        if (layer.Offset != Vector2.Zero)
+        if (local)
+            pos += layer.Offset;
+        else if (layer.Offset != Vector2.Zero)
             pos += Vector2.Transform(layer.Offset, Matrix.CreateRotationZ(trans.Angle + data.DrawRotation));
 
-        var shader = ResolveShader(target, data.DrawShader ?? layer.Shader).Effect;
-        ApplyDrawColor(shader, data);
-        _renderMan.Submit(spr, pos, shader);
+        ApplyDrawColor(target, data);
+        var shader = ResolveShader(target, data.DrawShader ?? layer.Shader);
+        spr.Lighting = GetLighting(comp, layer, trans);
+        _renderMan.Submit(spr, pos, shader, target.Custom0, target.Custom1);
+    }
+
+    private static TextureLighting GetLighting(SpriteComponent comp, SpriteLayer? layer, TransformComponent transform)
+    {
+        var offset = layer?.LightOffset ?? comp.LightOffset;
+        return new TextureLighting(
+            layer?.LightBase ?? comp.LightBase,
+            transform.Position + offset,
+            layer?.Emission ?? comp.Emission);
     }
 
     // only the shader set through SetDrawShader gets it, a shader that has no such parameter just ignores it
-    private static void ApplyDrawColor(Effect? shader, SpriteRenderData data)
+    private static void ApplyDrawColor(SpriteTarget target, SpriteRenderData data)
     {
-        if (shader is null || data.DrawShader is null || data.DrawShaderColor is not { } color)
+        if (data.DrawShader is null || data.DrawShaderColor is not { } color)
             return;
 
-        shader.Parameters["DrawColor"]?.SetValue(color.ToVector4());
+        SetTargetParam(target, "DrawColor", color.ToVector4());
     }
 
     /// <summary>
@@ -341,17 +392,92 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
         }
     }
 
-    // resolving a ShaderPath clones the Effect, so only do it when the name changes
-    private static ShaderPath ResolveShader(SpriteTarget target, string? name)
+    // The shader is looked up again only when its name changes, and the parameters go to it again only when one of
+    // them (or the shader) did.
+    private ShaderInstance? ResolveShader(SpriteTarget target, string? name)
     {
         if (target.ShaderName != name)
         {
             target.ShaderName = name;
-            target.Shader = new ShaderPath(name);
+            ReleaseShader(target);
+            target.Shader = _shaderMan.GetSharedInstance(name);
+            target.ParamsDirty = true;
         }
+
+        if (target.ParamsDirty)
+            ApplyParams(target);
 
         return target.Shader;
     }
+
+    private static void ReleaseShader(SpriteTarget target)
+    {
+        if (target.Shader is { IsOwned: true } owned)
+            owned.Dispose();
+
+        target.Shader = null;
+    }
+
+    private static void ApplyParams(SpriteTarget target)
+    {
+        target.ParamsDirty = false;
+        target.Custom0 = target.Shader?.DefaultCustom0 ?? default;
+        target.Custom1 = target.Shader?.DefaultCustom1 ?? default;
+
+        if (target.Shader is not { } shader || target.Params is null)
+            return;
+
+        foreach (var (name, value) in target.Params)
+        {
+            // travels with the sprite, the shader itself is left alone and stays shared
+            if (shader.TryGetSpriteSlot(name, out var slot))
+            {
+                ShaderInstance.WriteSlot(ref target.Custom0, ref target.Custom1, slot, value);
+                continue;
+            }
+
+            if (!shader.HasParameter(name))
+                continue;
+
+            // a value only this sprite has needs a shader only this sprite has
+            if (!shader.IsOwned)
+                target.Shader = shader = shader.Duplicate();
+
+            shader.SetParameter(name, value);
+        }
+    }
+
+    private static void SetTargetParam(SpriteTarget target, string name, Vector4 value)
+    {
+        target.Params ??= new Dictionary<string, Vector4>();
+        if (target.Params.TryGetValue(name, out var current) && current == value)
+            return;
+
+        target.Params[name] = value;
+        target.ParamsDirty = true;
+    }
+
+    /// <summary>
+    /// Sets a parameter of the shader the sprite (or a layer, with <paramref name="layerId"/>) is drawn with, for
+    /// this sprite only.
+    /// </summary>
+    public void SetShaderParam(EntityUid uid, string? layerId, string name, Vector4 value)
+    {
+        var data = GetData(uid);
+        SetTargetParam(layerId is null ? data.Base : GetLayerTarget(data, layerId), name, value);
+    }
+
+    /// <inheritdoc cref="SetShaderParam(EntityUid, string?, string, Vector4)"/>
+    public void SetShaderParam(EntityUid uid, string? layerId, string name, float value)
+        => SetShaderParam(uid, layerId, name, new Vector4(value, 0f, 0f, 0f));
+
+    /// <inheritdoc cref="SetShaderParam(EntityUid, string?, string, Vector4)"/>
+    public void SetShaderParam(EntityUid uid, string? layerId, string name, Vector2 value)
+        => SetShaderParam(uid, layerId, name, new Vector4(value, 0f, 0f));
+
+    /// <inheritdoc cref="SetShaderParam(EntityUid, string?, string, Vector4)"/>
+    public void SetShaderParam(EntityUid uid, string? layerId, string name, Color value)
+        => SetShaderParam(uid, layerId, name, value.ToVector4());
 
     /// <summary>
     /// Draws <paramref name="key"/> instead of the sprite's own key (or a layer's, with <paramref name="layerId"/>)
@@ -440,19 +566,19 @@ public sealed class SpriteSystem : SharedSpriteSystem, IEntityDrawSystem
     /// <summary>
     /// Get the shader instance of a layer or base sprite.
     /// </summary>
-    public Effect? GetDrawShaderEffect(EntityUid uid, string? layerId = null)
+    public ShaderInstance? GetDrawShaderInstance(EntityUid uid, string? layerId = null)
     {
         if (!TryComp<SpriteComponent>(uid, out var comp))
             return null;
 
         var data = GetData(uid);
         if (layerId is null)
-            return ResolveShader(data.Base, data.DrawShader ?? comp.Shader).Effect;
+            return ResolveShader(data.Base, data.DrawShader ?? comp.Shader);
 
         if (GetLayer(comp, layerId) is not { } layer)
             return null;
 
-        return ResolveShader(GetLayerTarget(data, layerId), data.DrawShader ?? layer.Shader).Effect;
+        return ResolveShader(GetLayerTarget(data, layerId), data.DrawShader ?? layer.Shader);
     }
 
     private SpriteRenderData GetData(EntityUid uid)

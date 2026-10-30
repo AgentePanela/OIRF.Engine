@@ -65,10 +65,9 @@ tilemap.TileBlending = true; // enable terrain blending
 | `Layer` | `int` | `0` | Render layer for all tiles |
 | `SamplerState` | `SamplerState?` | `null` | Override sampler (null = global default) |
 | `TileBlending` | `bool` | `true` | Enable terrain blending between different tile types |
-| `Shader` | `string?` | `null` | Name of a shader to apply to this tilemap, resolved via `ShaderManager` (see [Shaders](Shaders.md)) |
-| `Effect` | `Effect?` | `null` | Resolved automatically from `Shader`; do not set manually |
+| `Shader` | `string?` | `null` | Id of the shader prototype to draw this tilemap with (see [Shaders](Shaders.md)) |
 
-Set `tilemap.Shader = "MetallicFloor";` and `TilemapSystem` takes care of resolving, caching, and updating the effect's `Time`/`ViewportSize` parameters every frame.
+Set `tilemap.Shader = "Grayscale";` and every chunk is drawn with it. In a tilemap shader `LocalUV` is 0..1 over each tile.
 
 ---
 

@@ -1,3 +1,4 @@
+using Engine.Shared.Common;
 using Engine.Shared.IoC;
 using Microsoft.Xna.Framework;
 using System;
@@ -6,7 +7,13 @@ namespace Engine.Client.Graphics;
 
 public class Camera2D
 {
-    [Dependency] private readonly ViewportAdapter _viewport = default!;
+    /// <summary>
+    /// The viewport this camera looks through.
+    /// </summary>
+    public RenderViewport? Viewport { get; internal set; }
+
+    // the part of the world one screenful covers at zoom 1
+    private Vector2 ViewSize => Viewport?.VisibleSize ?? new Vector2(GameClient.Options.Width, GameClient.Options.Height);
 
     private float _zoom;
     private float _minimumZoom = 0.1f;
@@ -17,16 +24,16 @@ public class Camera2D
     public Vector2 WorldCenter => Position + Origin;
 
     public Vector2 ViewportCenter => new Vector2(ViewportMidX, ViewportMidY);
-    public float ViewportMidX => (_viewport.VirtualWidth / 2f) / Zoom;
-    public float ViewportMidY => (_viewport.VirtualHeight / 2f) / Zoom;
+    public float ViewportMidX => (ViewSize.X / 2f) / Zoom;
+    public float ViewportMidY => (ViewSize.Y / 2f) / Zoom;
 
     public float ViewportLeft => WorldCenter.X - ViewportMidX;
     public float ViewportRight => WorldCenter.X + ViewportMidX;
     public float ViewportTop => WorldCenter.Y - ViewportMidY;
     public float ViewportBottom => WorldCenter.Y + ViewportMidY;
 
-    public float ViewportWidth => _viewport.VirtualWidth / Zoom;
-    public float ViewportHeight => _viewport.VirtualHeight / Zoom;
+    public float ViewportWidth => ViewSize.X / Zoom;
+    public float ViewportHeight => ViewSize.Y / Zoom;
 
     public Rectangle ViewportBounds => new Rectangle(
         (int)ViewportLeft,
@@ -52,8 +59,17 @@ public class Camera2D
     internal void CacheFrame()
     {
         var center = Position + Origin;
-        float midX = (_viewport.VirtualWidth / 2f) / Zoom;
-        float midY = (_viewport.VirtualHeight / 2f) / Zoom;
+        float midX = ViewportMidX;
+        float midY = ViewportMidY;
+
+        // a rotated view covers a bigger axis aligned box
+        if (Rotation != 0f)
+        {
+            float cos = MathF.Abs(MathF.Cos(Rotation));
+            float sin = MathF.Abs(MathF.Sin(Rotation));
+            (midX, midY) = (midX * cos + midY * sin, midX * sin + midY * cos);
+        }
+
         _vpLeft = center.X - midX;
         _vpRight = center.X + midX;
         _vpTop = center.Y - midY;
@@ -118,9 +134,16 @@ public class Camera2D
 
     /// <summary>
     /// Gets the origin point for rotation and zoom transformations.
-    /// Usually the center of the viewport resolution.
+    /// The center of the viewport this camera looks through.
     /// </summary>
-    public Vector2 Origin => new Vector2(GameClient.Options.Width / 2f, GameClient.Options.Height / 2f);
+    public Vector2 Origin => Viewport is { } viewport
+        ? viewport.Size / 2f
+        : new Vector2(GameClient.Options.Width / 2f, GameClient.Options.Height / 2f);
+
+    /// <summary>
+    /// The world area the last <see cref="CacheFrame"/> saw, what the IsOnScreen checks test against.
+    /// </summary>
+    public RectangleF WorldBounds => new(_vpLeft, _vpTop, _vpRight - _vpLeft, _vpBottom - _vpTop);
 
     /// <summary>
     /// Moves the camera by the given delta vector, taking rotation into account.
@@ -146,7 +169,7 @@ public class Camera2D
 
     /// <summary>
     /// Calculates the view matrix to be used in SpriteBatch.Begin().
-    /// This matrix does NOT include the viewport scaling (letterboxing).
+    /// This matrix does NOT include the viewport render scale.
     /// </summary>
     public Matrix GetVirtualViewMatrix()
     {
@@ -158,12 +181,11 @@ public class Camera2D
     }
 
     /// <summary>
-    /// Gets the full view matrix, combining the camera transformations AND the viewport scaling.
-    /// This is what RenderManager should use in SpriteBatch.Begin().
+    /// Gets the full view matrix: world to pixels of the viewport's render target.
     /// </summary>
     public Matrix GetViewMatrix()
     {
-        return GetVirtualViewMatrix() * _viewport.GetScaleMatrix();
+        return Viewport is { } viewport ? viewport.GetViewMatrix() : GetVirtualViewMatrix();
     }
 
     /// <summary>
@@ -179,14 +201,8 @@ public class Camera2D
     /// </summary>
     public Vector2 ScreenToWorld(Vector2 screenPosition)
     {
-        var pp = GameClient.GraphicsDevice.PresentationParameters;
-        float offsetX = (pp.BackBufferWidth - _viewport.VirtualWidth) / 2f;
-        float offsetY = (pp.BackBufferHeight - _viewport.VirtualHeight) / 2f;
-
-        Vector2 adjusted = screenPosition - new Vector2(offsetX, offsetY);
-        adjusted = Vector2.Transform(adjusted, Matrix.Invert(_viewport.GetScaleMatrix()));
-
-        return Vector2.Transform(adjusted, Matrix.Invert(GetVirtualViewMatrix()));
+        var offset = Viewport?.ScreenOffset ?? Vector2.Zero;
+        return Vector2.Transform(screenPosition - offset, GetInverseViewMatrix());
     }
 
     /// <summary>
@@ -194,15 +210,8 @@ public class Camera2D
     /// </summary>
     public Vector2 WorldToScreen(Vector2 worldPosition)
     {
-        // Apply camera matrix
-        Vector2 viewportPos = Vector2.Transform(worldPosition, GetVirtualViewMatrix());
-
-        // Then apply physical screen letterboxing offsets
-        var pp = GameClient.GraphicsDevice.PresentationParameters;
-        float offsetX = (pp.BackBufferWidth - _viewport.VirtualWidth) / 2f;
-        float offsetY = (pp.BackBufferHeight - _viewport.VirtualHeight) / 2f;
-
-        return Vector2.Transform(viewportPos, _viewport.GetScaleMatrix()) + new Vector2(offsetX, offsetY);
+        var offset = Viewport?.ScreenOffset ?? Vector2.Zero;
+        return Vector2.Transform(worldPosition, GetViewMatrix()) + offset;
     }
 
     public void Reset()

@@ -25,6 +25,17 @@ public struct RawTexture : IRenderable
 
     public bool Visible = true;
 
+    public TextureLighting Lighting;
+
+    /// <summary>
+    /// The size it is drawn at: the region times the scale. Setting it changes the scale.
+    /// </summary>
+    public Vector2 Size
+    {
+        readonly get => new(Region.Width * Scale.X, Region.Height * Scale.Y);
+        set => Scale = new Vector2(value.X / Region.Width, value.Y / Region.Height);
+    }
+
     public RawTexture(Texture2D texture)
     {
         Texture = texture;
@@ -55,7 +66,7 @@ public struct RawTexture : IRenderable
         Visible = visible;
     }
 
-    public void Draw(RenderManager renderer, Vector2 pos)
+    public void Draw(IRenderManager renderer, Vector2 pos)
     {
         renderer.DrawTexture(this, pos);
     }

@@ -6,7 +6,6 @@ using System.Reflection;
 using Engine.Client.Debug.Diagnostics;
 using Engine.Client.GameStates;
 using Engine.Client.Graphics;
-using Engine.Client.Graphics.Lighting;
 using Engine.Shared.Configuration;
 using Engine.Shared.Configuration.CVars;
 using Engine.Shared.Debug.Diagnostics;
@@ -18,14 +17,13 @@ using MonoGame.Framework.Utilities;
 namespace Engine.Client.UI.Debug;
 
 /// <summary>
-/// F3-style overlay: general/camera/render/memory stats on the left, a per-system
+/// general/camera/render/memory stats on the left, a per-system
 /// update/draw bar chart on the right.
 /// </summary>
 public sealed class ProfilerOverlay : Overlay
 {
     [Dependency] private readonly Camera2D _camera = default!;
-    [Dependency] private readonly RenderManager _renderMan = default!;
-    [Dependency] private readonly LightingManager _lighting = default!;
+    [Dependency] private readonly IRenderManager _renderMan = default!;
     [Dependency] private readonly IConfigurationManager _cfg = default!;
     [Dependency] private readonly SystemsProfiler _profiler = default!;
     [Dependency] private readonly INetManager _net = default!;
@@ -47,9 +45,11 @@ public sealed class ProfilerOverlay : Overlay
     private readonly Label _cameraLabel;
     private readonly Label _resourcesLabel;
     private readonly Label _renderLabel;
-    private readonly Label _lightingLabel;
     private readonly Label _memoryLabel;
     private readonly Label _stateLabel;
+
+    private readonly Label _renderStatsLabel;
+    private readonly Label _lightStatsLabel;
 
     private readonly BoxContainer _netPanel;
     private readonly Label _netLabel;
@@ -94,7 +94,6 @@ public sealed class ProfilerOverlay : Overlay
         _cameraLabel = CreateLabel();
         _resourcesLabel = CreateLabel();
         _renderLabel = CreateLabel();
-        _lightingLabel = CreateLabel();
         _memoryLabel = CreateLabel();
         _stateLabel = CreateLabel();
 
@@ -106,10 +105,37 @@ public sealed class ProfilerOverlay : Overlay
         left.AddChild(_resourcesLabel);
         left.AddChild(new Separator());
         left.AddChild(_renderLabel);
-        left.AddChild(_lightingLabel);
         left.AddChild(_memoryLabel);
         left.AddChild(new Separator());
         left.AddChild(_stateLabel);
+
+        var renderPanel = new BoxContainer
+        {
+            Orientation = Orientation.Vertical,
+            Separation = 4,
+            Background = PanelBg,
+            Padding = new(8, 6),
+            MinWidth = 260,
+        };
+        leftColumn.AddChild(renderPanel);
+
+        renderPanel.AddChild(new Label { Text = "RENDERING", FontSize = 25f, Color = Color.White });
+        _renderStatsLabel = CreateLabel();
+        renderPanel.AddChild(_renderStatsLabel);
+
+        var lightPanel = new BoxContainer
+        {
+            Orientation = Orientation.Vertical,
+            Separation = 4,
+            Background = PanelBg,
+            Padding = new(8, 6),
+            MinWidth = 260,
+        };
+        leftColumn.AddChild(lightPanel);
+
+        lightPanel.AddChild(new Label { Text = "LIGHTING", FontSize = 25f, Color = Color.White });
+        _lightStatsLabel = CreateLabel();
+        lightPanel.AddChild(_lightStatsLabel);
 
         _netPanel = new BoxContainer
         {
@@ -122,7 +148,7 @@ public sealed class ProfilerOverlay : Overlay
         };
         leftColumn.AddChild(_netPanel);
 
-        _netPanel.AddChild(new Label { Text = "NETWORKING", FontSize = 28f, Color = Color.White });
+        _netPanel.AddChild(new Label { Text = "NETWORKING", FontSize = 25f, Color = Color.White });
         _netLabel = CreateLabel();
         _netPanel.AddChild(_netLabel);
         _bandwidthRow = BuildRow(_netPanel, NetBarColor, "band");
@@ -142,13 +168,15 @@ public sealed class ProfilerOverlay : Overlay
 
         right.AddChild(new Label { Text = "SYSTEMS PROFILER" });
         right.AddChild(new Separator());
-        right.AddChild(new Label { Text = "UPDATE", FontSize = 28f, Color = Color.White });
+        right.AddChild(new Label { Text = "UPDATE", FontSize = 25f, Color = Color.White });
         _updateRows = BuildRows(right, RowsPerSection, UpdateBarColor);
         right.AddChild(new Separator());
-        right.AddChild(new Label { Text = "DRAW", FontSize = 28f, Color = Color.White });
+        right.AddChild(new Label { Text = "DRAW", FontSize = 25f, Color = Color.White });
         _drawRows = BuildRows(right, RowsPerSection, DrawBarColor);
 
         RefreshStats();
+        RefreshRendering();
+        RefreshLighting();
         RefreshSystems();
         RefreshNetworking();
     }
@@ -162,6 +190,8 @@ public sealed class ProfilerOverlay : Overlay
 
         _refreshTimer = 0f;
         RefreshStats();
+        RefreshRendering();
+        RefreshLighting();
         RefreshSystems();
         RefreshNetworking();
     }
@@ -181,17 +211,62 @@ public sealed class ProfilerOverlay : Overlay
         var entityCount = GameClient.EntityManager.GetEntityCount();
         _resourcesLabel.Text = $"Resolution: {gfx.PreferredBackBufferWidth}x{gfx.PreferredBackBufferHeight} | Entities: {entityCount}";
 
-        _renderLabel.Text = $"Render draw: {FormatMs(_renderMan.DrawStopwatch.Elapsed.TotalMilliseconds)}\n" +
-                             UIProfiler.LogSnapshot(true).TrimEnd();
-
-        _lightingLabel.Text = $"Lighting: {FormatMs(_lighting.LastLightingTotalMs)} | " +
-                               $"lights {_lighting.LastVisibleLights}/{_lighting.LastShadowLights} | occ {_lighting.LastOccluders}\n" +
-                               $"  shadow {FormatMs(_lighting.LastShadowPassMs)} " +
-                               $"(build {FormatMs(_lighting.LastShadowBuildMs)} / setup {FormatMs(_lighting.LastShadowSetupMs)} / draw {FormatMs(_lighting.LastShadowDrawMs)}) | " +
-                               $"light {FormatMs(_lighting.LastLightPassMs)} | bleed {FormatMs(_lighting.LastWallBleedMs)} | blur {FormatMs(_lighting.LastLightBlurMs)}";
+        _renderLabel.Text = UIProfiler.LogSnapshot(true).TrimEnd();
 
         _memoryLabel.Text = MemoryMeter.GetInfo();
         _stateLabel.Text = $"State: {GameClient.GameState} | Elapsed: {FormatTime(time.TotalTime)}";
+    }
+
+    private void RefreshRendering()
+    {
+        var stats = _renderMan.Stats;
+        var text =
+            $"World: {FormatMs(stats.TotalMs)} (submit {FormatMs(stats.SubmitMs)} | sort {FormatMs(stats.SortMs)} | " +
+            $"flush {FormatMs(stats.FlushMs)} | present {FormatMs(stats.PresentMs)})\n" +
+            $"Draw calls: {stats.DrawCalls} | Triangles: {stats.Primitives} | Texture swaps: {stats.TextureSwaps}\n" +
+            $"Batches: {stats.Batches} ({stats.SpriteBatches} sprite, {stats.ShapeBatches} shape) | Quads: {stats.Quads}\n" +
+            $"Breaks: {stats.BreaksByTexture} texture | {stats.BreaksByShader} shader | {stats.BreaksBySampler} sampler | " +
+            $"{stats.BreaksByBlend} blend | {stats.BreaksByMask} mask | {stats.BreaksByKind} sprite/shape\n" +
+            $"Shaders: {stats.SharedShaders} shared | {stats.OwnedShaders} owned\n" +
+            $"Submitted: {stats.Submitted} | Culled: {stats.Culled} | Target switches: {stats.TargetSwitches}";
+
+        text += $"\nPost effects: {stats.PostEffects} ({FormatMs(stats.PostProcessMs)}) | Targets: {stats.TargetBytes / (1024.0 * 1024.0):0.0}MB";
+        foreach (var viewport in stats.Viewports)
+            text += $"\n{viewport.Name}: {viewport.Width}x{viewport.Height} | {viewport.Items} items | {FormatMs(viewport.Ms)}";
+
+        foreach (var overlay in stats.Overlays)
+            text += $"\n{overlay.Name} ({overlay.Stage}): {FormatMs(overlay.Ms)}";
+
+        _renderStatsLabel.Text = text;
+    }
+
+    private void RefreshLighting()
+    {
+        var light = _renderMan.Stats.Light;
+
+        var chunks = !light.CacheEnabled
+            ? "off (light.cache)"
+            : light.ChunksInUse
+                ? $"{light.ChunksResident}/{light.ChunkCapacity} kept | {light.ChunksRebuilt} redrawn"
+                : $"too many for the view ({light.ChunkCapacity} max): static lights added one by one";
+
+        var fov = light.ViewportsWithFov == 0
+            ? "off"
+            : $"{FormatMs(light.FovMs)} | {light.FovSegments} edges";
+
+        _lightStatsLabel.Text =
+            $"Time: {FormatMs(light.PrepareMs + light.LightMapMs)} (lights {FormatMs(light.PrepareMs)} | " +
+            $"light maps {FormatMs(light.LightMapMs)})\n" +
+            $"Lights: {light.Lights} ({light.StaticLights} static, {light.DynamicLights} dynamic, " +
+            $"{light.AnimatedLights} animated) | drawn this frame: {light.LightsDrawn}\n" +
+            $"Sprite lights: {light.SpriteLights}\n" +
+            $"Shadow edges drawn: {light.ShadowSegments}\n" +
+            $"Field of view: {fov}\n" +
+            $"Bloom: {(light.BloomMs > 0 ? FormatMs(light.BloomMs) : "off")}\n" +
+            $"Chunks: {chunks}\n" +
+            $"Atlas pages: {light.StaticAtlasPages} static, {light.DynamicAtlasPages} dynamic | " +
+            $"Memory: {light.CacheBytes / (1024.0 * 1024.0):0.0}MB\n" +
+            $"Light maps: {light.LightMapTexels / 1000.0:0.#}k texels";
     }
 
     private void RefreshSystems()

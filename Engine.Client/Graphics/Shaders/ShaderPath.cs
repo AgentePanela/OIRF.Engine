@@ -8,8 +8,8 @@ using Microsoft.Xna.Framework.Graphics;
 namespace Engine.Client.Graphics.Shaders;
 
 /// <summary>
-/// A shader name that resolves itself to the loaded <see cref="Effect"/>. Use this for components or prototypes
-/// giving the possibility to set shader by name in prototypes.
+/// The id of a shader prototype. Use this for components or prototypes giving the possibility to set shader by
+/// name in prototypes.
 /// </summary>
 [TypeConverter(typeof(ShaderPathConverter))]
 public readonly struct ShaderPath : IEquatable<ShaderPath>
@@ -17,21 +17,20 @@ public readonly struct ShaderPath : IEquatable<ShaderPath>
     public readonly string? Name;
 
     /// <summary>
-    /// The resolved shader Effect (a fresh clone), or null if unset or not a loaded shader name.
+    /// The shared instance of the shader, or null if unset or not a shader prototype.
     /// </summary>
-    public readonly Effect? Effect;
+    public ShaderInstance? Instance => IoCManager.Resolve<ShaderManager>().GetSharedInstance(Name);
 
     public ShaderPath(string? name)
     {
         Name = name;
-        Effect = name is null ? null : IoCManager.Resolve<ShaderManager>().GetShader(name)?.Clone();
     }
 
     /// <summary>
     /// Every shader name currently loaded
     /// </summary>
     public static IReadOnlyList<string> GetAvailable()
-        => IoCManager.Resolve<ShaderManager>().GetShaderList();
+        => IoCManager.Resolve<ShaderManager>().GetShaderList().ConvertAll(id => id.Id);
 
     public static implicit operator ShaderPath(string? name) => new(name);
 

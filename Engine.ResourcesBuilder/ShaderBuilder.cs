@@ -33,10 +33,9 @@ public static class ShaderBuilder
 
         foreach (var root in resourceFolders)
         {
-            // Sprite shaders get lighting support injected in memory (source
-            // files under Shaders/ are never touched) - see
-            // ShaderLightingInjector for the rename+wrap mechanism.
-            var generatedRoot = ShaderLightingInjector.GenerateRoot(root, saveDir);
+            // Shaders are pre-processed in memory (source files under Shaders/
+            // are never touched) - see ShaderLightingInjector.
+            var generatedRoot = ShaderLightingInjector.GenerateRoot(root, saveDir, resourceFolders);
 
             // A fresh ContentBuilder per root
             var builder = new ShaderContentBuilder();
