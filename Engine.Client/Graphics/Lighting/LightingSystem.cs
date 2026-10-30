@@ -23,6 +23,8 @@ public sealed partial class LightingSystem : EntitySystem, ILightRenderer
     // by texture key, null for a key that does not exist so it is only reported once
     private readonly Dictionary<string, (Texture2D Texture, Rectangle Region)?> _masks = new();
 
+    private readonly LightDrawingEvent _drawingEvent = new();
+
     public override void Init()
     {
         base.Init();
@@ -57,11 +59,25 @@ public sealed partial class LightingSystem : EntitySystem, ILightRenderer
     {
         foreach (var (uid, light, transform) in GetEntitiesWithComp<PointLightComponent, TransformComponent>())
         {
-            if (!light.Enabled || light.Radius <= 0f || light.Intensity <= 0f || HasComp<ContainedComponent>(uid))
+            if (HasComp<ContainedComponent>(uid))
                 continue;
 
-            var center = transform.Position + light.Offset;
-            var radius = light.Radius;
+            var ev = _drawingEvent;
+            ev.Handled = false;
+            ev.Enabled = light.Enabled;
+            ev.Center = transform.Position + light.Offset;
+            ev.Color = light.Color;
+            ev.Radius = light.Radius;
+            ev.Intensity = light.Intensity;
+            ev.Rotation = 0f;
+            ev.Animated = false;
+            RaiseEvent(uid, ev);
+
+            if (!ev.Enabled || ev.Radius <= 0f || ev.Intensity <= 0f)
+                continue;
+
+            var center = ev.Center;
+            var radius = ev.Radius;
             if (center.X + radius < bounds.Left || center.X - radius > bounds.Right
                 || center.Y + radius < bounds.Top || center.Y - radius > bounds.Bottom)
                 continue;
@@ -71,7 +87,7 @@ public sealed partial class LightingSystem : EntitySystem, ILightRenderer
             if (!string.IsNullOrEmpty(light.Mask) && GetMask(light.Mask) is { } found)
                 (mask, region) = found;
 
-            var rotation = light.Rotation + (light.RotatesWithTransform ? transform.Angle : 0f);
+            var rotation = light.Rotation + ev.Rotation + (light.RotatesWithTransform ? transform.Angle : 0f);
             var halfCone = MathHelper.ToRadians(Math.Clamp(light.ConeAngle, 0f, 360f)) * 0.5f;
 
             lights.Add(new LightDraw
@@ -80,8 +96,9 @@ public sealed partial class LightingSystem : EntitySystem, ILightRenderer
                 Center = center,
                 Radius = radius,
                 Rotation = rotation,
-                Color = light.Color,
-                Brightness = light.Intensity * _lighting.LightIntensity,
+                Color = ev.Color,
+                Brightness = ev.Intensity * _lighting.LightIntensity,
+                Animated = ev.Animated,
                 HalfCone = halfCone,
                 ConeSoftness = Math.Clamp(light.ConeSoftness, 0f, 1f),
                 Falloff = FalloffScalar(light.Falloff),

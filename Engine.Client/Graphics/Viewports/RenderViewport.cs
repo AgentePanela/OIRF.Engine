@@ -69,6 +69,14 @@ public sealed class RenderViewport : IDisposable
     public bool LightingEnabled { get; set; } = true;
 
     /// <summary>
+    /// Off keeps this viewport out of the bloom (light.bloom)
+    /// </summary>
+    public bool BloomEnabled { get; set; } = true;
+
+    // half, quarter and eighth of the target, two of each to blur from one into the other
+    private readonly RenderTarget2D?[] _bloomTargets = new RenderTarget2D?[6];
+
+    /// <summary>
     /// The light of the last frame.
     /// </summary>
     public RenderTarget2D? LightTarget { get; private set; }
@@ -266,10 +274,41 @@ public sealed class RenderViewport : IDisposable
         static int RoundUp(int value) => (value + LightTargetStep - 1) / LightTargetStep * LightTargetStep;
     }
 
+    internal RenderTarget2D?[] EnsureBloomTargets(GraphicsDevice device)
+    {
+        for (var i = 0; i < _bloomTargets.Length; i++)
+        {
+            var divisor = 2 << (i / 2);
+            var width = Math.Max(1, TargetSize.X / divisor);
+            var height = Math.Max(1, TargetSize.Y / divisor);
+
+            if (_bloomTargets[i] is { IsDisposed: false } target && target.Width == width && target.Height == height)
+                continue;
+
+            _bloomTargets[i]?.Dispose();
+            _bloomTargets[i] = new RenderTarget2D(device, width, height, false, SurfaceFormat.Color, DepthFormat.None);
+        }
+
+        return _bloomTargets;
+    }
+
     internal long TargetBytes
         => TargetSize.X * (long)TargetSize.Y * 8 * ((Target is null ? 0 : 1) + (_scratch is null ? 0 : 1))
            + (LightTarget is { } light ? light.Width * (long)light.Height * 4 : 0)
-           + (FovTarget is { } fov ? fov.Width * (long)fov.Height * 4 : 0);
+           + (FovTarget is { } fov ? fov.Width * (long)fov.Height * 4 : 0)
+           + BloomBytes;
+
+    private long BloomBytes
+    {
+        get
+        {
+            var bytes = 0L;
+            foreach (var target in _bloomTargets)
+                bytes += target is null ? 0 : target.Width * (long)target.Height * 4;
+
+            return bytes;
+        }
+    }
 
     public void Dispose()
     {
@@ -283,5 +322,11 @@ public sealed class RenderViewport : IDisposable
         FovTarget?.Dispose();
         FovTarget = null;
         HadFov = false;
+
+        for (var i = 0; i < _bloomTargets.Length; i++)
+        {
+            _bloomTargets[i]?.Dispose();
+            _bloomTargets[i] = null;
+        }
     }
 }

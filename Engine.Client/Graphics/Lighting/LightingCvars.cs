@@ -47,6 +47,21 @@ public static class LightingCvars
     public static readonly CVarDef<float> StaticDelay =
         CVarDef.Create("light.static-delay", 0.5f);
 
+    public static readonly CVarDef<bool> Bloom =
+        CVarDef.Create("light.bloom", false);
+
+    /// <summary>
+    /// 0 to 1, the brightness the bloom glow starts at.
+    /// </summary>
+    public static readonly CVarDef<float> BloomThreshold =
+        CVarDef.Create("light.bloom-threshold", 0.8f);
+
+    public static readonly CVarDef<float> BloomIntensity =
+        CVarDef.Create("light.bloom-intensity", 0.5f);
+
+    public static readonly CVarDef<bool> DebugBase =
+        CVarDef.Create("light.debug-base", false, CVar.NOSAVE);
+
     public static readonly CVarDef<bool> DebugOccluders =
         CVarDef.Create("light.occluder-overlay", false, CVar.NOSAVE);
     

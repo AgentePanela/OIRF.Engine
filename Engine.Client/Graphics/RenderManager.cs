@@ -4,6 +4,7 @@ using Engine.Client.Assets.Atlas;
 using Engine.Client.Graphics.Batching;
 using Engine.Client.Graphics.Fonts;
 using Engine.Client.Graphics.Shaders;
+using Engine.Shared.Graphics;
 using Engine.Shared.IoC;
 using FontStashSharp;
 using Microsoft.Xna.Framework;
@@ -77,6 +78,7 @@ public sealed partial class RenderManager : IRenderManager
         _textRenderer = new TextRenderer(GameClient.GraphicsDevice, _batcher);
         InitLighting();
         InitFov();
+        InitBloom();
         SyncMainViewport();
     }
 
@@ -280,6 +282,9 @@ public sealed partial class RenderManager : IRenderManager
             _batcher.Lighting = command.Lighting;
             if (!command.Lit)
                 _batcher.Lighting.Emission = 1f;
+
+            if (_collectLightBases && _batcher.Lighting is { Mode: not LightBaseMode.Pixel, Emission: < 1f })
+                _lightBases.Add(_batcher.Lighting.Base);
 
             if (command.Kind == DrawCommandType.Sprite)
             {

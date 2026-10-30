@@ -123,6 +123,7 @@ public sealed partial class LightingSystem
 
         _spriteLightDraws.Clear();
         _spriteLights.CollectLights(Union(_areas), _spriteLightDraws);
+        stats.SpriteLights = _spriteLightDraws.Count;
 
         // an occluder that changed changes the shadows of the lights that reach it
         _changes.Clear();
@@ -158,7 +159,9 @@ public sealed partial class LightingSystem
             }
 
             state.Seen = _frame;
-            state.IsStatic = settings.Cache && now - state.ChangedAt >= settings.StaticDelay;
+            state.IsStatic = settings.Cache && !light.Animated && now - state.ChangedAt >= settings.StaticDelay;
+            if (light.Animated)
+                stats.AnimatedLights++;
 
             if (!state.IsStatic)
             {
@@ -214,6 +217,18 @@ public sealed partial class LightingSystem
         stats.ShadowSegments += _shadowBatch.Count;
         stats.CacheBytes = source.Bytes;
         _shadowBatch.Count = 0;
+    }
+
+    internal void CollectPages(List<(string Name, Texture2D Page)> pages)
+    {
+        for (var i = 0; i < _staticAtlas.Pages.Count; i++)
+            pages.Add(($"Static {i}", _staticAtlas.Pages[i]));
+
+        for (var i = 0; i < _dynamicAtlas.Pages.Count; i++)
+            pages.Add(($"Dynamic {i}", _dynamicAtlas.Pages[i]));
+
+        for (var i = 0; i < _chunks.Pages.Count; i++)
+            pages.Add(($"Chunks {i}", _chunks.Pages[i]));
     }
 
     void ILightRenderer.Composite(LightMapLayout layout, Matrix lightView)

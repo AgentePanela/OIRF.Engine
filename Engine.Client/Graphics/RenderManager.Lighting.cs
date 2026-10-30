@@ -76,6 +76,11 @@ public sealed partial class RenderManager
     private bool _lightCache;
     private float _lightStaticDelay;
     private float _overbright = 1f;
+    private bool _lightDebugBase;
+
+    // light.debug-base
+    private readonly HashSet<Vector2> _lightBases = new();
+    private bool _collectLightBases;
 
     // what the light map of every lit viewport covers this frame
     private readonly Dictionary<RenderViewport, LightMapLayout> _lightLayouts = new();
@@ -91,6 +96,7 @@ public sealed partial class RenderManager
         _cfg.Subs(LightingCvars.Dither, v => _lightDither = v ? 1f : 0f);
         _cfg.Subs(LightingCvars.Cache, v => _lightCache = v);
         _cfg.Subs(LightingCvars.StaticDelay, v => _lightStaticDelay = MathF.Max(v, 0f));
+        _cfg.Subs(LightingCvars.DebugBase, v => _lightDebugBase = v);
 
         // 0 is what turns the snap off in the shader
         _cfg.Subs(LightingCvars.Pixelated, _ => UpdatePixelSize());
@@ -190,6 +196,14 @@ public sealed partial class RenderManager
         var lightView = Matrix.CreateTranslation(-bounds.X, -bounds.Y, 0f)
                         * Matrix.CreateScale(layout.Scale, layout.Scale, 1f);
 
+        if (_lightDebugBase)
+        {
+            DrawBaseStripes(bounds, lightView);
+            FinishLightMap(viewport, layout, target);
+            _frameStats.Light.LightMapMs += Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+            return true;
+        }
+
         lights.Composite(layout, lightView);
 
         // what the content adds to the light, in world space and adding up like the lights
@@ -200,6 +214,14 @@ public sealed partial class RenderManager
         _transformOverride = null;
         BlendState = blend;
 
+        FinishLightMap(viewport, layout, target);
+        _frameStats.Light.LightMapMs += Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        return true;
+    }
+
+    private void FinishLightMap(RenderViewport viewport, LightMapLayout layout, RenderTarget2D target)
+    {
+        var bounds = layout.Bounds;
         viewport.LightMapBounds = bounds;
         viewport.LightMapSize = layout.Size;
         viewport.LightMapTransform = new Vector4(
@@ -208,8 +230,54 @@ public sealed partial class RenderManager
         viewport.WasLit = true;
 
         _frameStats.Light.LightMapTexels += layout.Size.X * layout.Size.Y;
-        _frameStats.Light.LightMapMs += Stopwatch.GetElapsedTime(start).TotalMilliseconds;
-        return true;
+    }
+
+    private const float StripeHeight = 16f;
+    private const float StripeWidth = 64f;
+
+    private static readonly Color[] StripeColors =
+    [
+        new(255, 80, 80), new(255, 180, 60), new(240, 240, 70), new(90, 230, 90),
+        new(70, 220, 230), new(80, 120, 255), new(190, 90, 255), new(255, 110, 200),
+    ];
+
+    // light.debug-base
+    private void DrawBaseStripes(RectangleF bounds, Matrix lightView)
+    {
+        _batcher.Begin(lightView, BlendState.Opaque, (float)GameClient.Timing.TotalTime);
+        _batcher.SetState(_shaders.UnshadedInstance, SamplerState.PointClamp);
+
+        var firstRow = (int)MathF.Floor(bounds.Top / StripeHeight);
+        var lastRow = (int)MathF.Ceiling(bounds.Bottom / StripeHeight);
+        var firstColumn = (int)MathF.Floor(bounds.Left / StripeWidth);
+        var lastColumn = (int)MathF.Ceiling(bounds.Right / StripeWidth);
+
+        for (var row = firstRow; row < lastRow; row++)
+        {
+            var color = StripeColors[((row % StripeColors.Length) + StripeColors.Length) % StripeColors.Length];
+            for (var column = firstColumn; column < lastColumn; column++)
+            {
+                var shade = (column & 1) == 0 ? 1f : 0.6f;
+                _batcher.Draw(_batcher.White, new Vector2(column * StripeWidth, row * StripeHeight),
+                    new Rectangle(0, 0, 1, 1), new Color(color.ToVector3() * shade / _overbright), 0f, Vector2.Zero,
+                    new Vector2(StripeWidth, StripeHeight), SpriteEffects.None);
+            }
+        }
+
+        _batcher.Flush();
+    }
+
+    // light.debug-base
+    private void DrawLightBases()
+    {
+        if (_lightBases.Count == 0)
+            return;
+
+        foreach (var point in _lightBases)
+            DrawCircle(point, 2f, Color.White, Color.Black, 1f);
+
+        _lightBases.Clear();
+        DrawQueue();
     }
 
     /// <summary>

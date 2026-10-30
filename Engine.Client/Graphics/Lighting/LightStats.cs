@@ -15,6 +15,13 @@ public sealed class LightStats
     public int DynamicLights;
 
     /// <summary>
+    /// Lights a <see cref="LightDrawingEvent"/> handler animates.
+    /// </summary>
+    public int AnimatedLights;
+
+    public int SpriteLights;
+
+    /// <summary>
     /// Lights drawn with their shadows this frame
     /// </summary>
     public int LightsDrawn;
@@ -25,6 +32,8 @@ public sealed class LightStats
     public int ShadowSegments;
 
     public double FovMs;
+
+    public double BloomMs;
     public int ViewportsWithFov;
 
     /// <summary>
@@ -75,9 +84,9 @@ public sealed class LightStats
     internal void Reset()
     {
         CacheEnabled = ChunksInUse = false;
-        Lights = StaticLights = DynamicLights = LightsDrawn = ShadowSegments = 0;
+        Lights = StaticLights = DynamicLights = AnimatedLights = SpriteLights = LightsDrawn = ShadowSegments = 0;
         ViewportsWithFov = FovSegments = 0;
-        FovMs = 0;
+        FovMs = BloomMs = 0;
         ChunksResident = ChunkCapacity = ChunksRebuilt = 0;
         StaticAtlasPages = DynamicAtlasPages = LightMapTexels = 0;
         CacheBytes = 0;
@@ -90,11 +99,14 @@ public sealed class LightStats
         Lights = other.Lights;
         StaticLights = other.StaticLights;
         DynamicLights = other.DynamicLights;
+        AnimatedLights = other.AnimatedLights;
+        SpriteLights = other.SpriteLights;
         LightsDrawn = other.LightsDrawn;
         ShadowSegments = other.ShadowSegments;
         ViewportsWithFov = other.ViewportsWithFov;
         FovSegments = other.FovSegments;
         FovMs = other.FovMs;
+        BloomMs = other.BloomMs;
         ChunksResident = other.ChunksResident;
         ChunkCapacity = other.ChunkCapacity;
         ChunksRebuilt = other.ChunksRebuilt;

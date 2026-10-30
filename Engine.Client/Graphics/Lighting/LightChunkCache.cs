@@ -40,6 +40,8 @@ internal sealed class LightChunkCache : IDisposable
     }
 
     private readonly List<RenderTarget2D> _pages = new();
+
+    public IReadOnlyList<RenderTarget2D> Pages => _pages;
     private readonly Dictionary<(int X, int Y), Chunk> _resident = new();
     private readonly Stack<int> _free = new();
     private readonly HashSet<(int X, int Y)> _want = new();

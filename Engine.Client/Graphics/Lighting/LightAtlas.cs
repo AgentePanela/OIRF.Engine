@@ -32,6 +32,11 @@ internal struct LightDraw
     public float SourceRadius;
 
     /// <summary>
+    /// Changes every frame (<see cref="LightDrawingEvent.Animated"/>), never kept.
+    /// </summary>
+    public bool Animated;
+
+    /// <summary>
     /// The atlas page it is drawn in, -1 when there was no room.
     /// </summary>
     public int Page;
@@ -59,6 +64,8 @@ internal sealed class LightAtlas : IDisposable
     private const int Step = 32;
 
     private readonly List<RenderTarget2D> _pages = new();
+
+    public IReadOnlyList<RenderTarget2D> Pages => _pages;
 
     // filling a page in rows, the tallest square of the row sets its height
     private int _page;

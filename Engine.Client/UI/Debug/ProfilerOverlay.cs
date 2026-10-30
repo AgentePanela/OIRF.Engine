@@ -257,10 +257,12 @@ public sealed class ProfilerOverlay : Overlay
         _lightStatsLabel.Text =
             $"Time: {FormatMs(light.PrepareMs + light.LightMapMs)} (lights {FormatMs(light.PrepareMs)} | " +
             $"light maps {FormatMs(light.LightMapMs)})\n" +
-            $"Lights: {light.Lights} ({light.StaticLights} static, {light.DynamicLights} dynamic) | " +
-            $"drawn this frame: {light.LightsDrawn}\n" +
+            $"Lights: {light.Lights} ({light.StaticLights} static, {light.DynamicLights} dynamic, " +
+            $"{light.AnimatedLights} animated) | drawn this frame: {light.LightsDrawn}\n" +
+            $"Sprite lights: {light.SpriteLights}\n" +
             $"Shadow edges drawn: {light.ShadowSegments}\n" +
             $"Field of view: {fov}\n" +
+            $"Bloom: {(light.BloomMs > 0 ? FormatMs(light.BloomMs) : "off")}\n" +
             $"Chunks: {chunks}\n" +
             $"Atlas pages: {light.StaticAtlasPages} static, {light.DynamicAtlasPages} dynamic | " +
             $"Memory: {light.CacheBytes / (1024.0 * 1024.0):0.0}MB\n" +

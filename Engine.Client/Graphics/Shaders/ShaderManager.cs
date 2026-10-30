@@ -40,6 +40,9 @@ public sealed class ShaderManager
     private ShaderInstance? _lightInstance;
     private ShaderInstance? _fovInstance;
     private ShaderInstance? _glowInstance;
+    private ShaderInstance? _bloomExtractInstance;
+    private ShaderInstance? _bloomBlurInstance;
+    private ShaderInstance? _bloomAddInstance;
 
     /// <summary>
     /// What a sprite with no shader of its own is drawn with while it writes a mask.
@@ -64,6 +67,15 @@ public sealed class ShaderManager
 
     internal ShaderInstance? GlowInstance
         => _glowInstance ??= CreateEngineInstance("SpriteGlow", lit: false, ShaderBlend.Additive);
+
+    internal ShaderInstance? BloomExtractInstance
+        => _bloomExtractInstance ??= CreateEngineInstance("BloomExtract", lit: false, ShaderBlend.Alpha);
+
+    internal ShaderInstance? BloomBlurInstance
+        => _bloomBlurInstance ??= CreateEngineInstance("BloomBlur", lit: false, ShaderBlend.Alpha);
+
+    internal ShaderInstance? BloomAddInstance
+        => _bloomAddInstance ??= CreateEngineInstance("BloomAdd", lit: false, ShaderBlend.Additive);
 
     private ShaderInstance? CreateEngineInstance(string file, bool lit, ShaderBlend blend)
         => _effects.TryGetValue(file, out var effect)

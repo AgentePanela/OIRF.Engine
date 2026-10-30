@@ -151,12 +151,18 @@ public sealed partial class RenderManager
         DrawOverlays(viewport, RenderStage.World, dt);
 
         var items = _queue.Count;
+        _collectLightBases = lit && _lightDebugBase;
         DrawQueue();
+        _collectLightBases = false;
 
         UseLightMap(null);
 
         // over the world and light
         DrawFov(viewport);
+
+        ApplyBloom(viewport);
+
+        DrawLightBases();
 
         DrawOverlays(viewport, RenderStage.AfterLighting, dt);
 

@@ -7,7 +7,7 @@ A shader has two halves:
 
 Sprites and tilemaps never name a `.fx` file, they name a shader prototype.
 
-The engine ships no shaders of its own, only the header every shader includes (`Sprite.fxh`). Every shader named in this document (`Grayscale`, `Tint`, `Outline`, `Dissolve`...) is an example of one you would write.
+The engine ships no shaders for you to use, only the header every shader includes (`Sprite.fxh`); the ones it draws its own things with (lights, field of view, bloom) are internal. Every shader named in this document (`Grayscale`, `Tint`, `Outline`, `Dissolve`...) is an example of one you would write.
 
 ```
 Resources/
@@ -56,7 +56,7 @@ That is a complete shader. Three rules:
 
 - **Always start with `#include "Sprite.fxh"`.** It is the engine's header: it declares the texture, the vertex shader and everything below. Do not declare `SpriteTexture`, a sampler, a vertex shader or the `#if OPENGL` block yourself.
 - **The pixel shader takes a `SpritePixel`** and returns the color.
-- **Always end with `SPRITE_TECHNIQUE(YourPixelShader)`.** Do not write a `technique` block by hand: the sprite would be drawn without the engine's vertex shader, and `LocalUV` and the custom values would be garbage.
+- **Always end with `SPRITE_TECHNIQUE(YourPixelShader)`** (or `SPRITE_TECHNIQUE_UNLIT`, see [Lighting](#lighting)). Do not write a `technique` block by hand: the sprite would be drawn without the engine's vertex shader and its lighting, and `LocalUV` and the custom values would be garbage.
 
 Shaders are compiled when the game loads (see [Building](#building)). When one does not compile, the log says so and everything using it is drawn with no shader.
 
@@ -72,6 +72,7 @@ Shaders are compiled when the game loads (see [Building](#building)). When one d
 | `UV` | Where to sample the texture. Sprites share atlas pages, so this is **not** 0..1 over the sprite |
 | `LocalUV` | 0..1 over the sprite itself: `(0, 0)` is its top left, `(1, 1)` its bottom right. Use this for anything positioned on the sprite (a line across it, a gradient, a cut) |
 | `Custom0`, `Custom1` | Two `float4` each sprite carries on its own. See [per sprite parameters](#3-per-sprite-the-cheap-way) |
+| `Light` | Filled by the engine for the lighting. Leave it alone |
 
 A flipped sprite has its `LocalUV` flipped too: it follows the texture.
 
@@ -81,6 +82,13 @@ A flipped sprite has its `LocalUV` flipped too: it follows the texture.
 |---|---|
 | `SampleSprite(input)` | The sprite as it would be drawn with no shader: texture times tint |
 | `SpriteTextureSampler` | The texture being drawn, for sampling somewhere else than `input.UV` (`tex2D(SpriteTextureSampler, uv)`) |
+
+The engine binds the sprite's texture to sampler register `s0` and the light map to `s1`; `s2` is kept for the engine too. A texture of your own goes in `s3` or above:
+
+```hlsl
+Texture2D NoiseTexture;
+sampler2D NoiseSampler : register(s3) = sampler_state { Texture = <NoiseTexture>; };
+```
 
 ### Values the engine fills in
 
@@ -389,13 +397,17 @@ For anything more than "run the frame through a shader" (only part of the screen
 
 ## Lighting
 
-A shader ignores the lighting when its prototype says `lit: false`. Nothing in the `.fx` decides it: the simplest unlit shader is a `.fx` that only returns `SampleSprite(input)`, with a prototype like this.
+`SPRITE_TECHNIQUE` lights whatever your pixel shader returns: it is multiplied by the light map where the sprite reads it (see [Lighting](Lighting.md#how-sprites-take-the-light)). Your shader works on the unlit color and never deals with the light.
+
+A shader ignores the lighting when its prototype says `lit: false`, or the sprite is `unshaded`. The simplest unlit shader is a `.fx` that only returns `SampleSprite(input)`, with a prototype like this:
 
 ```yaml
 - type: shader
   id: Unshaded
   lit: false
 ```
+
+A shader that must never be lit, whatever its prototype says (a mask, a screen effect), ends with `SPRITE_TECHNIQUE_UNLIT(YourPixelShader)` instead: what it returns is what is drawn.
 
 ---
 
@@ -414,5 +426,5 @@ It targets `DesktopGL` by default.
 When the build itself breaks, loading logs `Building the shaders failed` and no shader at all is loaded. A shader that is missing afterwards is logged the first time something asks for it (`uses 'X.fx', which is not a compiled shader`). Common causes:
 
 - A `technique` block written by hand, or no `SPRITE_TECHNIQUE` at the end.
-- Declaring something the header already declares (`SpriteTexture`, `TexelSize`, `Time`...).
+- Declaring something the header already declares (`SpriteTexture`, `TexelSize`, `Time`, `LightMap`...), or a sampler on `s0`, `s1` or `s2`.
 - A parameter listed under `params` that the `.fx` does not have: this one is a warning (`sets 'X', which 'Y.fx' does not have`), usually a typo or a per sprite parameter missing from `perSprite`.
