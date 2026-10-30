@@ -31,6 +31,7 @@ internal sealed class SerializerManager : ISerializationManager
         */
 #pragma warning disable SYSLIB0050
         _types = assemblies
+            .Where(IsShared)
             .SelectMany(a => a.GetTypes())
             .Where(t => t.IsSerializable
                 && !t.IsAbstract
@@ -67,17 +68,26 @@ internal sealed class SerializerManager : ISerializationManager
         return _hash;
     }
 
+    // a type of one side only would shift the ids of the other side
+    private bool IsShared(Assembly assembly)
+    {
+        if (assembly.GetName().Name is not (ClientAssembly or ServerAssembly)
+           && !assembly.GetReferencedAssemblies().Any(r => r.Name is ClientAssembly or ServerAssembly))
+            return true;
+        
+        Log.Warn($"assembly '{assembly.GetName().Name}' will not register any networked serializable type since it is not shared!");
+        return false;
+    }
+
+    private const string ClientAssembly = "Engine.Client";
+    private const string ServerAssembly = "Engine.Server";
+
     private string BuildHash()
     {
         // net serializer always return a empty hash :(
         var sb = new StringBuilder();
-        foreach (var type in _types)
-        {
-            if (type.IsEnum)
-                continue;
-
-            sb.Append(type.FullName).Append(';');
-        }
+        foreach (var (type, id) in Instance.GetTypeMap().OrderBy(p => p.Value)) // the ids it gave is also empty, enums and arrays too
+            sb.Append(id).Append(' ').Append(type.FullName).Append(';');
 
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString())));
     }
