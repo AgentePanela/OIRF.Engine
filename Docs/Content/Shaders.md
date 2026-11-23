@@ -7,7 +7,7 @@ A shader has two halves:
 
 Sprites and tilemaps never name a `.fx` file, they name a shader prototype.
 
-The engine ships no shaders for you to use, only the header every shader includes (`Sprite.fxh`); the ones it draws its own things with (lights, field of view, bloom) are internal. Every shader named in this document (`Grayscale`, `Tint`, `Outline`, `Dissolve`...) is an example of one you would write.
+The engine ships no shaders for you to use, only the header every shader includes (`Sprite.fxh`) and one for reading the field of view (`FovMask.fxh`, see [Lighting](Lighting.md#a-field-of-view-of-your-own)); the ones it draws its own things with (lights, field of view, bloom) are internal. Every shader named in this document (`Grayscale`, `Tint`, `Outline`, `Dissolve`...) is an example of one you would write.
 
 ```
 Resources/
@@ -83,7 +83,7 @@ A flipped sprite has its `LocalUV` flipped too: it follows the texture.
 | `SampleSprite(input)` | The sprite as it would be drawn with no shader: texture times tint |
 | `SpriteTextureSampler` | The texture being drawn, for sampling somewhere else than `input.UV` (`tex2D(SpriteTextureSampler, uv)`) |
 
-The engine binds the sprite's texture to sampler register `s0` and the light map to `s1`; `s2` is kept for the engine too. A texture of your own goes in `s3` or above:
+The engine binds the sprite's texture to sampler register `s0`, the light map to `s1` and the field of view to `s2` (`FovMask.fxh`). A texture of your own goes in `s3` or above:
 
 ```hlsl
 Texture2D NoiseTexture;
@@ -426,5 +426,5 @@ It targets `DesktopGL` by default.
 When the build itself breaks, loading logs `Building the shaders failed` and no shader at all is loaded. A shader that is missing afterwards is logged the first time something asks for it (`uses 'X.fx', which is not a compiled shader`). Common causes:
 
 - A `technique` block written by hand, or no `SPRITE_TECHNIQUE` at the end.
-- Declaring something the header already declares (`SpriteTexture`, `TexelSize`, `Time`, `LightMap`...), or a sampler on `s0`, `s1` or `s2`.
+- Declaring something the header already declares (`SpriteTexture`, `TexelSize`, `Time`, `LightMap`, `FovMask`...), or a sampler on `s0`, `s1` or `s2`.
 - A parameter listed under `params` that the `.fx` does not have: this one is a warning (`sets 'X', which 'Y.fx' does not have`), usually a typo or a per sprite parameter missing from `perSprite`.

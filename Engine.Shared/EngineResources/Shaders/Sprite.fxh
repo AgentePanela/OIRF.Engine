@@ -27,8 +27,8 @@ float2 ScreenSize = float2(1280.0, 720.0);
 
 Texture2D SpriteTexture;
 
-// The renderer binds the sprite's texture to register s0 and the light map to s1 (TextureLighting.fxh). s2 is kept
-// for the engine too: a texture of your own goes in s3 or above.
+// The renderer binds the sprite's texture to register s0, the light map to s1 (TextureLighting.fxh) and the field of
+// view to s2 (FovMask.fxh): a texture of your own goes in s3 or above.
 sampler2D SpriteTextureSampler : register(s0) = sampler_state
 {
     Texture = <SpriteTexture>;

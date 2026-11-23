@@ -103,11 +103,34 @@ internal sealed class SpriteBatcher
     public Vector4 LightParams;
 
     /// <summary>
+    /// The field of view of the viewport being drawn,
+    /// </summary>
+    public Texture2D? FovMask;
+
+    /// <summary>
+    /// Takes a world position to its uv on <see cref="FovMask"/>: uv = position * xy + zw.
+    /// </summary>
+    public Vector4 FovMaskTransform;
+
+    /// <summary>
+    /// cvar fov.color (premultiplied)
+    /// </summary>
+    public Vector4 FovColor;
+
+    /// <summary>
+    /// The eye (xy), how far it sees (z, 0 for no limit) and how wide that edge fades (w)
+    /// </summary>
+    public Vector4 FovEye;
+
+    /// <summary>
     /// What quads with no shader of their own are drawn with. The plain SpriteEffect, which ignores the light, while
     /// null (before the shaders are loaded).
     /// </summary>
     public ShaderInstance? DefaultShader;
     public Texture2D White { get; }
+
+    // all seen, for a shader that reads the field of view where there is none
+    private readonly Texture2D _clear;
 
     private static readonly Vector4 NoLightParams = new(1f, 0f, 1f, 0f);
 
@@ -124,6 +147,9 @@ internal sealed class SpriteBatcher
 
         White = new Texture2D(device, 1, 1);
         White.SetData(new[] { Color.White });
+
+        _clear = new Texture2D(device, 1, 1);
+        _clear.SetData(new[] { Color.Transparent });
 
         for (var i = 0; i < MaxQuads; i++)
         {
@@ -384,6 +410,7 @@ internal sealed class SpriteBatcher
         Effect effect;
         var shader = _shader ?? DefaultShader;
         var readsLight = false;
+        var readsFov = false;
         if (shader?.Effect is { } custom)
         {
             effect = custom;
@@ -398,6 +425,15 @@ internal sealed class SpriteBatcher
                 lightMap.SetValue(LightMap ?? White);
                 shader.LightMapTransformParam?.SetValue(LightMapTransform);
                 shader.LightParamsParam?.SetValue(LightMap is null ? NoLightParams : LightParams);
+            }
+
+            if (shader.FovMaskParam is { } fovMask)
+            {
+                readsFov = true;
+                fovMask.SetValue(FovMask ?? _clear);
+                shader.FovMaskTransformParam?.SetValue(FovMask is null ? Vector4.Zero : FovMaskTransform);
+                shader.FovColorParam?.SetValue(FovColor);
+                shader.FovEyeParam?.SetValue(FovMask is null ? Vector4.Zero : FovEye);
             }
         }
         else
@@ -426,6 +462,8 @@ internal sealed class SpriteBatcher
             _device.SamplerStates[0] = _sampler;
             if (readsLight)
                 _device.SamplerStates[1] = SamplerState.LinearClamp;
+            if (readsFov)
+                _device.SamplerStates[2] = SamplerState.PointClamp;
 
             _device.DrawUserIndexedPrimitives(PrimitiveType.TriangleList, _vertices, 0, _quads * 4, _indices, 0,
                 _quads * 2, SpriteVertex.Declaration);

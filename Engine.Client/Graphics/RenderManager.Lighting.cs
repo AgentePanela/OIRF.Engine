@@ -48,11 +48,15 @@ internal interface ILightRenderer
     void Composite(LightMapLayout layout, Matrix lightView);
 
     /// <summary>
-    /// Draws into the alpha of the target that is set what the occluders hide from
-    /// <paramref name="eye"/> - Return False when the eye is nowhere to see from.
+    /// Where eye is in the world. False when it is nowhere to see from.
     /// </summary>
-    bool DrawFovMask(EntityUid eye, Vector2 offset, RectangleF bounds, float scale, Point targetSize, LightStats stats,
-        out Vector2 eyePosition);
+    bool TryGetEyePosition(EntityUid eye, out Vector2 position);
+
+    /// <summary>
+    /// Draws into the alpha of the target that is set what the occluders hide from <paramref name="from"/>, the
+    /// target covering <paramref name="bounds"/> at <paramref name="scale"/> pixels per world unit.
+    /// </summary>
+    void DrawFovShadows(Vector2 from, float radius, RectangleF bounds, float scale, Point targetSize, LightStats stats);
 }
 
 public sealed partial class RenderManager

@@ -35,11 +35,6 @@ public sealed partial class OccluderComponent : Component
     [NetField] public partial Vector2 Size { get; set; } = new(64, 64);
 
     /// <summary>
-    /// For the field of view only!
-    /// </summary>
-    [NetField] public partial float FovHeight { get; set; } = 0f;
-
-    /// <summary>
     /// How much of light it stops, 0 to 1.
     /// </summary>
     [NetField] public partial float Opacity { get; set; } = 1f;

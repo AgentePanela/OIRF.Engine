@@ -138,6 +138,7 @@ public sealed partial class RenderManager
 
         // the world reads the light map while it is drawn
         UseLightMap(lit ? viewport : null);
+        UseFovMask(viewport);
 
         DrawOverlays(viewport, RenderStage.BelowWorld, dt);
 
@@ -158,7 +159,8 @@ public sealed partial class RenderManager
         UseLightMap(null);
 
         // over the world and light
-        DrawFov(viewport);
+        ComposeFov(viewport);
+        UseFovMask(null);
 
         ApplyBloom(viewport);
 

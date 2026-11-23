@@ -61,6 +61,11 @@ public sealed class ShaderInstance : IDisposable
     internal readonly EffectParameter? LightMapTransformParam;
     internal readonly EffectParameter? LightParamsParam;
 
+    internal readonly EffectParameter? FovMaskParam;
+    internal readonly EffectParameter? FovMaskTransformParam;
+    internal readonly EffectParameter? FovColorParam;
+    internal readonly EffectParameter? FovEyeParam;
+
     private readonly IReadOnlyDictionary<string, SpriteParamSlot> _spriteSlots;
     private readonly ShaderManager? _owner;
 
@@ -85,6 +90,10 @@ public sealed class ShaderInstance : IDisposable
         LightMapParam = effect.Parameters["LightMap"];
         LightMapTransformParam = effect.Parameters["LightMapTransform"];
         LightParamsParam = effect.Parameters["LightParams"];
+        FovMaskParam = effect.Parameters["FovMask"];
+        FovMaskTransformParam = effect.Parameters["FovMaskTransform"];
+        FovColorParam = effect.Parameters["FovColor"];
+        FovEyeParam = effect.Parameters["FovEye"];
     }
 
     /// <summary>

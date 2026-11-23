@@ -1,9 +1,9 @@
 using System;
 using System.Diagnostics;
 using Engine.Client.Graphics.Lighting;
+using Engine.Client.Graphics.Shaders;
 using Engine.Shared.Common;
 using Engine.Shared.Extensions;
-using Engine.Shared.Graphics;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -12,6 +12,12 @@ public sealed partial class RenderManager
 {
     private int _maxFovSize => _lightMaxSize;
     private Vector4 _fovColor;
+
+    // the mask being built
+    private bool _buildingFov;
+    private RectangleF _fovBounds;
+    private float _fovScale;
+    private Point _fovTargetSize;
 
     private void InitFov()
     {
@@ -40,12 +46,13 @@ public sealed partial class RenderManager
         viewport.HadFov = false;
 
         if (!viewport.FovEnabled || viewport.Eye is not { } eye || LightRenderer is not { } lights
-            || GameClient.GameState != GameState.Running || _shaders.FovInstance is null)
+            || GameClient.GameState != GameState.Running || !lights.TryGetEyePosition(eye, out var eyePosition))
             return false;
 
         var start = Stopwatch.GetTimestamp();
         var device = GameClient.GraphicsDevice;
         var view = viewport.Camera.WorldBounds;
+        eyePosition += viewport.EyeOffset;
 
         // a pixel of the mask for every pixel of the screen
         var scale = viewport.RenderScale * viewport.Camera.Zoom;
@@ -69,13 +76,33 @@ public sealed partial class RenderManager
         // read by what was drawn before
         device.Textures[0] = null;
         device.Textures[1] = null;
-        device.Textures[3] = null;
+        device.Textures[2] = null;
         device.SetRenderTarget(target);
         device.Clear(Color.Transparent);
 
-        if (!lights.DrawFovMask(eye, viewport.EyeOffset, bounds, scale, new Point(target.Width, target.Height),
-                _frameStats.Light, out var eyePosition))
-            return false;
+        _buildingFov = true;
+        _fovBounds = bounds;
+        _fovScale = scale;
+        _fovTargetSize = new Point(target.Width, target.Height);
+
+        // what the renderer submits goes into the mask
+        (_queue, _overlayQueue) = (_overlayQueue, _queue);
+        var blend = BlendState;
+        BlendState = BlendState.Opaque;
+        _transformOverride = Matrix.CreateTranslation(-bounds.X, -bounds.Y, 0f) * Matrix.CreateScale(scale, scale, 1f);
+
+        try
+        {
+            viewport.Fov.BuildMask(new FovMaskContext(this, viewport, eye, eyePosition, bounds));
+            DrawQueue();
+        }
+        finally
+        {
+            _transformOverride = null;
+            BlendState = blend;
+            (_queue, _overlayQueue) = (_overlayQueue, _queue);
+            _buildingFov = false;
+        }
 
         viewport.FovMaskBounds = bounds;
         viewport.FovMaskSize = size;
@@ -90,32 +117,74 @@ public sealed partial class RenderManager
         return true;
     }
 
-    // Covers what the eye of the viewport does not see, over the world just drawn.
-    private void DrawFov(RenderViewport viewport)
+    // FovMaskContext.DrawShadows
+    internal void DrawFovShadows(Vector2 from, float radius)
     {
-        if (!viewport.HadFov || _shaders.FovInstance is not { Effect: { } effect } shader)
+        if (!_buildingFov || LightRenderer is not { } lights)
+            return;
+
+        lights.DrawFovShadows(from, radius, _fovBounds, _fovScale, _fovTargetSize, _frameStats.Light);
+    }
+
+    private void UseFovMask(RenderViewport? viewport)
+    {
+        if (viewport is not { HadFov: true } || viewport.FovTarget is not { } target)
+        {
+            _batcher.FovMask = null;
+            return;
+        }
+
+        _batcher.FovMask = target;
+        _batcher.FovMaskTransform = viewport.FovMaskTransform;
+        _batcher.FovColor = _fovColor;
+        _batcher.FovEye = new Vector4(viewport.FovEyePosition, viewport.FovRadius, viewport.FovRadiusSoftness);
+    }
+
+    // what is out of sight, over the world just drawn and lit
+    private void ComposeFov(RenderViewport viewport)
+    {
+        if (!viewport.HadFov)
             return;
 
         var start = Stopwatch.GetTimestamp();
+        viewport.Fov.Compose(new FovComposeContext(this, viewport, _fovColor, _shaders.FovInstance));
+        _frameStats.Light.FovMs += Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+    }
+
+    internal void DrawFovQuad(RenderViewport viewport, ShaderInstance shader, bool filter)
+    {
+        if (shader.IsDisposed)
+            return;
+
         var device = GameClient.GraphicsDevice;
+        Texture2D texture = _batcher.White;
+        var blend = BlendState.AlphaBlend;
 
-        effect.Parameters["FovMask"]?.SetValue(viewport.FovTarget);
-        effect.Parameters["FovMaskTransform"]?.SetValue(viewport.FovMaskTransform);
-        effect.Parameters["FovColor"]?.SetValue(_fovColor);
-        effect.Parameters["FovEye"]?.SetValue(new Vector4(viewport.FovEyePosition, viewport.FovRadius,
-            viewport.FovRadiusSoftness));
-        device.SamplerStates[3] = SamplerState.PointClamp;
+        if (filter)
+        {
+            texture = viewport.SwapTargets(device);
+            device.SetRenderTarget(viewport.Target);
+            blend = BlendState.Opaque;
+        }
 
-        // one quad over the view, each pixel reads the mask where it is
-        var view = viewport.Camera.WorldBounds;
-        _batcher.Begin(ComputeTransform(), BlendState.AlphaBlend, (float)GameClient.Timing.TotalTime);
+        // the corners of the target taken to the world
+        var view = viewport.GetViewMatrix();
+        var inverse = Matrix.Invert(view);
+        var size = viewport.TargetSize;
+
+        _batcher.Begin(view, blend, (float)GameClient.Timing.TotalTime);
         _batcher.SetState(shader, SamplerState.PointClamp);
-        _batcher.Lighting = new TextureLighting(LightBaseMode.Pixel, Vector2.Zero, 1f);
-        _batcher.Draw(_batcher.White, new Vector2(view.X, view.Y), new Rectangle(0, 0, 1, 1), Color.White, 0f,
-            Vector2.Zero, new Vector2(view.Width, view.Height), SpriteEffects.None);
+        _batcher.Custom0 = shader.DefaultCustom0;
+        _batcher.Custom1 = shader.DefaultCustom1;
+        _batcher.Lighting = TextureLighting.Unshaded;
+        _batcher.DrawQuad(texture,
+            Corner(0f, 0f), Corner(size.X, 0f), Corner(0f, size.Y), Corner(size.X, size.Y));
         _batcher.Flush();
         _batcher.Lighting = default;
+        _batcher.Custom0 = _batcher.Custom1 = default;
 
-        _frameStats.Light.FovMs += Stopwatch.GetElapsedTime(start).TotalMilliseconds;
+        VertexPositionColorTexture Corner(float x, float y)
+            => new(new Vector3(Vector2.Transform(new Vector2(x, y), inverse), 0f), Color.White,
+                new Vector2(x / size.X, y / size.Y));
     }
 }

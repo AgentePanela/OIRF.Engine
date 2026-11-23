@@ -124,6 +124,11 @@ public sealed class RenderViewport : IDisposable
     public bool FovEnabled { get; set; } = true;
 
     /// <summary>
+    /// How the field of view is worked out and drawn.
+    /// </summary>
+    public FovRenderer Fov { get; set; } = new ShadowFov();
+
+    /// <summary>
     /// How far the eye sees, 0 no limit.
     /// </summary>
     public float FovRadius { get; set; }
@@ -134,7 +139,7 @@ public sealed class RenderViewport : IDisposable
     public float FovRadiusSoftness { get; set; } = 32f;
 
     /// <summary>
-    /// What the eye did not see last frame, in the alpha (1 is hidden). Null until there is an eye. 
+    /// What the eye does not see this frame, in the alpha (1 is hidden). Null until there is an eye.
     /// </summary>
     public RenderTarget2D? FovTarget { get; private set; }
 

@@ -22,13 +22,13 @@ RenderManager.RenderFrame() ───────► SyncMainViewport(): fit the
   for each enabled viewport, main last (DrawViewport):
     Camera.CacheFrame()
     BuildLightMap() ─────────────────► its light map, overlays: LightMap
-    BuildFovMask() ──────────────────► what its eye does not see
+    BuildFovMask() ──────────────────► what its eye does not see (Fov.BuildMask)
     SetRenderTarget + Clear
     overlays: BelowWorld
     EntityManager.DrawSystems(ctx) ──► systems Submit() what that viewport sees
     overlays: World ─────────────────► into the same queue
     DrawQueue() ─────────────────────► sort, then batch; every sprite reads the light map
-    DrawFov() ───────────────────────► fov.color over what is out of sight
+    ComposeFov() ────────────────────► what is out of sight (Fov.Compose)
     ApplyBloom()
     overlays: AfterLighting
     overlays: Screen ────────────────► identity transform, pixels of the target
@@ -159,7 +159,11 @@ Sprites read it themselves. Every vertex carries a `Light` `Vector4` (`SpriteVer
 
 ### Field of view
 
-`BuildFovMask` draws, at screen density, the shadows of the viewport's eye into a mask of its own (`FovTarget`), with the same `ShadowBatch` and a source of size 0 (hard edges). Glass is left out, and the `fovHeight` of an occluder raises its box for this mask only. After `DrawQueue`, `Fov.fx` paints `fov.color` over the view where the mask says hidden, and the radius on top.
+The content facing side is in `Docs/Content/Lighting.md`. `RenderManager.Fov.cs` sizes the mask (`FovTarget`, world aligned, a pixel per pixel of the screen) and hands it to the viewport's `FovRenderer`; the default is `ShadowFov`.
+
+* **Mask.** `BuildFovMask` sets the mask as the target, cleared to all seen, and calls `Fov.BuildMask`. `DrawShadows` goes to `LightingSystem.Fov.cs`: the plain `CollectSegments` of the lights (the real outline, glass left out, an occluder the point is inside skipped), cached by point, reach and `OccluderSystem.OutlinesVersion`, drawn with the same `ShadowBatch` and a source of size 0 (hard edges), into the alpha only. What the renderer submits meanwhile goes through the same trick as the `LightMap` stage: the queue is swapped for the overlay one, the transform overridden with the view of the mask and the blend set to `Opaque`, then the queue is drawn after `BuildMask` returns.
+* **Binding.** Like the light map, the mask is bound per flush: `ShaderInstance` looks up `FovMask`, `FovMaskTransform`, `FovColor` and `FovEye` once, and `SpriteBatcher.Flush` sets them (`s2`, point clamp) for a shader that has them, from `SpriteBatcher.FovMask` and the rest. `UseFovMask` sets those from the start of the world queue until `ComposeFov` is done; the rest of the time a 1x1 transparent texture is bound, which reads as all seen.
+* **Compose.** After `DrawQueue`, before bloom, `Fov.Compose`. `DrawOver` and `Filter` draw one `DrawQuad` whose corners are the target's corners taken through the inverse of the view matrix, so it covers the target exactly even with a turned camera, with `TextureLighting.Unshaded` (`Light.xy` the world position). `Filter` swaps the targets first and draws the old one through the shader with `Opaque`; `DrawOver` draws the white texture with `AlphaBlend`. `ShadowFov` draws `Fov.fx`: `fov.color` times `FovHidden`.
 
 ### Bloom
 

@@ -105,7 +105,6 @@ Stops the light of every `castShadows` light near it.
 | `offset` | `[0, 0]` | From the entity position |
 | `opacity` | `1` | How much of the light it stops, 0 to 1 |
 | `tint` | white | The color of the light that goes through it |
-| `fovHeight` | `0` | For the field of view only, see [below](#tall-occluders) |
 
 The occluder casts shadow from its outline only: its own area stays lit, and neighbouring occluders that touch merge into one outline, so a row of walls has no shadow seams between them.
 
@@ -179,7 +178,7 @@ Layers that do not set them use the sprite's. A shader prototype with `lit: fals
 
 ## Field of view
 
-A viewport with an eye hides what the eye cannot see, using the same occluders as the light: everything out of sight is painted over with `fov.color`.
+A viewport with an eye hides what the eye cannot see, using the same occluders as the light: by default, everything the outline of an occluder hides from the eye is covered with `fov.color`. Glass hides nothing.
 
 ```csharp
 _renderer.MainViewport.Eye = playerUid;
@@ -192,21 +191,74 @@ _renderer.MainViewport.Eye = playerUid;
 | `FovEnabled` | `true` | |
 | `FovRadius` | `0` | How far it sees, 0 for no limit |
 | `FovRadiusSoftness` | `32` | How wide the edge of the radius fades |
+| `Fov` | `ShadowFov` | How it is worked out and drawn, see [below](#a-field-of-view-of-your-own) |
 
 The `togglefov` console command flips `FovEnabled` on the main viewport. The field of view does not need the lighting to be on.
 
 It is only drawn: the entities out of sight are still there, sent by the server and clickable.
 
-### Tall occluders
+The shadow follows the outline on the floor. A sprite drawn taller than its occluder (a wall in 3/4) is cut where the outline is; a game that wants otherwise writes its own field of view.
 
-The field of view is cut at the outline of the occluders on the floor. A wall drawn taller than its outline (3/4 perspective) would have the top of its sprite cut. `fovHeight` raises the occluder for the field of view only, by that many world units upwards; the light keeps using the outline on the floor.
+### A field of view of your own
 
-- In a column of occluders, only the top one rises.
-- It does not rise when the eye is less than `fovHeight` north of it, so a corridor right behind a wall is still visible.
+Every frame of a viewport with an eye goes through its `FovRenderer`, in two steps:
 
-### Reading the mask
+| Step | When | Does |
+|---|---|---|
+| `BuildMask(in FovMaskContext)` | Before the world is drawn | Fills the mask: a world aligned texture, alpha is how hidden a point is (1 hidden), **rgb is free for your own data** |
+| `Compose(in FovComposeContext)` | After the lit world, before bloom | Draws what is out of sight. What it hides does not glow |
 
-`RenderViewport.FovMask` is what the eye did not see last frame (alpha 1 is hidden), ready to submit over the world from a [render overlay](Graphics.md#render-overlays). It is how the content can do its own treatment of what is out of sight: turn off the engine's (`FovEnabled = false`) and draw from the mask.
+`ShadowFov`, the default, is `ctx.DrawShadows(ctx.EyePosition)` and `ctx.DrawOver(ctx.DefaultShader)`. Inherit from it (or from `FovRenderer`) and set it on the viewport: `viewport.Fov = new MyFov();`. Each viewport has its own instance, so it can keep state.
+
+**`FovMaskContext`**, the mask cleared to all seen:
+- `Viewport`, `Eye`, `EyePosition` (with `EyeOffset`), `Bounds` (the world area the mask covers).
+- `DrawShadows(from, radius = 0)`: hides what the occluders hide from `from`, out to `radius` (0 as far as the mask goes). Only touches the alpha, and calls add up: several points of view are several calls.
+- `Renderer`: everything submitted through it, in world positions, is drawn into the mask after the shadows and **replaces** what is there, transparent pixels included (a shader prototype with another `blend` changes that). That is how you reveal, hide, or write your own data in the rgb.
+
+**`FovComposeContext`**:
+- `Viewport`, `Color` (`fov.color`, premultiplied), `DefaultShader` (what `ShadowFov` covers with).
+- `DrawOver(shader)`: one quad over the whole frame, blended over it.
+- `Filter(shader)`: the whole frame is drawn again through the shader, which gets it as its `SpriteTexture` and replaces it.
+
+In both, `input.Light.xy` is the world position of the pixel. A shader reads the mask by including `FovMask.fxh` after `Sprite.fxh`:
+
+| In `FovMask.fxh` | |
+|---|---|
+| `float4 FovSample(float2 world)` | The mask as it is, your rgb and the alpha |
+| `float FovHidden(float2 world)` | How hidden, 0 to 1: the alpha and `FovRadius` |
+| `FovColor` | `fov.color`, premultiplied |
+
+The mask is set for every shader that includes `FovMask.fxh` from the world being drawn until `Compose` is done, so a sprite's own shader can read it too. Everywhere else it reads as all seen.
+
+What is out of sight in black and white, instead of covered:
+
+```hlsl
+#include "Sprite.fxh"
+#include "FovMask.fxh"
+
+float4 OutOfSightPS(SpritePixel input) : COLOR0
+{
+    float4 color = SampleSprite(input);
+    float gray = dot(color.rgb, float3(0.299, 0.587, 0.114));
+    color.rgb = lerp(color.rgb, gray.xxx, FovHidden(input.Light.xy));
+    return color;
+}
+
+SPRITE_TECHNIQUE_UNLIT(OutOfSightPS)
+```
+
+```csharp
+public sealed class GrayFov : ShadowFov
+{
+    private readonly ShaderInstance _gray;
+
+    public GrayFov(ShaderInstance gray) => _gray = gray;
+
+    public override void Compose(in FovComposeContext ctx) => ctx.Filter(_gray);
+}
+```
+
+`RenderViewport.FovMask` is the mask of the frame as a `RawTexture`, ready to submit over the world where it is (from an `AfterLighting` [render overlay](Graphics.md#render-overlays), to debug it).
 
 ---
 
