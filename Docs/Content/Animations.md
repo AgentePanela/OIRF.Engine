@@ -41,7 +41,7 @@ animations:
 | `files` | yes | — | A single file name (no extension) when `spritesheet: true`, or a list of file names (no extension) when `false`. |
 | `spritesheet` | no | `false` | Whether `files` points at one sheet to slice, or a list of standalone frame files. |
 | `frameWidth` / `frameHeight` | only if `spritesheet: true` | — | Pixel size of a single cell in the sheet. |
-| `frameCount` | only if `spritesheet: true` | — | How many cells to read out of the sheet (left-to-right, top-to-bottom). Implicit (`files.Length`) when `spritesheet: false`. |
+| `frameCount` | no | every cell | How many cells to read out of the sheet (left-to-right, top-to-bottom). Left out, every cell of the sheet is a frame; set it when the last row is not full. Implicit (`files.Length`) when `spritesheet: false`. |
 | `speed` | no | `10` | Default frames per second. |
 | `loop` | no | `true` | Whether the animation restarts after the last frame. If `false`, playback stops (`AnimationComponent.Playing = false`) on the last frame. |
 | `frameSpeeds` | no | — | Optional array of per-frame duration multipliers, index-aligned with the frame number. A value of `2` makes that frame stay twice as long as `1/speed`. |

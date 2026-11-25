@@ -12,7 +12,8 @@ public sealed class AnimationDef
     /// </summary>
     public required string Key { get; init; }
 
-    public required int FrameCount { get; init; }
+    // set once the sheet is read when its info.yml leaves frameCount out
+    public int FrameCount { get; internal set; }
 
     /// <summary>
     /// Default frames per second, used for frames without a FrameSpeeds override.

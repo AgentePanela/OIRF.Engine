@@ -108,7 +108,8 @@ internal sealed partial class AssetManager : IAssetManager
 
             var frameWidth = GetInt(map, "frameWidth", required: true);
             var frameHeight = GetInt(map, "frameHeight", required: true);
-            var frameCount = GetInt(map, "frameCount", required: true);
+            // 0 = every cell of the sheet, counted once it is read
+            var frameCount = GetInt(map, "frameCount");
             var sourceKey = string.IsNullOrEmpty(folder) ? fileScalar.Value! : $"{folder}/{fileScalar.Value}";
 
             _sheetSources[sourceKey] = new SheetSlice
@@ -160,7 +161,15 @@ internal sealed partial class AssetManager : IAssetManager
         var columns = Math.Max(1, source.Width / slice.FrameWidth);
         var buffer = new Color[slice.FrameWidth * slice.FrameHeight];
 
-        for (int i = 0; i < slice.FrameCount; i++)
+        var frameCount = slice.FrameCount;
+        if (frameCount <= 0)
+        {
+            frameCount = columns * Math.Max(1, source.Height / slice.FrameHeight);
+            if (_animations.TryGetValue(slice.AnimKey, out var def))
+                def.FrameCount = frameCount;
+        }
+
+        for (int i = 0; i < frameCount; i++)
         {
             var col = i % columns;
             var row = i / columns;
