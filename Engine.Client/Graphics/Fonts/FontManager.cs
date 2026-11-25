@@ -12,7 +12,7 @@ using Engine.Shared.Storage;
 
 namespace Engine.Client.Graphics.Fonts;
 
-public sealed class FontManager : IFontManager
+public sealed partial class FontManager : IFontManager
 {
     public const float DefaultSize = 16f;
     [Dependency] private readonly IPrototypeManager _protoMan = default!;
@@ -20,6 +20,8 @@ public sealed class FontManager : IFontManager
     private static readonly Dictionary<string, ResFile> _ttfFiles = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, ResFile> _ttfFilesByName = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<(string Family, FontVariant Variant), FontSystem> _fontSystems = new();
+    // null when the family is a sprite font that failed to build
+    private readonly Dictionary<string, StaticSpriteFont?> _spriteFonts = new();
     private static bool _indexed;
     private string? _defaultFamilyCache;
     private bool _defaultFamilyCached;
@@ -48,8 +50,11 @@ public sealed class FontManager : IFontManager
 
         _protoMan.PrototypesReloaded += (typeKey, _) =>
         {
-            if (typeKey.Equals("fontFamily", StringComparison.OrdinalIgnoreCase))
-                _defaultFamilyCached = false;
+            if (!typeKey.Equals("fontFamily", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            _defaultFamilyCached = false;
+            _spriteFonts.Clear();
         };
     }
 
@@ -61,6 +66,10 @@ public sealed class FontManager : IFontManager
 
     public SpriteFontBase Get(float size, string family, FontVariant variant = FontVariant.Regular)
     {
+        // a sprite font has one size and no variants
+        if (TryGetSpriteFont(family, out var spriteFont))
+            return spriteFont;
+
         if (TryGetSystem(family, variant, out var system))
             return system.GetFont(size);
 
@@ -90,7 +99,7 @@ public sealed class FontManager : IFontManager
     {
         if (!_defaultFamilyCached)
         {
-            _defaultFamilyCache = _protoMan.EnumerateAll<FontFamilyPrototype>().FirstOrDefault()?.ID;
+            _defaultFamilyCache = _protoMan.EnumerateAll<FontFamilyPrototype>().FirstOrDefault(p => p.Sprite is null)?.ID;
             _defaultFamilyCached = true;
         }
 
