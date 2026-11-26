@@ -658,6 +658,12 @@ public sealed class CollisionSystem : EntitySystem
         foreach (var (_, fixA) in cA.Fixtures)
         foreach (var (_, fixB) in cB.Fixtures)
         {
+            // only pairs that push each other, like CheckEntityPair
+            if (!fixA.Hard || !fixB.Hard)
+                continue;
+            if (!SetsOverlap(fixA.Masks, fixB.Layers) && !SetsOverlap(fixB.Masks, fixA.Layers))
+                continue;
+
             if (CollisionMath.TryComputeMTV(fixA.Shape, tA.Position, fixB.Shape, tB.Position, out mtv))
                 return true;
         }
