@@ -639,7 +639,11 @@ public sealed class CollisionSystem : EntitySystem
         return s >= 0f && s <= 1f && t >= 0f;
     }
 
-    public bool TryGetPenetration(EntityUid uidA, EntityUid uidB, out Vector2 mtv)
+    /// <summary>
+    /// The push that takes fixture <paramref name="fixtureA"/> of <paramref name="uidA"/> out of fixture
+    /// <paramref name="fixtureB"/> of <paramref name="uidB"/>.
+    /// </summary>
+    public bool TryGetPenetration(EntityUid uidA, string fixtureA, EntityUid uidB, string fixtureB, out Vector2 mtv)
     {
         mtv = Vector2.Zero;
 
@@ -655,20 +659,10 @@ public sealed class CollisionSystem : EntitySystem
             !TryComp<CollisionComponent>(uidB, out var cB))
             return false;
 
-        foreach (var (_, fixA) in cA.Fixtures)
-        foreach (var (_, fixB) in cB.Fixtures)
-        {
-            // only pairs that push each other, like CheckEntityPair
-            if (!fixA.Hard || !fixB.Hard)
-                continue;
-            if (!SetsOverlap(fixA.Masks, fixB.Layers) && !SetsOverlap(fixB.Masks, fixA.Layers))
-                continue;
+        if (!cA.Fixtures.TryGetValue(fixtureA, out var fixA) || !cB.Fixtures.TryGetValue(fixtureB, out var fixB))
+            return false;
 
-            if (CollisionMath.TryComputeMTV(fixA.Shape, tA.Position, fixB.Shape, tB.Position, out mtv))
-                return true;
-        }
-
-        return false;
+        return CollisionMath.TryComputeMTV(fixA.Shape, tA.Position, fixB.Shape, tB.Position, out mtv);
     }
  
     /// <summary>

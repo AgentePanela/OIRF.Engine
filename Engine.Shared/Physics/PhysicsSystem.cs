@@ -21,7 +21,8 @@ public sealed class PhysicsSystem : EntitySystem
     [Dependency] private readonly CollisionSystem _collision = default!;
 
     private readonly Dictionary<EntityUid, List<ActiveCollision>> _activeCollisions = new();
-    private record ActiveCollision(EntityUid Other, Vector2 Penetration, bool IsHard);
+    // one per pair of fixtures touching, so one pair ending leaves the others
+    private record ActiveCollision(EntityUid Other, string SelfFixture, string OtherFixture, bool IsHard);
 
     public override void Init()
     {
@@ -48,7 +49,7 @@ public sealed class PhysicsSystem : EntitySystem
                     if (!col.IsHard)
                         continue;
 
-                    if (!_collision.TryGetPenetration(uid, col.Other, out var mtv))
+                    if (!_collision.TryGetPenetration(uid, col.SelfFixture, col.Other, col.OtherFixture, out var mtv))
                         continue;
 
                     bool otherIsStatic = TryComp<PhysicsComponent>(col.Other, out var otherPhysics)
@@ -93,7 +94,7 @@ public sealed class PhysicsSystem : EntitySystem
             _activeCollisions[uid] = list;
         }
 
-        list.Add(new ActiveCollision(ev.Other, ev.PenetrationVector, ev.IsHard));
+        list.Add(new ActiveCollision(ev.Other, ev.SelfFixtureId, ev.OtherFixtureId, ev.IsHard));
     }
 
     private void OnCollisionEnd(EntityUid uid, PhysicsComponent physics, CollisionEndEvent ev)
@@ -101,7 +102,8 @@ public sealed class PhysicsSystem : EntitySystem
         if (!_activeCollisions.TryGetValue(uid, out var list))
             return;
 
-        list.RemoveAll(c => c.Other.Id == ev.Other.Id);
+        list.RemoveAll(c => c.Other == ev.Other && c.SelfFixture == ev.SelfFixtureId
+                            && c.OtherFixture == ev.OtherFixtureId);
 
         if (list.Count == 0)
             _activeCollisions.Remove(uid);
